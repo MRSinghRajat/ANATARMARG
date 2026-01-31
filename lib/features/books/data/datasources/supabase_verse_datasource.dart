@@ -166,10 +166,13 @@ class SupabaseVerseDataSource {
       var query = _supabase.client!
           .from(SupabaseConfig.verseTranslationsTable)
           .select()
-          .inFilter('verse_id', verseIds)
-          .order('is_primary', ascending: false);
+          .inFilter('verse_id', verseIds);
 
-      final response = await query;
+      if (languageCode != null) {
+        query = query.eq('language_code', languageCode);
+      }
+
+      final response = await query.order('is_primary', ascending: false);
 
       final list = response as List;
       final result = <VerseTranslationModel>[];
