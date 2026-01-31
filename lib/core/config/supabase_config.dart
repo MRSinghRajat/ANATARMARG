@@ -4,9 +4,8 @@ class SupabaseConfig {
   static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-  // TODO: Add Google Web Client ID (Required for Supabase Auth)
-  // This can be found in your Google Cloud Console Credentials > OAuth 2.0 Client IDs
-  static const String googleWebClientId = '';
+  // Google Web Client ID (Required for Supabase Auth)
+  static String get googleWebClientId => dotenv.env['GOOGLE_WEB_CLIENT_ID'] ?? '';
 
   // Table names
   static const String parvasTable = 'parvas';
