@@ -579,10 +579,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         children: [
           // Book/Chapter selector button (Gita Ch 2 / Mahabharat Ch X)
           Expanded(
-            child: GestureDetector(
-              onTap: _showBooksChaptersModal,
-              child: Container(
-                padding:
+            child: Semantics(
+              button: true,
+              label: 'Select Chapter',
+              child: GestureDetector(
+                onTap: _showBooksChaptersModal,
+                child: Container(
+                  padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.9),
@@ -617,12 +620,16 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
               ),
             ),
           ),
+          ),
           const SizedBox(width: 8),
           // Language selector (EN/HI/SA)
-          GestureDetector(
-            onTap: () => _showLanguageSelector(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          Semantics(
+            button: true,
+            label: 'Select Language',
+            child: GestureDetector(
+              onTap: () => _showLanguageSelector(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(24),
@@ -641,19 +648,23 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                       color: AppColors.warmOrange,
                     ),
               ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
           // Settings gear
-          GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings')),
-              );
-            },
-            child: Container(
-              width: 44,
-              height: 44,
+          Semantics(
+            button: true,
+            label: 'Settings',
+            child: GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Settings')),
+                );
+              },
+              child: Container(
+                width: 44,
+                height: 44,
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(12),
@@ -666,6 +677,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                 ],
               ),
               child: const Icon(Icons.settings, color: AppColors.tertiaryText),
+            ),
             ),
           ),
         ],
@@ -1160,11 +1172,15 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Complete button
-          GestureDetector(
-            onTap: _isCompleted ? null : _completeChapter,
-            child: Container(
-              key: _completeButtonKey,
-              width: 52,
+          Semantics(
+            button: true,
+            label: _isCompleted ? 'Chapter Completed' : 'Mark chapter as complete',
+            enabled: !_isCompleted,
+            child: GestureDetector(
+              onTap: _isCompleted ? null : _completeChapter,
+              child: Container(
+                key: _completeButtonKey,
+                width: 52,
               height: 52,
               decoration: BoxDecoration(
                 color: _isCompleted
@@ -1185,6 +1201,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                 size: 28,
               ),
             ),
+            ),
           ),
           // Prev/Next arrows - move between chapters
           Row(
@@ -1192,11 +1209,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
               _buildNavButton(
                 icon: Icons.arrow_back_ios_new,
                 onTap: _goToPrevChapter,
+                label: 'Previous Chapter',
               ),
               const SizedBox(width: 16),
               _buildNavButton(
                 icon: Icons.arrow_forward_ios,
                 onTap: _goToNextChapter,
+                label: 'Next Chapter',
               ),
             ],
           ),
@@ -1206,12 +1225,15 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   }
 
   Widget _buildNavButton(
-      {required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
+      {required IconData icon, required VoidCallback onTap, required String label}) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.9),
           shape: BoxShape.circle,
@@ -1224,6 +1246,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
           ],
         ),
         child: Icon(icon, size: 20, color: AppColors.primaryText),
+      ),
       ),
     );
   }
