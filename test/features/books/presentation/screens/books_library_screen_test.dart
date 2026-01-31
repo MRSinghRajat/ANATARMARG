@@ -1,0 +1,54 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antar_marg/features/books/presentation/screens/books_library_screen.dart';
+import 'package:antar_marg/features/books/data/repositories/book_repository.dart';
+import 'package:antar_marg/features/books/data/models/book_model.dart';
+import 'package:antar_marg/features/books/presentation/providers/book_providers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+class FakeBookRepository implements BookRepository {
+  @override
+  Future<List<BookModel>> getAllBooks() async {
+    return [
+      BookModel(
+        id: '1',
+        name: 'Test Book',
+        description: 'Test Description',
+        totalChapters: 10,
+        coverImageUrl: 'https://example.com/image.jpg',
+      ),
+    ];
+  }
+
+  @override
+  List<BookModel> get allBooks => [];
+
+  @override
+  Future<BookModel?> getBookById(String id) async => null;
+}
+
+void main() {
+  testWidgets('renders CachedNetworkImage for book with image', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bookRepositoryProvider.overrideWithValue(FakeBookRepository()),
+        ],
+        child: const MaterialApp(
+          home: BooksLibraryScreen(),
+        ),
+      ),
+    );
+
+    // Wait for data
+    await tester.pumpAndSettle();
+
+    // Verify CachedNetworkImage widget is present
+    expect(find.byType(CachedNetworkImage), findsOneWidget);
+
+    // Verify properties
+    final imageWidget = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
+    expect(imageWidget.imageUrl, 'https://example.com/image.jpg');
+  });
+}
