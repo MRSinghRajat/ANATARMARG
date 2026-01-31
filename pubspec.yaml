@@ -1,0 +1,58 @@
+name: antar_marg
+description: Antar Marg - The Inner Path - A spiritual learning app for ancient Indian wisdom
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  flutter_riverpod: ^2.4.0
+  
+  # Animation
+  rive: ^0.11.17  # Updated for better compatibility
+  
+  # Authentication
+  google_sign_in: ^6.1.0
+  # sign_in_with_apple: ^5.0.0  # iOS only - temporarily disabled for Android testing
+  
+  # Networking
+  http: ^1.1.0
+  
+  # Database
+  supabase_flutter: ^2.0.0
+  
+  # Local Storage
+  shared_preferences: ^2.2.0
+  sqflite: ^2.3.0
+  path_provider: ^2.1.0
+  
+  # Audio
+  audioplayers: ^5.2.0
+  
+  # UI
+  cached_network_image: ^3.3.0
+  intl: ^0.18.0
+  fl_chart: ^0.65.0
+  
+  # Utilities
+  uuid: ^4.3.0
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/sounds/
+    - assets/rive/
