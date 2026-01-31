@@ -144,20 +144,20 @@ class ParvaRepository {
         final parvas = await _supabaseDataSource.getAllParvas();
         // Update status based on user progress if authenticated
         if (_supabase.currentUserId != null) {
-          for (var parva in parvas) {
-            final userStatus = await _supabaseDataSource.getUserParvaStatus(
-              parva.id,
-              _supabase.currentUserId!,
-            );
-            if (userStatus != null) {
-              parva = ParvaModel(
-                id: parva.id,
-                name: parva.name,
-                subtitle: parva.subtitle,
-                status: userStatus,
-                requiredLevel: parva.requiredLevel,
-                description: parva.description,
-                imageUrl: parva.imageUrl,
+          final userStatuses = await _supabaseDataSource.getUserParvaStatuses(
+            _supabase.currentUserId!,
+          );
+
+          for (var i = 0; i < parvas.length; i++) {
+            if (userStatuses.containsKey(parvas[i].id)) {
+              parvas[i] = ParvaModel(
+                id: parvas[i].id,
+                name: parvas[i].name,
+                subtitle: parvas[i].subtitle,
+                status: userStatuses[parvas[i].id]!,
+                requiredLevel: parvas[i].requiredLevel,
+                description: parvas[i].description,
+                imageUrl: parvas[i].imageUrl,
               );
             }
           }
