@@ -7,6 +7,7 @@ import '../../features/prayer/presentation/screens/prayer_screen.dart';
 import '../../features/content/presentation/screens/reading_screen.dart';
 import '../../features/content/presentation/screens/verse_full_screen.dart';
 import '../../features/content/data/models/verse_model.dart';
+import '../../features/profile/presentation/screens/notifications_settings_screen.dart';
 
 class AppRouter {
   static const String login = '/login';
@@ -16,6 +17,7 @@ class AppRouter {
   static const String prayer = '/prayer';
   static const String reading = '/reading';
   static const String verseFullScreen = '/verse-full-screen';
+  static const String notificationsSettings = '/notifications-settings';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -57,6 +59,9 @@ class AppRouter {
             onShare: args['onShare'] as VoidCallback?,
           ),
         );
+      case notificationsSettings:
+        return MaterialPageRoute(
+            builder: (_) => const NotificationsSettingsScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
