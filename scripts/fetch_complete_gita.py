@@ -6,8 +6,8 @@ Saves to gita_full_cleaned.json in format: [{"chapter":1,"verse":1,"hindi":"..."
 import json
 import os
 import re
-import time
-import urllib.request
+import asyncio
+import aiohttp
 
 # Verse counts per chapter (Bhagavad Gita standard)
 VERSE_COUNTS = {
@@ -28,65 +28,92 @@ def strip_verse_prefix(text):
     text = re.sub(r'^\d+\.\d+\.?\s*', '', text)
     return text.strip()
 
-def fetch_verse(chapter, verse):
-    """Fetch a single verse from the API."""
+async def fetch_verse(session, chapter, verse, semaphore):
+    """Fetch a single verse from the API with concurrency limit."""
     url = f"{API_BASE}/{chapter}/{verse}"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read().decode())
-            return data
-    except Exception as e:
-        print(f"Error fetching {chapter}.{verse}: {e}")
+    async with semaphore:
+        try:
+            async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data, chapter, verse
+                else:
+                    print(f"Error fetching {chapter}.{verse}: Status {response.status}")
+                    return None, chapter, verse
+        except Exception as e:
+            print(f"Error fetching {chapter}.{verse}: {e}")
+            return None, chapter, verse
+
+async def process_verse(data, chapter, verse):
+    """Process the fetched verse data into the desired format."""
+    if not data:
         return None
 
-def main():
+    # Use Swami Tejomayananda for Hindi (tej.ht)
+    hindi = ""
+    if "tej" in data and "ht" in data["tej"]:
+        hindi = strip_verse_prefix(data["tej"]["ht"])
+
+    # Use Purohit Swami for English (purohit.et) - matches user's format
+    english = ""
+    if "purohit" in data and "et" in data["purohit"]:
+        english = strip_verse_prefix(data["purohit"]["et"])
+    elif "siva" in data and "et" in data["siva"]:
+        english = strip_verse_prefix(data["siva"]["et"])
+
+    return {
+        "chapter": chapter,
+        "verse": verse,
+        "hindi": hindi,
+        "english": english
+    }
+
+async def main_async():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(script_dir, "gita_full_cleaned.json")
     
-    result = []
     total = sum(VERSE_COUNTS.values())
-    count = 0
-    
     print(f"Fetching {total} verses from Vedic Scriptures API...")
     
-    for chapter in range(1, 19):
-        verses_in_ch = VERSE_COUNTS[chapter]
-        for verse in range(1, verses_in_ch + 1):
+    # Limit concurrent requests to avoid hitting rate limits or errors
+    # 20 is a safe number, much faster than 1 but not aggressive
+    semaphore = asyncio.Semaphore(20)
+
+    tasks = []
+    async with aiohttp.ClientSession() as session:
+        for chapter in range(1, 19):
+            verses_in_ch = VERSE_COUNTS[chapter]
+            for verse in range(1, verses_in_ch + 1):
+                tasks.append(fetch_verse(session, chapter, verse, semaphore))
+
+        # Gather all responses
+        responses = await asyncio.gather(*tasks)
+
+    # Process results
+    results = []
+    count = 0
+
+    for data, chapter, verse in responses:
+        processed = await process_verse(data, chapter, verse)
+        if processed:
+            results.append(processed)
             count += 1
-            data = fetch_verse(chapter, verse)
-            if data:
-                # Use Swami Tejomayananda for Hindi (tej.ht)
-                hindi = ""
-                if "tej" in data and "ht" in data["tej"]:
-                    hindi = strip_verse_prefix(data["tej"]["ht"])
-                
-                # Use Purohit Swami for English (purohit.et) - matches user's format
-                english = ""
-                if "purohit" in data and "et" in data["purohit"]:
-                    english = strip_verse_prefix(data["purohit"]["et"])
-                elif "siva" in data and "et" in data["siva"]:
-                    english = strip_verse_prefix(data["siva"]["et"])
-                
-                result.append({
-                    "chapter": chapter,
-                    "verse": verse,
-                    "hindi": hindi,
-                    "english": english
-                })
-                if count % 50 == 0:
-                    print(f"  Fetched {count}/{total} verses...")
-            else:
-                print(f"  Skipped {chapter}.{verse}")
+            if count % 50 == 0:
+                print(f"  Processed {count}/{total} verses...")
+        else:
+            print(f"  Skipped {chapter}.{verse}")
             
-            # Be nice to the API - small delay
-            time.sleep(0.1)
+    # Sort results by chapter and verse as they might be out of order
+    results.sort(key=lambda x: (x["chapter"], x["verse"]))
     
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+        json.dump(results, f, ensure_ascii=False, indent=2)
     
-    print(f"Saved {len(result)} verses to {output_path}")
-    return 0 if len(result) == total else 1
+    print(f"Saved {len(results)} verses to {output_path}")
+    return 0 if len(results) == total else 1
+
+def main():
+    return asyncio.run(main_async())
 
 if __name__ == "__main__":
     exit(main())
