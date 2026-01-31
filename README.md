@@ -37,7 +37,13 @@ A gamified spiritual learning app that guides users through ancient Indian wisdo
    flutter pub get
    ```
 
-3. Set up GPT API key in `lib/core/config/app_config.dart`
+3. Set up configuration:
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Update `.env` with your Supabase credentials
+   - Set up GPT API key in `lib/core/config/app_config.dart`
 
 4. Run the app:
    ```bash

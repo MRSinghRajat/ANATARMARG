@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../gamification/presentation/screens/leaderboard_screen.dart';
 import '../../../../shared/widgets/stat_card.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -28,7 +29,12 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           IconButton(
             icon: const Icon(Icons.leaderboard),
             onPressed: () {
-              // TODO: Navigate to leaderboard
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const LeaderboardScreen(),
+                ),
+              );
             },
           ),
           IconButton(
@@ -234,7 +240,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                       height: 40,
                       decoration: BoxDecoration(
                         color: hasActivity
-                            ? AppColors.warmOrange.withOpacity(0.2)
+                            ? AppColors.warmOrange.withValues(alpha: 0.2)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         border: dayNumber == now.day

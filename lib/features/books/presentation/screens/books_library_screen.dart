@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/banyan_tree_painter.dart';
 import '../../data/models/book_model.dart';
-import '../../data/repositories/book_repository.dart';
+import '../providers/book_providers.dart';
 import 'book_detail_screen.dart';
 
 /// Library screen - Sacred Epics styling with all books, progress, subtitles.
@@ -15,7 +16,6 @@ class BooksLibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
-  final BookRepository _bookRepository = BookRepository();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _booksKey = GlobalKey();
   List<BookModel> _books = [];
@@ -29,15 +29,16 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   Future<void> _loadBooks() async {
     setState(() => _isLoading = true);
+    final bookRepository = ref.read(bookRepositoryProvider);
     try {
-      final books = await _bookRepository.getAllBooks();
+      final books = await bookRepository.getAllBooks();
       setState(() {
         _books = books;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _books = _bookRepository.allBooks;
+        _books = bookRepository.allBooks;
         _isLoading = false;
       });
     }
@@ -329,12 +330,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   Widget _buildBookThumbnail(BookModel book) {
     if (book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty) {
-      return Image.network(
-        book.coverImageUrl!,
+      return CachedNetworkImage(
+        imageUrl: book.coverImageUrl!,
         width: 80,
         height: 100,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _defaultThumbnail(),
+        errorWidget: (_, __, ___) => _defaultThumbnail(),
       );
     }
     return _defaultThumbnail();

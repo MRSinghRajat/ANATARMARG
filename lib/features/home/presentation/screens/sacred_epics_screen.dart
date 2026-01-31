@@ -5,6 +5,7 @@ import '../../../../shared/widgets/banyan_tree_painter.dart';
 import '../../../books/data/models/book_model.dart';
 import '../../../books/data/repositories/book_repository.dart';
 import '../../../books/presentation/screens/book_detail_screen.dart';
+import '../widgets/side_drawer.dart';
 
 /// Sacred Epics screen - replicates the reference UI exactly:
 /// Top nav (hamburger, SACRED EPICS, profile), featured banyan tree,
@@ -17,6 +18,7 @@ class SacredEpicsScreen extends ConsumerStatefulWidget {
 }
 
 class _SacredEpicsScreenState extends ConsumerState<SacredEpicsScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final BookRepository _bookRepository = BookRepository();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _booksKey = GlobalKey();
@@ -71,7 +73,9 @@ class _SacredEpicsScreenState extends ConsumerState<SacredEpicsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFF1A1612),
+      drawer: const SideDrawer(),
       body: SafeArea(
         child: Column(
           children: [
@@ -105,7 +109,7 @@ class _SacredEpicsScreenState extends ConsumerState<SacredEpicsScreen> {
           IconButton(
             icon: const Icon(Icons.menu, color: Colors.white, size: 24),
             onPressed: () {
-              // TODO: Open drawer/side menu
+              _scaffoldKey.currentState?.openDrawer();
             },
           ),
           const Text(
