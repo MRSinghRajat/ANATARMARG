@@ -72,4 +72,35 @@ class SupabaseParvaDataSource {
       return null;
     }
   }
+
+  /// Get user's progress for all parvas
+  Future<Map<int, ParvaStatus>> getUserParvaStatuses(String userId) async {
+    if (!_supabase.isInitialized) {
+      return {};
+    }
+
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.userParvaProgressTable)
+          .select('parva_id, status')
+          .eq('user_id', userId);
+
+      final Map<int, ParvaStatus> statuses = {};
+
+      for (var item in (response as List)) {
+        final parvaId = item['parva_id'] as int;
+        final statusStr = item['status'] as String;
+        final status = ParvaStatus.values.firstWhere(
+          (e) => e.name == statusStr,
+          orElse: () => ParvaStatus.locked,
+        );
+        statuses[parvaId] = status;
+      }
+
+      return statuses;
+    } catch (e) {
+      print('Error fetching user parva statuses: $e');
+      return {};
+    }
+  }
 }
