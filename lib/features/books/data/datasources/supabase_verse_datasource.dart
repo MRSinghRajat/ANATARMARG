@@ -179,10 +179,6 @@ class SupabaseVerseDataSource {
 
       for (final row in list) {
         final tMap = row as Map<String, dynamic>;
-        if (languageCode != null &&
-            (tMap['language_code'] as String?) != languageCode) {
-          continue;
-        }
         result.add(VerseTranslationModel.fromJson(tMap));
       }
 

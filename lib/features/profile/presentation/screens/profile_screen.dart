@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_router.dart';
 import '../../../../core/utils/sound_manager.dart';
+import 'language_settings_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -206,7 +208,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   title: const Text('Notifications'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // TODO: Navigate to notifications settings
+                    Navigator.pushNamed(
+                        context, AppRouter.notificationsSettings);
                   },
                 ),
               ),
@@ -217,7 +220,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   title: const Text('Language'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // TODO: Navigate to language settings
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LanguageSettingsScreen(),
+                      ),
+                    );
                   },
                 ),
               ),
