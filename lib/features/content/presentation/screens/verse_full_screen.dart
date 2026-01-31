@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/coin_calculator.dart';
 import '../../../../shared/widgets/coin_earned_overlay.dart';
@@ -91,27 +92,54 @@ class _VerseFullScreenState extends State<VerseFullScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Placeholder for verse image
-                    // TODO: Replace with actual image from GPT/DALL-E or assets
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppColors.lightGreen.withOpacity(0.3),
-                            AppColors.warmOrange.withOpacity(0.2),
-                          ],
+                    // Verse Image
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: CachedNetworkImage(
+                        imageUrl:
+                            'https://picsum.photos/seed/${widget.verse.id}/800/400',
+                        width: double.infinity,
+                        height: 200,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: double.infinity,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.lightGreen.withValues(alpha: 0.3),
+                                AppColors.warmOrange.withValues(alpha: 0.2),
+                              ],
+                            ),
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.warmOrange,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.image_outlined,
-                          size: 64,
-                          color: AppColors.tertiaryText.withOpacity(0.5),
+                        errorWidget: (context, url, error) => Container(
+                          width: double.infinity,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.lightGreen.withValues(alpha: 0.3),
+                                AppColors.warmOrange.withValues(alpha: 0.2),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              size: 64,
+                              color: AppColors.tertiaryText.withValues(alpha: 0.5),
+                            ),
+                          ),
                         ),
                       ),
                     ),
