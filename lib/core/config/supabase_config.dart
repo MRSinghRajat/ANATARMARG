@@ -4,6 +4,10 @@ class SupabaseConfig {
   static const String supabaseAnonKey =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aWthdGVtb256eWtxYW10dm9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NTQzMDIsImV4cCI6MjA4NTIzMDMwMn0.YlulvY1iIlK-pBNkFdmKMwnfn0avMfQO35KW-Z7plAA';
 
+  // TODO: Add Google Web Client ID (Required for Supabase Auth)
+  // This can be found in your Google Cloud Console Credentials > OAuth 2.0 Client IDs
+  static const String googleWebClientId = '';
+
   // Table names
   static const String parvasTable = 'parvas';
   static const String questStagesTable = 'quest_stages';

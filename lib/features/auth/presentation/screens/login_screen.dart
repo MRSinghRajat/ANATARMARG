@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../core/services/supabase_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -19,7 +21,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               // App Logo/Title
               Text(
-                'ANTAR MARG',
+                AppConfig.appName.toUpperCase(),
                 style: Theme.of(context).textTheme.displayLarge,
               ),
               const SizedBox(height: 8),
@@ -36,10 +38,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     // Google Sign In
                     ElevatedButton.icon(
-                      onPressed: () {
-                        // TODO: Implement Google Sign In
-                        Navigator.pushReplacementNamed(
-                            context, '/animated-onboarding');
+                      onPressed: () async {
+                        try {
+                          await SupabaseService().signInWithGoogle();
+                          if (context.mounted) {
+                            Navigator.pushReplacementNamed(
+                                context, '/animated-onboarding');
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            // If cancelled, just return
+                            if (e.toString().contains('cancelled')) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Sign in failed: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
                       },
                       icon: const Icon(Icons.g_mobiledata, size: 24),
                       label: const Text('Continue with Google'),
