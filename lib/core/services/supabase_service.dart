@@ -12,9 +12,17 @@ class SupabaseService {
   /// Initialize Supabase client
   Future<void> initialize() async {
     try {
+      final url = SupabaseConfig.supabaseUrl;
+      final anonKey = SupabaseConfig.supabaseAnonKey;
+
+      // Skip initialization if credentials are placeholders or invalid
+      if (!_isValidSupabaseConfig(url, anonKey)) {
+        return; // App will use local data
+      }
+
       await Supabase.initialize(
-        url: SupabaseConfig.supabaseUrl,
-        anonKey: SupabaseConfig.supabaseAnonKey,
+        url: url,
+        anonKey: anonKey,
       );
       _client = Supabase.instance.client;
     } catch (e) {
@@ -23,8 +31,27 @@ class SupabaseService {
     }
   }
 
+  bool _isValidSupabaseConfig(String url, String anonKey) {
+    if (url.isEmpty || anonKey.isEmpty) return false;
+    if (url.contains('YOUR_') || anonKey.contains('YOUR_')) return false;
+    if (!url.startsWith('https://') || !url.contains('.supabase')) return false;
+    return true;
+  }
+
   SupabaseClient? get client => _client;
   bool get isInitialized => _client != null;
+
+  /// Check if Google Sign-In is configured correctly
+  String? validateGoogleConfig() {
+    final clientId = SupabaseConfig.googleWebClientId;
+    if (clientId.isEmpty) {
+      return 'Google Web Client ID is missing in .env';
+    }
+    if (clientId.contains('YOUR_') || !clientId.endsWith('.apps.googleusercontent.com')) {
+      return 'Invalid Google Web Client ID format in .env';
+    }
+    return null; // Config is valid
+  }
 
   /// Get current user ID (if authenticated)
   String? get currentUserId => _client?.auth.currentUser?.id;

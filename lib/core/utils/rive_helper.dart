@@ -29,7 +29,7 @@ class RiveHelper {
 
   /// Get Rive file path for room background (Aangan, Ashram)
   /// Place your room Rive file at: assets/rive/room.riv
-  static const String roomRiveFilePath = 'assets/rive/room.riv';
+  static const String roomRiveFilePath = 'assets/rive/roomanimation.riv';
 
   /// Check if Rive file exists
   /// This will be used to conditionally load Rive or use placeholder

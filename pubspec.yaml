@@ -42,6 +42,12 @@ dependencies:
   intl: ^0.18.0
   fl_chart: ^0.65.0
   
+  # Interactive Features
+  scratcher: ^2.5.0
+  sensors_plus: ^6.1.0
+  confetti: ^0.7.0
+  lottie: ^3.1.0
+
   # Utilities
   uuid: ^4.3.0
   google_fonts: ^6.1.0

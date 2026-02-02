@@ -5,6 +5,7 @@ import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
 import '../../data/repositories/chapter_repository.dart';
 import '../../data/repositories/verse_repository.dart';
+import '../../data/repositories/book_progress_repository.dart';
 import '../../data/services/verse_notes_service.dart';
 import 'book_chapter_screen.dart';
 import 'book_chat_screen.dart';
@@ -25,9 +26,11 @@ class BookDetailScreen extends ConsumerStatefulWidget {
 class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   final ChapterRepository _chapterRepository = ChapterRepository();
   final VerseRepository _verseRepository = VerseRepository();
+  final BookProgressRepository _progressRepository = BookProgressRepository();
   final VerseNotesService _notesService = VerseNotesService();
   List<ChapterModel> _chapters = [];
   Map<String, int> _verseCountByChapter = {};
+  Map<String, int> _completedVersesByChapter = {};
   Map<String, List<VerseNoteModel>> _notesByChapter = {};
   bool _isLoading = true;
 
@@ -46,16 +49,22 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
 
       // Load verse counts and notes in parallel
       final counts = <String, int>{};
+      final completedMap = <String, int>{};
       final notesMap = <String, List<VerseNoteModel>>{};
       await Future.wait(chapters.map((ch) async {
         final count = await _verseRepository.getVerseCountForChapter(ch.id);
         counts[ch.id] = count;
+        
+        final readVerses = await _progressRepository.getReadVerseIds(ch.id);
+        completedMap[ch.id] = readVerses.length;
+
         final notes = await _notesService.getNotesForChapter(ch.id);
         if (notes.isNotEmpty) notesMap[ch.id] = notes;
       }));
       if (mounted) {
         setState(() {
           _verseCountByChapter = counts;
+          _completedVersesByChapter = completedMap;
           _notesByChapter = notesMap;
           _isLoading = false;
         });
@@ -232,13 +241,21 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   Widget _buildContent(BuildContext context) {
     switch (_selectedTab) {
       case 0:
-        return _buildChaptersList(context);
+        return RefreshIndicator(
+          onRefresh: _loadChapters,
+          color: AppColors.warmOrange,
+          child: _buildChaptersList(context),
+        );
       case 1:
         return BookChatScreen(book: widget.book);
       case 2:
         return BookNotesScreen(book: widget.book);
       default:
-        return _buildChaptersList(context);
+        return RefreshIndicator(
+          onRefresh: _loadChapters,
+          color: AppColors.warmOrange,
+          child: _buildChaptersList(context),
+        );
     }
   }
 
@@ -278,8 +295,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: InkWell(
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => BookChapterScreen(
@@ -288,6 +305,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                   ),
                 ),
               );
+              // Refresh progress when returning
+              _loadChapters();
             },
             borderRadius: BorderRadius.circular(12),
             child: Padding(
@@ -322,17 +341,33 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
+                            if (shlokCount > 0) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: (_completedVersesByChapter[chapter.id] ?? 0) / shlokCount,
+                                  backgroundColor: AppColors.borderColor,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    isCompleted ? AppColors.successColor : AppColors.warmOrange,
+                                  ),
+                                  minHeight: 4,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                            ],
                             Row(
                               children: [
                                 if (shlokCount > 0)
                                   Text(
-                                    '$shlokCount shlokas',
+                                    '${_completedVersesByChapter[chapter.id] ?? 0}/$shlokCount completed',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall
                                         ?.copyWith(
-                                          color: AppColors.tertiaryText,
+                                          color: AppColors.warmOrange,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
                                         ),
                                   ),
                                 if (shlokCount > 0) const Text(' • '),

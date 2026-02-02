@@ -39,6 +39,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     // Google Sign In
                     ElevatedButton.icon(
                       onPressed: () async {
+                        final configError = SupabaseService().validateGoogleConfig();
+                        if (configError != null) {
+                          if (context.mounted) {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Configuration Missing'),
+                                content: Text(
+                                    '$configError\n\nPlease add GOOGLE_WEB_CLIENT_ID to your .env file.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return;
+                        }
+
                         try {
                           await SupabaseService().signInWithGoogle();
                           if (context.mounted) {
@@ -51,10 +72,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             if (e.toString().contains('cancelled')) {
                               return;
                             }
+                            // ApiException 10 = DEVELOPER_ERROR (SHA-1/OAuth misconfiguration)
+                            final msg = e.toString().contains('ApiException: 10')
+                                ? 'Google Sign-In needs setup. Add SHA-1 to Google Cloud Console.'
+                                : 'Sign in failed: $e';
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Sign in failed: $e'),
+                                content: Text(msg),
                                 backgroundColor: Colors.red,
+                                duration: const Duration(seconds: 5),
                               ),
                             );
                           }
@@ -65,6 +91,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Continue without signing in (use app with local data)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(
+                            context, '/animated-onboarding');
+                      },
+                      child: const Text('Continue without signing in'),
                     ),
                     const SizedBox(height: 16),
 
