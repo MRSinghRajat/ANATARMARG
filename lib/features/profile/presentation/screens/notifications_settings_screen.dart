@@ -22,18 +22,32 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _dailyReminders = prefs.getBool('notifications_daily') ?? true;
-      _prayerAlerts = prefs.getBool('notifications_prayer') ?? true;
-      _newContentUpdates = prefs.getBool('notifications_updates') ?? true;
-      _isLoading = false;
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          _dailyReminders = prefs.getBool('notifications_daily') ?? true;
+          _prayerAlerts = prefs.getBool('notifications_prayer') ?? true;
+          _newContentUpdates = prefs.getBool('notifications_updates') ?? true;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _updateSetting(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {
+      // Ignore - settings will use in-memory value
+    }
   }
 
   @override

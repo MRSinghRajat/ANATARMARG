@@ -24,10 +24,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadSoundSettings() async {
-    setState(() {
-      _isSoundEnabled = !_soundManager.isMuted;
-      _soundVolume = _soundManager.volume;
-    });
+    try {
+      if (mounted) {
+        setState(() {
+          _isSoundEnabled = !_soundManager.isMuted;
+          _soundVolume = _soundManager.volume;
+        });
+      }
+    } catch (_) {
+      // Use defaults if SoundManager fails
+    }
   }
 
   Future<void> _toggleSound() async {

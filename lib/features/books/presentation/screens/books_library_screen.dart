@@ -75,16 +75,21 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                         color: AppColors.warmOrange,
                       ),
                     )
-                  : SingleChildScrollView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: [
-                          _buildFeaturedSection(context),
-                          const SizedBox(height: 24),
-                          _buildBooksList(context),
-                          const SizedBox(height: 24),
-                        ],
+                  : RefreshIndicator(
+                      onRefresh: _loadBooks,
+                      color: AppColors.warmOrange,
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            _buildFeaturedSection(context),
+                            const SizedBox(height: 24),
+                            _buildBooksList(context),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
                       ),
                     ),
             ),
@@ -230,13 +235,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => BookDetailScreen(book: book),
               ),
             );
+            _loadBooks();
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -294,14 +300,15 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
+                          onPressed: () async {
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) =>
                                     BookDetailScreen(book: book),
                               ),
                             );
+                            _loadBooks();
                           },
                           icon: const Icon(Icons.arrow_forward, size: 16),
                           label: const Text('Continue Learning'),

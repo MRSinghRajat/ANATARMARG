@@ -41,22 +41,11 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         });
       }
     } catch (e) {
-      // Fallback: retry getAllItems (generates defaults on error)
-      try {
-        final items = await _itemRepository.getAllItems();
-        if (mounted) {
-          setState(() {
-            _items = items;
-            _isLoadingItems = false;
-          });
-        }
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _items = [];
-            _isLoadingItems = false;
-          });
-        }
+      if (mounted) {
+        setState(() {
+          _items = [];
+          _isLoadingItems = false;
+        });
       }
     }
   }
@@ -128,7 +117,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
             Positioned.fill(
               child: Container(color: AppColors.primaryBackground),
             ),
-            // Room + Character (same size as Aangan)
+            // Room + Character
             Positioned(
               top: 0,
               left: 0,
@@ -145,7 +134,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
               right: 0,
               child: _buildTopBar(context),
             ),
-            // Draggable bottom half - Items screen (pull up for full screen, pull down to half)
+            // Draggable bottom half
             DraggableScrollableSheet(
               initialChildSize: 0.5,
               minChildSize: 0.25,
@@ -183,13 +172,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 },
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: 'Get 500 test coins',
-                child: IconButton(
-                  icon: const Icon(Icons.add_circle_outline,
-                      color: AppColors.coinGreen),
-                  onPressed: _grantTestCoins,
-                ),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline,
+                    color: AppColors.coinGreen),
+                onPressed: _grantTestCoins,
               ),
             ],
           ),
@@ -221,7 +207,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           parent: AlwaysScrollableScrollPhysics(),
         ),
         slivers: [
-          // Drag handle - inside scrollable so sheet responds to drag from anywhere
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 0),
@@ -237,9 +222,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
               ),
             ),
           ),
-          // Tabs
           SliverToBoxAdapter(child: _buildTabs()),
-          // Tab content as slivers
           ..._buildTabSlivers(context),
         ],
       ),
@@ -257,26 +240,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
     }
     if (_items.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.inventory_2_outlined,
-                    size: 64, color: AppColors.tertiaryText.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text('Loading items...',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: _loadItems,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
+          child: Center(child: Text('No items loaded')),
         ),
       ];
     }
@@ -301,50 +267,55 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         _items.where((i) => i.type == ItemType.shelter).toList();
 
     return [
-      SliverPadding(
-        padding: const EdgeInsets.all(16),
-        sliver: SliverList(
-          delegate: SliverChildListDelegate([
-            Text(
-              'Furniture',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                primary: false,
-                itemCount: furnitureItems.length,
-                itemBuilder: (context, index) {
-                  return _buildItemCard(context, furnitureItems[index]);
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Houses',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                primary: false,
-                itemCount: shelterItems.length,
-                itemBuilder: (context, index) {
-                  return _buildItemCard(context, shelterItems[index]);
-                },
-              ),
-            ),
-          ]),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Furniture',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
         ),
       ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: furnitureItems.length,
+            itemBuilder: (context, index) {
+              return _buildItemCard(context, furnitureItems[index]);
+            },
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Text(
+            'Houses',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: shelterItems.length,
+            itemBuilder: (context, index) {
+              return _buildItemCard(context, shelterItems[index]);
+            },
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 50)),
     ];
   }
 
@@ -354,56 +325,62 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         _items.where((i) => i.type == ItemType.clothes).toList();
 
     return [
-      SliverPadding(
-        padding: const EdgeInsets.all(16),
-        sliver: SliverList(
-          delegate: SliverChildListDelegate([
-            Text(
-              'Food',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.8,
-              ),
-              itemCount: foodItems.length,
-              itemBuilder: (context, index) {
-                return _buildItemCard(context, foodItems[index]);
-              },
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Clothes',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.8,
-              ),
-              itemCount: clothesItems.length,
-              itemBuilder: (context, index) {
-                return _buildItemCard(context, clothesItems[index]);
-              },
-            ),
-          ]),
+      // Food Section
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Text(
+            'Food',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
         ),
       ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.8,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => _buildItemCard(context, foodItems[index]),
+            childCount: foodItems.length,
+          ),
+        ),
+      ),
+
+      // Clothes Section
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          child: Text(
+            'Clothes',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.8,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => _buildItemCard(context, clothesItems[index]),
+            childCount: clothesItems.length,
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 50)),
     ];
   }
 
@@ -426,25 +403,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              Text(
-                'Character appearance evolves with wisdom',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.secondaryText,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Normal Skin',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'The default skin for your sadhu',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -452,7 +410,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
-                  'Equipped',
+                  'Default Skin Equipped',
                   style: TextStyle(
                     color: AppColors.successColor,
                     fontWeight: FontWeight.bold,
@@ -477,23 +435,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: 64,
-                  color: AppColors.tertiaryText.withOpacity(0.5),
-                ),
+                 Icon(Icons.inventory_2_outlined,
+                    size: 64, color: AppColors.tertiaryText.withOpacity(0.5)),
                 const SizedBox(height: 16),
-                Text(
-                  'No items owned yet',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Purchase items from the shop',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.secondaryText,
-                      ),
-                ),
+                const Text('No items owned yet'),
               ],
             ),
           ),
@@ -519,6 +464,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           ),
         ),
       ),
+      const SliverToBoxAdapter(child: SizedBox(height: 50)),
     ];
   }
 
@@ -571,116 +517,88 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
     final canAfford = _coinService.currentBalance >= item.coinCost;
     final rarityColor = _getRarityColor(item.rarity);
 
-    return Card(
-      child: InkWell(
-        onTap: showOwned || item.isUnlocked
-            ? null
-            : () {
-                if (canAfford) {
-                  _purchaseItem(item);
-                }
-              },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Item Image/Icon
-              Expanded(
-                child: Container(
-                  width: double.infinity,
+    return Container(
+      width: 160, 
+      margin: const EdgeInsets.symmetric(horizontal: 4), 
+      child: Card(
+        child: InkWell(
+          onTap: showOwned || item.isUnlocked
+              ? null
+              : () {
+                  if (canAfford) {
+                    _purchaseItem(item);
+                  }
+                },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: rarityColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: rarityColor.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      _getItemIcon(item.type),
+                      size: 48,
+                      color: rarityColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  item.name,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Container(
+                  margin: const EdgeInsets.only(top: 4, bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: rarityColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: rarityColor.withOpacity(0.3),
-                      width: 2,
-                    ),
+                    color: rarityColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Icon(
-                    _getItemIcon(item.type),
-                    size: 48,
-                    color: rarityColor,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Item Name
-              Text(
-                item.name,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  child: Text(
+                    item.rarity.name.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
+                      color: rarityColor,
                     ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              // Rarity Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: rarityColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  item.rarity.name.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: rarityColor,
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 4),
-
-              // Price or Owned
-              if (showOwned || item.isUnlocked)
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      size: 16,
-                      color: AppColors.successColor,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Owned',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.successColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Icon(
-                      Icons.diamond,
-                      size: 16,
-                      color: canAfford
-                          ? AppColors.coinGreen
-                          : AppColors.tertiaryText,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${item.coinCost}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: canAfford
-                            ? AppColors.coinGreen
-                            : AppColors.tertiaryText,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
+                if (showOwned || item.isUnlocked)
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 16, color: AppColors.successColor),
+                      SizedBox(width: 4),
+                      Text('Owned', style: TextStyle(
+                        fontSize: 12, color: AppColors.successColor, fontWeight: FontWeight.bold)),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Icon(Icons.diamond, size: 16, color: canAfford ? AppColors.coinGreen : AppColors.tertiaryText),
+                      const SizedBox(width: 4),
+                      Text('${item.coinCost}', style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold,
+                        color: canAfford ? AppColors.coinGreen : AppColors.tertiaryText)),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -689,25 +607,18 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
 
   Color _getRarityColor(ItemRarity rarity) {
     switch (rarity) {
-      case ItemRarity.common:
-        return AppColors.commonColor;
-      case ItemRarity.rare:
-        return AppColors.rareColor;
-      case ItemRarity.epic:
-        return AppColors.epicColor;
+      case ItemRarity.common: return AppColors.commonColor;
+      case ItemRarity.rare: return AppColors.rareColor;
+      case ItemRarity.epic: return AppColors.epicColor;
     }
   }
 
   IconData _getItemIcon(ItemType type) {
     switch (type) {
-      case ItemType.food:
-        return Icons.restaurant;
-      case ItemType.clothes:
-        return Icons.checkroom;
-      case ItemType.furniture:
-        return Icons.chair;
-      case ItemType.shelter:
-        return Icons.home;
+      case ItemType.food: return Icons.restaurant;
+      case ItemType.clothes: return Icons.checkroom;
+      case ItemType.furniture: return Icons.chair;
+      case ItemType.shelter: return Icons.home;
     }
   }
 }

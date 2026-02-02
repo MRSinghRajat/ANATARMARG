@@ -68,19 +68,22 @@ class VerseRepository {
 
   /// Fetch verses with translations for a chapter
   /// Returns empty list if Supabase not initialized or on error.
-  /// Errors are rethrown so callers can show retry/error UI.
   Future<List<VerseWithTranslations>> getVersesWithTranslations(
     String chapterId, {
     String? preferredLanguageCode,
   }) async {
     if (!_supabase.isInitialized) {
-      throw Exception(
-          'Supabase not connected. Check your internet connection.');
+      return []; // Use local data fallback when Supabase not configured
     }
-    return await _supabaseDataSource.getVersesWithTranslations(
-      chapterId,
-      preferredLanguageCode: preferredLanguageCode,
-    );
+    try {
+      return await _supabaseDataSource.getVersesWithTranslations(
+        chapterId,
+        preferredLanguageCode: preferredLanguageCode,
+      );
+    } catch (e) {
+      print('Error fetching verses with translations from Supabase: $e');
+      return [];
+    }
   }
 
   /// Fetch verses with ALL translations (Hindi + English) for displaying both

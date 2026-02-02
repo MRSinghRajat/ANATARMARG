@@ -15,10 +15,12 @@ import '../../data/repositories/book_progress_repository.dart';
 import '../../data/datasources/supabase_verse_datasource.dart'
     show VerseWithTranslations;
 import '../../data/services/verse_notes_service.dart';
+import '../../data/services/reader_preferences_service.dart';
 import '../../../content/data/datasources/gpt_api_service.dart';
 import '../../../content/data/models/chapter_model.dart' show ChapterContent;
 import '../widgets/books_chapters_modal.dart';
 import 'book_chat_screen.dart';
+import '../widgets/reader_settings_modal.dart';
 
 class BookChapterScreen extends ConsumerStatefulWidget {
   final BookModel book;
@@ -45,6 +47,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   final VerseRepository _verseRepository = VerseRepository();
   final ChapterRepository _chapterRepository = ChapterRepository();
   final VerseNotesService _notesService = VerseNotesService();
+  final ReaderPreferencesService _prefsService = ReaderPreferencesService();
   final BookProgressRepository _progressRepository = BookProgressRepository();
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _verseKeys = {};
@@ -52,10 +55,17 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   List<VerseWithTranslations> _verses = [];
   List<ChapterModel> _chapters = [];
   Set<String> _bookmarkedVerseIds = {};
+  Set<String> _readVerseIds = {};
   List<VerseNoteModel> _chapterNotes = [];
+
   String _selectedLanguage = 'en';
   int _currentVerseIndex = 0;
   int _selectedContentTab = 0; // 0: Chapter, 1: Notes
+  
+  // Reader Settings State
+  double _fontSize = 18.0;
+  ReaderTheme _readerTheme = ReaderTheme.paper;
+  ReaderFont _readerFont = ReaderFont.serif;
   bool _isLoading = true;
   bool _isLoadingVerses = false;
   bool _isCompleted = false;
@@ -123,8 +133,22 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   void initState() {
     super.initState();
     GuideAnimationService().setState(GuideState.speaking);
+    _loadPreferences();
     _loadChapter();
     _loadBookmarksAndNotes();
+  }
+
+  Future<void> _loadPreferences() async {
+    final fontSize = await _prefsService.loadFontSize();
+    final theme = await _prefsService.loadTheme();
+    final font = await _prefsService.loadFont();
+    if (mounted) {
+      setState(() {
+        _fontSize = fontSize;
+        _readerTheme = theme;
+        _readerFont = font;
+      });
+    }
   }
 
   Future<void> _loadChapters() async {
@@ -147,9 +171,11 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
       bookmarks = bookmarks.union(supabaseBookmarks);
     }
     final notes = await _notesService.getNotesForChapter(_chapterId);
+    final readVerses = await _progressRepository.getReadVerseIds(_chapterId);
     if (mounted) {
       setState(() {
         _bookmarkedVerseIds = bookmarks;
+        _readVerseIds = readVerses;
         _chapterNotes = notes;
       });
     }
@@ -295,6 +321,52 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
           duration: const Duration(seconds: 1),
         ),
       );
+    }
+  }
+
+  Future<void> _toggleReadStatus(String verseId) async {
+    final isRead = !_readVerseIds.contains(verseId);
+    setState(() {
+      if (isRead) {
+        _readVerseIds.add(verseId);
+      } else {
+        _readVerseIds.remove(verseId);
+      }
+    });
+
+    try {
+      if (isRead) {
+        await _progressRepository.markVerseRead(
+          verseId: verseId,
+          chapterId: _chapterId,
+          bookId: widget.book.id,
+          completedVersesCount: _readVerseIds.length,
+          totalVerses: _verses.length,
+        );
+      } else {
+        // TODO: Implement unmark as read in repository if needed
+        // For now we only support marking as read as per requirements
+        // But local state update allows toggling for current session
+      }
+      
+      // Auto-complete chapter if all verses read
+      if (isRead && _readVerseIds.length == _verses.length && !_isCompleted) {
+         _completeChapter();
+      }
+    } catch (e) {
+      // Revert optimization on error
+      if (mounted) {
+        setState(() {
+          if (isRead) {
+             _readVerseIds.remove(verseId);
+          } else {
+             _readVerseIds.add(verseId);
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating progress: $e')),
+        );
+      }
     }
   }
 
@@ -456,8 +528,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     if (_verses.isEmpty) return;
     if (!_scrollController.hasClients) return;
     // ListView.builder builds items lazily - item may not exist yet.
-    // Use ScrollController with estimated card height (~220px avg).
-    const double estimatedCardHeight = 220;
+    // Use ScrollController with estimated card height.
+    // Reduced to 100 for Reader Mode (clean text is shorter than cards).
+    // Updated for new typography: 18px font + 1.8 height + padding
+    const double estimatedCardHeight = 140;
     final targetOffset = (index * estimatedCardHeight)
         .clamp(0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
@@ -475,7 +549,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
           key!.currentContext!,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          alignment: 0.2,
+          alignment: 0.1, // Align near top (10% down) instead of middle
         );
       }
     });
@@ -657,32 +731,76 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
             button: true,
             label: 'Settings',
             child: GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Settings')),
-                );
-              },
+              onTap: () => _showSettingsModal(context),
               child: Container(
                 width: 44,
                 height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.settings, color: AppColors.tertiaryText),
               ),
-              child: const Icon(Icons.settings, color: AppColors.tertiaryText),
-            ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _showSettingsModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ReaderSettingsModal(
+        currentFontSize: _fontSize,
+        currentTheme: _readerTheme,
+        currentFont: _readerFont,
+        onFontSizeChanged: (val) {
+          setState(() => _fontSize = val);
+          _prefsService.saveFontSize(val);
+        },
+        onThemeChanged: (val) {
+          setState(() => _readerTheme = val);
+          _prefsService.saveTheme(val);
+        },
+        onFontChanged: (val) {
+          setState(() => _readerFont = val);
+          _prefsService.saveFont(val);
+        },
+      ),
+    );
+  }
+
+  Color _getReaderBackgroundColor() {
+    switch (_readerTheme) {
+      case ReaderTheme.dark:
+        return const Color(0xFF121212);
+      case ReaderTheme.paper:
+        return const Color(0xFFF9F7F2);
+      case ReaderTheme.light:
+        return Colors.white;
+    }
+  }
+
+  Color _getReaderTextColor() {
+     return _readerTheme == ReaderTheme.dark ? Colors.white.withOpacity(0.9) : AppColors.primaryText;
+  }
+  
+  String? _getFontFamily() {
+     switch (_readerFont) {
+       case ReaderFont.serif: return 'Serif';
+       case ReaderFont.sans: return null;
+       case ReaderFont.rounded: return 'VarelaRound';
+     }
   }
 
   void _showLanguageSelector(BuildContext context) {
@@ -714,6 +832,135 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     );
   }
 
+  void _showVerseSelector(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF9F7F2),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Jump to Shloka',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryText,
+                      ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: AppColors.tertiaryText),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  childAspectRatio: 1,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _verses.length,
+                itemBuilder: (context, index) {
+                  final shlokaNum = index + 1;
+                  final verseId = _verses[index].verse.id;
+                  final isRead = _readVerseIds.contains(verseId);
+                  final isCurrent = index == _currentVerseIndex;
+                  
+                  return InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _scrollToVerse(index);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isCurrent 
+                            ? AppColors.warmOrange 
+                            : (isRead ? AppColors.successColor.withOpacity(0.1) : Colors.white),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isCurrent 
+                              ? AppColors.warmOrange 
+                              : (isRead ? AppColors.successColor : AppColors.borderColor),
+                          width: 1.5,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$shlokaNum',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isCurrent 
+                              ? Colors.white 
+                              : (isRead ? AppColors.successColor : AppColors.primaryText),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Legend
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderColor),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildLegendItem(context, AppColors.warmOrange, 'Current', isFilled: true),
+                  _buildLegendItem(context, AppColors.successColor, 'Read', isFilled: false),
+                  _buildLegendItem(context, AppColors.borderColor, 'Unread', isFilled: false),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(BuildContext context, Color color, String label, {required bool isFilled}) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: isFilled ? color : (color == AppColors.successColor ? color.withOpacity(0.1) : Colors.white),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: color, width: 1.5),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.secondaryText,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLanguageOption(BuildContext context, String code, String label) {
     final isSelected = _selectedLanguage == code;
     return ListTile(
@@ -737,21 +984,84 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
   Widget _buildMainContent(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0), // Full width
       decoration: BoxDecoration(
-        color: AppColors.lightYellow.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: _getReaderBackgroundColor(),
       ),
       child: Column(
         children: [
           _buildContentTabs(context),
+          // Progress Header - Tap to open Grid
+          if (_selectedContentTab == 0 && !_isLoadingVerses && _verses.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: InkWell(
+                onTap: () => _showVerseSelector(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.warmOrange.withOpacity(0.15),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Chapter Progress',
+                                  style: TextStyle(
+                                    color: AppColors.secondaryText,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '${_readVerseIds.length}/${_verses.length}',
+                                  style: TextStyle(
+                                    color: AppColors.warmOrange,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: _verses.isEmpty 
+                                    ? 0 
+                                    : _readVerseIds.length / _verses.length,
+                                backgroundColor: AppColors.borderColor,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  AppColors.warmOrange,
+                                ),
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(
+                        Icons.grid_view_rounded,
+                        color: AppColors.warmOrange,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Expanded(
             child: _selectedContentTab == 0
                 ? _buildChapterTab(context)
@@ -890,36 +1200,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
     return Column(
       children: [
-        // Shloka dropdown - jump to any shloka
-        if (_verses.length > 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: DropdownButtonFormField<int>(
-              initialValue: _currentVerseIndex.clamp(0, _verses.length - 1),
-              decoration: InputDecoration(
-                labelText: 'Jump to Shloka',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: List.generate(_verses.length, (i) {
-                final num = i + 1;
-                return DropdownMenuItem(
-                  value: i,
-                  child: Text('Shloka $num'),
-                );
-              }),
-              onChanged: (index) {
-                if (index != null) {
-                  setState(() => _currentVerseIndex = index);
-                  _scrollToVerse(index);
-                }
-              },
-            ),
-          ),
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
+            cacheExtent: 2000, // Keep more items alive for better scroll target detection
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
             itemCount: _verses.length,
             itemBuilder: (context, index) {
@@ -950,35 +1234,82 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                   v: v,
                 ),
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
+                  // Clean reader layout - no heavy shadows
+                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                    color: Colors.transparent,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: AppColors.tertiaryText.withOpacity(0.15),
+                        width: 1,
                       ),
-                    ],
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Shloka number + bookmark
+                      // Shloka number + bookmark + read toggle
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            '$shlokaNum',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.warmOrange,
+                          Row(
+                            children: [
+                              Semantics(
+                                label: _readVerseIds.contains(verseId) 
+                                    ? 'Mark as unread' 
+                                    : 'Mark as read',
+                                button: true,
+                                child: GestureDetector(
+                                  onTap: () => _toggleReadStatus(verseId),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                    width: 28, // Slightly larger touch target
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: _readVerseIds.contains(verseId)
+                                            ? AppColors.successColor
+                                            : (_readerTheme == ReaderTheme.dark 
+                                                ? Colors.white.withOpacity(0.3) 
+                                                : AppColors.tertiaryText.withOpacity(0.3)),
+                                        width: 1.5,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      color: _readVerseIds.contains(verseId)
+                                          ? AppColors.successColor
+                                          : Colors.transparent,
+                                    ),
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 300),
+                                      transitionBuilder: (child, anim) =>
+                                          ScaleTransition(scale: anim, child: child),
+                                      child: _readVerseIds.contains(verseId)
+                                          ? const Icon(
+                                              Icons.check,
+                                              key: ValueKey('icon_check'),
+                                              size: 18,
+                                              color: Colors.white,
+                                            )
+                                          : const SizedBox.shrink(key: ValueKey('icon_empty')),
+                                    ),
+                                  ),
                                 ),
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                // Simple elegant Verse number
+                                '$shlokaNum',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.warmOrange,
+                                      fontFamily: 'Serif', // Elegant feel
+                                    ),
+                              ),
+                            ],
                           ),
                           GestureDetector(
                             onTap: () => _toggleBookmark(verseId),
@@ -988,23 +1319,22 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                                   : Icons.bookmark_border,
                               color: isBookmarked
                                   ? AppColors.warmOrange
-                                  : AppColors.tertiaryText,
-                              size: 24,
+                                  : AppColors.tertiaryText.withOpacity(0.6),
+                              size: 26,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      // Show verse in selected language (default: English)
+                      const SizedBox(height: 20),
+                      // Show verse in selected language
                       Text(
                         displayText,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: AppColors.primaryText,
-                              height: 1.5,
-                              fontStyle: _selectedLanguage == 'en'
-                                  ? FontStyle.italic
-                                  : FontStyle.normal,
-                              fontSize: _selectedLanguage == 'sa' ? 18 : 16,
+                              color: _getReaderTextColor(),
+                              height: 1.8, // Improved readability
+                              fontSize: _fontSize, // User setting
+                              fontFamily: _getFontFamily(), // User setting
+                              fontStyle: FontStyle.normal,
                             ),
                       ),
                       // Note hint at bottom when this shlok has notes
@@ -1337,4 +1667,3 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
     );
   }
 }
-
