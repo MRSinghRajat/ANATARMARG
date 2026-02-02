@@ -8,8 +8,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:antar_marg/main.dart';
-import 'package:antar_marg/core/config/app_config.dart';
+import 'package:ashrae_playground/main.dart';
+import 'package:ashrae_playground/core/config/app_config.dart';
 
 void main() {
   testWidgets('App initializes and shows login screen',
@@ -17,7 +17,7 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(
       const ProviderScope(
-        child: AntarMargApp(),
+        child: AshraePlaygroundApp(),
       ),
     );
 
@@ -35,7 +35,7 @@ void main() {
   testWidgets('App has correct title', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
-        child: AntarMargApp(),
+        child: AshraePlaygroundApp(),
       ),
     );
 

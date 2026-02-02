@@ -1,11 +1,11 @@
 {
-    "name": "Antar Marg",
-    "short_name": "Antar Marg",
+    "name": "Ashrae Playground",
+    "short_name": "Ashrae Playground",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFF8E7",
     "theme_color": "#FF9933",
-    "description": "The Inner Path - A spiritual learning app for ancient Indian wisdom",
+    "description": "Ashrae Playground - A spiritual learning app for ancient Indian wisdom",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

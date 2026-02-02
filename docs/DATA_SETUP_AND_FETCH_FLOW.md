@@ -69,7 +69,7 @@ verseTranslationsTable = 'verse_translations'
 ```dart
 void main() async {
   await SupabaseService().initialize();  // Connects to Supabase
-  runApp(ProviderScope(child: AntarMargApp()));
+  runApp(ProviderScope(child: AshraePlaygroundApp()));
 }
 ```
 
