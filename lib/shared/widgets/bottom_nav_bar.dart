@@ -48,18 +48,18 @@ class BottomNavBar extends StatelessWidget {
               ),
               _buildNavItem(
                 context,
+                NavItem.quests,
+                Icons.self_improvement,
+                AppColors.prayerGold,
+                'PRAYER',
+                isCenter: true,
+              ),
+              _buildNavItem(
+                context,
                 NavItem.ashram,
                 Icons.temple_buddhist,
                 AppColors.earthBrown,
                 'ASHRAM',
-              ),
-              _buildNavItem(
-                context,
-                NavItem.quests,
-                Icons.account_balance,
-                AppColors.warmOrange,
-                'YATRA',
-                isCenter: true,
               ),
               _buildNavItem(
                 context,

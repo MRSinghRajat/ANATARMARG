@@ -951,7 +951,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         const SizedBox(width: 8),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
             color: AppColors.secondaryText,
             fontWeight: FontWeight.w500,
@@ -1016,7 +1016,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
+                                const Text(
                                   'Chapter Progress',
                                   style: TextStyle(
                                     color: AppColors.secondaryText,
@@ -1026,7 +1026,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                                 ),
                                 Text(
                                   '${_readVerseIds.length}/${_verses.length}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: AppColors.warmOrange,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,

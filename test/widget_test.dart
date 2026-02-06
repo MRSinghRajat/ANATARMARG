@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:ashrae_playground/main.dart';
-import 'package:ashrae_playground/core/config/app_config.dart';
 
 void main() {
   testWidgets('App initializes and shows login screen',

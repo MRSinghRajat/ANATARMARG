@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:rive/rive.dart'; // Standard Rive import
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/app_router.dart';
 import '../../data/repositories/aangan_repository.dart';
-import '../../data/services/user_presence_service.dart';
 import '../widgets/bell_widget.dart';
-import '../widgets/dust_cleaning_widget.dart';
 import '../widgets/nature_visitor_widget.dart';
 // Shop Integration
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -134,10 +131,6 @@ class _AanganScreenState extends ConsumerState<AanganScreen> with TickerProvider
     }
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +189,7 @@ class _AanganScreenState extends ConsumerState<AanganScreen> with TickerProvider
           ),
           
           // 4. Sacred Rope (Top Right - Hanging from Ceiling)
-          Positioned(
+          const Positioned(
             top: 0, 
             right: 20, 
             child: SafeArea(

@@ -39,4 +39,30 @@ class AppColors {
   static const Color successColor = Color(0xFF4CAF50);
   static const Color warningColor = Color(0xFFFF9800);
   static const Color errorColor = Color(0xFFF44336);
+
+  // Granthalaya (Library) Dark Theme
+  static const Color charcoalDark = Color(0xFF121212);
+  static const Color charcoalCard = Color(0xFF1C1C1C);
+  static const Color charcoalBorder = Color(0xFF2A2A2A);
+  static const Color zinc400 = Color(0xFFA1A1AA);
+  static const Color zinc500 = Color(0xFF71717A);
+  static const Color zinc600 = Color(0xFF52525B);
+  static const Color zinc100 = Color(0xFFF4F4F5);
+
+  // Granthalaya Light Theme (screenshot reference)
+  static const Color backgroundLight = Color(0xFFFDFCFB);
+  static const Color amberPrimary = Color(0xFFD97706); // Amber 600
+  static const Color slate800 = Color(0xFF1E293B);
+  static const Color slate500 = Color(0xFF64748B);
+
+  // Academic Dashboard (matte gold)
+  static const Color matteGold = Color(0xFFC5A059);
+  static const Color borderGold = Color(0x40C5A059); // rgba(197,160,89,0.25)
+
+  // Prayer / Ashram dashboard
+  static const Color prayerBackgroundDark = Color(0xFF181611);
+  static const Color prayerSurfaceDark = Color(0xFF27241C);
+  static const Color prayerGold = Color(0xFFECB613);
+  static const Color prayerTeal = Color(0xFF14B8A6);
+  static const Color prayerMuted = Color(0xFFB9B29D);
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Required for BackdropFilter
 import 'package:confetti/confetti.dart';
 import 'package:scratcher/scratcher.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../data/services/user_presence_service.dart';
 
 class DustCleaningWidget extends StatefulWidget {

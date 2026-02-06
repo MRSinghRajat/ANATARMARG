@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
-import '../../../home/presentation/screens/home_screen.dart';
 import '../../../home/presentation/screens/aangan_screen.dart';
+import '../../../books/presentation/providers/book_providers.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
+import '../../../books/presentation/widgets/granthalaya_resume_bar.dart';
 import '../../../shop/presentation/screens/shop_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../prayer/presentation/screens/prayer_dashboard_screen.dart';
 
 class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
@@ -33,10 +35,10 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final screens = [
       AanganScreen(
-        onBeginTap: () => _navigateTo(NavItem.ashram),
+        onBeginTap: () => _navigateTo(NavItem.quests), // Prayer tab
       ),
-      const ShopScreen(),
-      const HomeScreen(isYatraTab: true), // Yatra - character walks
+      const PrayerDashboardScreen(),
+      const ShopScreen(), // Ashram
       const BooksLibraryScreen(),
       const ProfileScreen(),
     ];
@@ -68,9 +70,17 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           index: _currentIndex,
           children: screens,
         ),
-        bottomNavigationBar: BottomNavBar(
-          currentItem: _currentItem,
-          onTap: _navigateTo,
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_currentItem == NavItem.books &&
+                ref.watch(granthalayaReadModeProvider))
+              const GranthalayaResumeBar(),
+            BottomNavBar(
+              currentItem: _currentItem,
+              onTap: _navigateTo,
+            ),
+          ],
         ),
       ),
     );
@@ -80,10 +90,10 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
     switch (item) {
       case NavItem.home:
         return 0;
-      case NavItem.ashram:
-        return 1;
       case NavItem.quests:
-        return 2;
+        return 1; // Prayer
+      case NavItem.ashram:
+        return 2; // Ashram
       case NavItem.books:
         return 3;
       case NavItem.profile:
