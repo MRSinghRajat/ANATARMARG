@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../core/utils/sound_manager.dart';
+import '../widgets/bookmarked_section.dart';
 import 'language_settings_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -108,6 +109,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 24),
+
+              // Bookmarked Section (Granthalaya black theme)
+              const BookmarkedSection(),
 
               const SizedBox(height: 24),
 

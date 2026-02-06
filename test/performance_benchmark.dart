@@ -1,5 +1,5 @@
 import 'dart:convert';
-import '../lib/features/books/data/models/verse_translation_model.dart';
+import 'package:ashrae_playground/features/books/data/models/verse_translation_model.dart';
 
 void main() {
   const int totalItems = 10000;
@@ -48,7 +48,7 @@ void main() {
 
   stopwatch.stop();
   final int baselineTime = stopwatch.elapsedMicroseconds;
-  print('Baseline (Client-side filtering): ${baselineTime}µs');
+  print('Baseline (Client-side filtering): $baselineTimeµs');
 
   // Measure Optimized (Server-side filtering simulation)
   stopwatch.reset();
@@ -63,7 +63,7 @@ void main() {
 
   stopwatch.stop();
   final int optimizedTime = stopwatch.elapsedMicroseconds;
-  print('Optimized (Server-side filtering): ${optimizedTime}µs');
+  print('Optimized (Server-side filtering): $optimizedTimeµs');
 
   // Calculate Improvement
   final double improvement = (baselineTime - optimizedTime) / baselineTime * 100;

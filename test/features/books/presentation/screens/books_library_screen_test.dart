@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:antar_marg/features/books/presentation/screens/books_library_screen.dart';
-import 'package:antar_marg/features/books/data/repositories/book_repository.dart';
-import 'package:antar_marg/features/books/data/models/book_model.dart';
-import 'package:antar_marg/features/books/presentation/providers/book_providers.dart';
+import 'package:ashrae_playground/features/books/presentation/screens/books_library_screen.dart';
+import 'package:ashrae_playground/features/books/data/repositories/book_repository.dart';
+import 'package:ashrae_playground/features/books/data/models/book_model.dart';
+import 'package:ashrae_playground/features/books/presentation/providers/book_providers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class FakeBookRepository implements BookRepository {

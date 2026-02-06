@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/parva_model.dart';
-import '../../../../shared/widgets/animated_guide.dart';
 
 class ParvaCard extends StatelessWidget {
   final ParvaModel parva;

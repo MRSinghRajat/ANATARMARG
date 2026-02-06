@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:antar_marg/features/profile/presentation/screens/notifications_settings_screen.dart';
+import 'package:ashrae_playground/features/profile/presentation/screens/notifications_settings_screen.dart';
 
 void main() {
   testWidgets('NotificationsSettingsScreen loads and toggles settings', (WidgetTester tester) async {

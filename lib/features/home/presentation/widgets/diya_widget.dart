@@ -91,12 +91,12 @@ class _DiyaWidgetState extends State<DiyaWidget> with SingleTickerProviderStateM
                 bottomLeft: Radius.circular(30),
                 bottomRight: Radius.circular(30),
               ),
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF8D6E63), // Lighter top
-                  const Color(0xFF4E342E), // Darker bottom
+                  Color(0xFF8D6E63), // Lighter top
+                  Color(0xFF4E342E), // Darker bottom
                 ],
               ),
               boxShadow: [

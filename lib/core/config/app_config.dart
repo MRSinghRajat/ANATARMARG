@@ -1,5 +1,5 @@
 class AppConfig {
-  static const String appName = 'Antar Marg';
+  static const String appName = 'Ashrae Playground';
   static const String appTagline = 'The Inner Path';
   static const String appVersion = '1.0.0';
   

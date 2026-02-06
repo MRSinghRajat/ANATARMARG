@@ -37,13 +37,13 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: AntarMargApp(),
+      child: AshraePlaygroundApp(),
     ),
   );
 }
 
-class AntarMargApp extends StatelessWidget {
-  const AntarMargApp({super.key});
+class AshraePlaygroundApp extends StatelessWidget {
+  const AshraePlaygroundApp({super.key});
 
   @override
   Widget build(BuildContext context) {
