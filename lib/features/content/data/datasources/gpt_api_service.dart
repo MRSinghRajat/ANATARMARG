@@ -170,10 +170,16 @@ class GPTApiService {
 
   Future<String> chatWithBook({
     required String book,
+    String? bookDescription,
+    String? category,
     required String userMessage,
     required List<Map<String, String>> history,
   }) async {
-    final systemPrompt = ApiConfig.getBookChatSystemPrompt(book);
+    final systemPrompt = ApiConfig.getBookChatSystemPrompt(
+      bookName: book,
+      bookDescription: bookDescription,
+      category: category,
+    );
 
     final messages = [
       {

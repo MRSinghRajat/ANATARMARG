@@ -1,5 +1,6 @@
 import '../models/book_model.dart';
 import '../datasources/supabase_book_datasource.dart';
+import '../repositories/book_progress_repository.dart';
 import '../../../../core/services/supabase_service.dart';
 
 class BookRepository {
@@ -9,6 +10,7 @@ class BookRepository {
 
   final SupabaseBookDataSource _supabaseDataSource = SupabaseBookDataSource();
   final SupabaseService _supabase = SupabaseService();
+  final BookProgressRepository _progressRepository = BookProgressRepository();
 
   // Fallback: Hardcoded books if Supabase is not available
   // Order and progress match reference: Ramayana first (45%), Mahabharata (12%)
@@ -48,39 +50,43 @@ class BookRepository {
         if (books.isEmpty) {
           return _defaultBooks;
         }
-        // Update progress based on user progress if authenticated
-        if (_supabase.currentUserId != null) {
-          var updatedBooks = <BookModel>[];
-          for (var book in books) {
-            final progress = await _supabaseDataSource.getUserBookProgress(
+        var updatedBooks = <BookModel>[];
+        for (var book in books) {
+          Map<String, dynamic>? progress;
+          if (_supabase.currentUserId != null) {
+            progress = await _supabaseDataSource.getUserBookProgress(
               book.id,
               _supabase.currentUserId!,
             );
-            if (progress != null) {
-              updatedBooks.add(BookModel(
-                id: book.id,
-                name: book.name,
-                nameSanskrit: book.nameSanskrit,
-                description: book.description,
-                totalChapters: book.totalChapters,
-                completedChapters: progress['completed_chapters'] as int? ?? 0,
-                coverImagePath: book.coverImagePath,
-                coverImageUrl: book.coverImageUrl,
-                category: book.category,
-                language: book.language,
-                lastReadAt: progress['last_read_at'] != null
-                    ? DateTime.parse(progress['last_read_at'] as String)
-                    : null,
-                createdAt: book.createdAt,
-                updatedAt: book.updatedAt,
-              ));
-            } else {
-              updatedBooks.add(book);
-            }
+          } else {
+            progress = await _progressRepository.getBookProgress(book.id);
           }
-          return updatedBooks;
+          if (progress != null) {
+            final completedChapters =
+                progress['completed_chapters'] as int? ?? 0;
+            final lastReadAt = progress['last_read_at'];
+            updatedBooks.add(BookModel(
+              id: book.id,
+              name: book.name,
+              nameSanskrit: book.nameSanskrit,
+              description: book.description,
+              totalChapters: book.totalChapters,
+              completedChapters: completedChapters,
+              coverImagePath: book.coverImagePath,
+              coverImageUrl: book.coverImageUrl,
+              category: book.category,
+              language: book.language,
+              lastReadAt: lastReadAt != null
+                  ? DateTime.tryParse(lastReadAt as String)
+                  : null,
+              createdAt: book.createdAt,
+              updatedAt: book.updatedAt,
+            ));
+          } else {
+            updatedBooks.add(book);
+          }
         }
-        return books;
+        return updatedBooks;
       } catch (e) {
         print('Error fetching from Supabase, using local data: $e');
         return _defaultBooks;
@@ -97,31 +103,36 @@ class BookRepository {
       try {
         final book = await _supabaseDataSource.getBookById(id);
         if (book != null) {
-          // Update progress if authenticated
+          Map<String, dynamic>? progress;
           if (_supabase.currentUserId != null) {
-            final progress = await _supabaseDataSource.getUserBookProgress(
+            progress = await _supabaseDataSource.getUserBookProgress(
               book.id,
               _supabase.currentUserId!,
             );
-            if (progress != null) {
-              return BookModel(
-                id: book.id,
-                name: book.name,
-                nameSanskrit: book.nameSanskrit,
-                description: book.description,
-                totalChapters: book.totalChapters,
-                completedChapters: progress['completed_chapters'] as int? ?? 0,
-                coverImagePath: book.coverImagePath,
-                coverImageUrl: book.coverImageUrl,
-                category: book.category,
-                language: book.language,
-                lastReadAt: progress['last_read_at'] != null
-                    ? DateTime.parse(progress['last_read_at'] as String)
-                    : null,
-                createdAt: book.createdAt,
-                updatedAt: book.updatedAt,
-              );
-            }
+          } else {
+            progress = await _progressRepository.getBookProgress(book.id);
+          }
+          if (progress != null) {
+            final completedChapters =
+                progress['completed_chapters'] as int? ?? 0;
+            final lastReadAt = progress['last_read_at'];
+            return BookModel(
+              id: book.id,
+              name: book.name,
+              nameSanskrit: book.nameSanskrit,
+              description: book.description,
+              totalChapters: book.totalChapters,
+              completedChapters: completedChapters,
+              coverImagePath: book.coverImagePath,
+              coverImageUrl: book.coverImageUrl,
+              category: book.category,
+              language: book.language,
+              lastReadAt: lastReadAt != null
+                  ? DateTime.tryParse(lastReadAt as String)
+                  : null,
+              createdAt: book.createdAt,
+              updatedAt: book.updatedAt,
+            );
           }
           return book;
         }

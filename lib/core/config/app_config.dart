@@ -1,11 +1,13 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class AppConfig {
   static const String appName = 'Ashrae Playground';
   static const String appTagline = 'The Inner Path';
   static const String appVersion = '1.0.0';
   
-  // GPT API Configuration
+  // GPT API Configuration (loaded from .env)
   static const String gptApiBaseUrl = 'https://api.openai.com/v1';
-  static const String gptApiKey = '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';
+  static String get gptApiKey => dotenv.env['GPT_API_KEY'] ?? '';
   
   // Coin Rewards
   static const int readingCompletionCoins = 20; // Base coins per chapter

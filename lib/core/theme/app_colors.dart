@@ -41,6 +41,8 @@ class AppColors {
   static const Color errorColor = Color(0xFFF44336);
 
   // Granthalaya (Library) Dark Theme
+  static const Color deepAsh = Color(0xFF0A0A0A);
+  static const Color manuscriptDark = Color(0xFF121212);
   static const Color charcoalDark = Color(0xFF121212);
   static const Color charcoalCard = Color(0xFF1C1C1C);
   static const Color charcoalBorder = Color(0xFF2A2A2A);
@@ -57,6 +59,7 @@ class AppColors {
 
   // Academic Dashboard (matte gold)
   static const Color matteGold = Color(0xFFC5A059);
+  static const Color accentGold = Color(0xFFE5C17B);
   static const Color borderGold = Color(0x40C5A059); // rgba(197,160,89,0.25)
 
   // Prayer / Ashram dashboard

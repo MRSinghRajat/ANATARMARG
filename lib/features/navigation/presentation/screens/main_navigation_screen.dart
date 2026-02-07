@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
 import '../../../home/presentation/screens/aangan_screen.dart';
-import '../../../books/presentation/providers/book_providers.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
-import '../../../books/presentation/widgets/granthalaya_resume_bar.dart';
 import '../../../shop/presentation/screens/shop_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../prayer/presentation/screens/prayer_dashboard_screen.dart';
@@ -70,17 +68,9 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           index: _currentIndex,
           children: screens,
         ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_currentItem == NavItem.books &&
-                ref.watch(granthalayaReadModeProvider))
-              const GranthalayaResumeBar(),
-            BottomNavBar(
-              currentItem: _currentItem,
-              onTap: _navigateTo,
-            ),
-          ],
+        bottomNavigationBar: BottomNavBar(
+          currentItem: _currentItem,
+          onTap: _navigateTo,
         ),
       ),
     );

@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/guide_animation_service.dart';
 import '../../../../shared/services/avatar_growth_service.dart';
@@ -22,6 +25,16 @@ import '../widgets/books_chapters_modal.dart';
 import 'book_chat_screen.dart';
 import '../widgets/reader_settings_modal.dart';
 
+/// Shlok Reader dark theme colors (from HTML design)
+class _ShlokReaderColors {
+  static const Color primary = Color(0xFFF59E0B); // Saffron Amber
+  static const Color backgroundDark = Color(0xFF0A0A0A);
+  static const Color surfaceDark = Color(0xFF161616);
+  static const Color obsidianGreen = Color(0xFF0D1F1A);
+  static const Color zinc800 = Color(0xFF27272A);
+  static const Color zinc900 = Color(0xFF18181B);
+}
+
 class BookChapterScreen extends ConsumerStatefulWidget {
   final BookModel book;
   final ChapterModel? chapter;
@@ -42,25 +55,26 @@ class BookChapterScreen extends ConsumerStatefulWidget {
   ConsumerState<BookChapterScreen> createState() => _BookChapterScreenState();
 }
 
-class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
+class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
+    with SingleTickerProviderStateMixin {
   final GPTApiService _gptService = GPTApiService();
   final VerseRepository _verseRepository = VerseRepository();
   final ChapterRepository _chapterRepository = ChapterRepository();
   final VerseNotesService _notesService = VerseNotesService();
   final ReaderPreferencesService _prefsService = ReaderPreferencesService();
   final BookProgressRepository _progressRepository = BookProgressRepository();
-  final ScrollController _scrollController = ScrollController();
+  late final PageController _pageController;
   final Map<String, GlobalKey> _verseKeys = {};
   ChapterContent? _chapterContent;
   List<VerseWithTranslations> _verses = [];
   List<ChapterModel> _chapters = [];
-  Set<String> _bookmarkedVerseIds = {};
   Set<String> _readVerseIds = {};
   List<VerseNoteModel> _chapterNotes = [];
 
   String _selectedLanguage = 'en';
   int _currentVerseIndex = 0;
   int _selectedContentTab = 0; // 0: Chapter, 1: Notes
+  double _pageScrollOffset = 0; // For zoom/opacity animation during scroll
   
   // Reader Settings State
   double _fontSize = 18.0;
@@ -71,6 +85,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   bool _isCompleted = false;
   String? _loadError;
   final GlobalKey _completeButtonKey = GlobalKey();
+  late AnimationController _glowController;
 
   String get _chapterId =>
       widget.chapter?.id ?? 'bg_chapter_${widget.chapterNumber ?? 1}';
@@ -132,10 +147,24 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: 0, viewportFraction: 0.52);
+    _pageController.addListener(_onPageScroll);
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    )..repeat(reverse: true);
     GuideAnimationService().setState(GuideState.speaking);
     _loadPreferences();
     _loadChapter();
     _loadBookmarksAndNotes();
+  }
+
+  void _onPageScroll() {
+    if (!_pageController.hasClients) return;
+    final page = _pageController.page ?? 0;
+    if ((page - _pageScrollOffset).abs() > 0.001) {
+      setState(() => _pageScrollOffset = page);
+    }
   }
 
   Future<void> _loadPreferences() async {
@@ -165,16 +194,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   }
 
   Future<void> _loadBookmarksAndNotes() async {
-    var bookmarks = await _notesService.getBookmarkedVerseIds();
-    final supabaseBookmarks = await _progressRepository.getBookmarkedVerseIds();
-    if (supabaseBookmarks.isNotEmpty) {
-      bookmarks = bookmarks.union(supabaseBookmarks);
-    }
     final notes = await _notesService.getNotesForChapter(_chapterId);
     final readVerses = await _progressRepository.getReadVerseIds(_chapterId);
     if (mounted) {
       setState(() {
-        _bookmarkedVerseIds = bookmarks;
         _readVerseIds = readVerses;
         _chapterNotes = notes;
       });
@@ -183,6 +206,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
   @override
   void dispose() {
+    _pageController.removeListener(_onPageScroll);
+    _pageController.dispose();
+    _glowController.dispose();
     if (_verses.isNotEmpty &&
         _currentVerseIndex >= 0 &&
         _currentVerseIndex < _verses.length) {
@@ -192,7 +218,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         lastReadVerseId: _verses[_currentVerseIndex].verse.id,
       );
     }
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -263,7 +288,15 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         _isLoadingVerses = false;
         _loadError = null;
         _currentVerseIndex = resolvedIdx;
+        _pageScrollOffset = resolvedIdx.toDouble();
       });
+      if (resolvedIdx > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _pageController.hasClients) {
+            _pageController.jumpToPage(resolvedIdx);
+          }
+        });
+      }
       _loadBookmarksAndNotes();
       if (resolvedIdx > 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -302,25 +335,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         return v.englishTranslation?.text ??
             v.primaryTranslation?.text ??
             (v.translations.isNotEmpty ? v.translations.first.text : '');
-    }
-  }
-
-  Future<void> _toggleBookmark(String verseId) async {
-    await _notesService.toggleBookmark(verseId);
-    var bookmarks = await _notesService.getBookmarkedVerseIds();
-    final isNowBookmarked = bookmarks.contains(verseId);
-    await _progressRepository.setVerseBookmarked(verseId, isNowBookmarked);
-    final supabaseBookmarks = await _progressRepository.getBookmarkedVerseIds();
-    bookmarks = bookmarks.union(supabaseBookmarks);
-    if (mounted) {
-      setState(() => _bookmarkedVerseIds = bookmarks);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(isNowBookmarked ? 'Bookmarked' : 'Removed from bookmarks'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
     }
   }
 
@@ -526,33 +540,12 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
   void _scrollToVerse(int index) {
     if (_verses.isEmpty) return;
-    if (!_scrollController.hasClients) return;
-    // ListView.builder builds items lazily - item may not exist yet.
-    // Use ScrollController with estimated card height.
-    // Reduced to 100 for Reader Mode (clean text is shorter than cards).
-    // Updated for new typography: 18px font + 1.8 height + padding
-    const double estimatedCardHeight = 140;
-    final targetOffset = (index * estimatedCardHeight)
-        .clamp(0.0, _scrollController.position.maxScrollExtent);
-    _scrollController.animateTo(
-      targetOffset,
+    if (!_pageController.hasClients) return;
+    _pageController.animateToPage(
+      index.clamp(0, _verses.length - 1),
       duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
+      curve: Curves.easeInOutCubic,
     );
-    // After scroll, try ensureVisible if the item is now built
-    Future.delayed(const Duration(milliseconds: 450), () {
-      if (!mounted) return;
-      final verseId = _verses[index].verse.id;
-      final key = _verseKeys[verseId];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.1, // Align near top (10% down) instead of middle
-        );
-      }
-    });
   }
 
   Future<void> _completeChapter() async {
@@ -589,31 +582,22 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF87CEEB),
-              Color(0xFF98D8C8),
-              Color(0xFF90EE90),
-            ],
-            stops: [0.0, 0.4, 0.8],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(context),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildMainContent(context),
-              ),
-              _buildBottomBar(context),
-            ],
-          ),
+      backgroundColor: _ShlokReaderColors.backgroundDark,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: _ShlokReaderColors.primary,
+                      ),
+                    )
+                  : _buildMainContent(context),
+            ),
+            _buildBottomBar(context),
+          ],
         ),
       ),
     );
@@ -647,11 +631,17 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     final bookShortName = _getBookShortName();
     final chapterButtonLabel = '$bookShortName Ch $_chapterNum';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _ShlokReaderColors.zinc900.withValues(alpha: 0.4),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+      ),
       child: Row(
         children: [
-          // Book/Chapter selector button (Gita Ch 2 / Mahabharat Ch X)
+          // Chapter selector pill
           Expanded(
             child: Semantics(
               button: true,
@@ -659,43 +649,42 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
               child: GestureDetector(
                 onTap: _showBooksChaptersModal,
                 child: Container(
-                  padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.menu_book,
-                        color: AppColors.warmOrange, size: 22),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        chapterButtonLabel,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primaryText,
-                                ),
-                        overflow: TextOverflow.ellipsis,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.menu_book,
+                        color: _ShlokReaderColors.primary,
+                        size: 22,
                       ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, color: AppColors.tertiaryText),
-                  ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          chapterButtonLabel,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.grey.shade400,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           // Language selector (EN/HI/SA)
           Semantics(
             button: true,
@@ -703,51 +692,76 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
             child: GestureDetector(
               onTap: () => _showLanguageSelector(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _ShlokReaderColors.zinc800,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _translationLabel,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: _ShlokReaderColors.primary,
                   ),
-                ],
-              ),
-              child: Text(
-                _translationLabel,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.warmOrange,
-                    ),
-              ),
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          // Settings gear
+          // Settings
           Semantics(
             button: true,
             label: 'Settings',
             child: GestureDetector(
               onTap: () => _showSettingsModal(context),
               child: Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+                  color: _ShlokReaderColors.zinc800,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
-                child: const Icon(Icons.settings, color: AppColors.tertiaryText),
+                child: Icon(Icons.settings, color: Colors.grey.shade300, size: 22),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerseProgressBar(BuildContext context) {
+    if (_verses.isEmpty) return const SizedBox.shrink();
+    final progress = (_currentVerseIndex + 1) / _verses.length;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress.clamp(0.0, 1.0),
+                minHeight: 6,
+                backgroundColor: Colors.white.withValues(alpha: 0.05),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  _ShlokReaderColors.primary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Verse ${_currentVerseIndex + 1} of ${_verses.length}',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: _ShlokReaderColors.primary,
+              letterSpacing: 1.5,
             ),
           ),
         ],
@@ -780,29 +794,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     );
   }
 
-  Color _getReaderBackgroundColor() {
-    switch (_readerTheme) {
-      case ReaderTheme.dark:
-        return const Color(0xFF121212);
-      case ReaderTheme.paper:
-        return const Color(0xFFF9F7F2);
-      case ReaderTheme.light:
-        return Colors.white;
-    }
-  }
-
-  Color _getReaderTextColor() {
-     return _readerTheme == ReaderTheme.dark ? Colors.white.withOpacity(0.9) : AppColors.primaryText;
-  }
-  
-  String? _getFontFamily() {
-     switch (_readerFont) {
-       case ReaderFont.serif: return 'Serif';
-       case ReaderFont.sans: return null;
-       case ReaderFont.rounded: return 'VarelaRound';
-     }
-  }
-
   void _showLanguageSelector(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -832,135 +823,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     );
   }
 
-  void _showVerseSelector(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Color(0xFFF9F7F2),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Jump to Shloka',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primaryText,
-                      ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: AppColors.tertiaryText),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 5,
-                  childAspectRatio: 1,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                itemCount: _verses.length,
-                itemBuilder: (context, index) {
-                  final shlokaNum = index + 1;
-                  final verseId = _verses[index].verse.id;
-                  final isRead = _readVerseIds.contains(verseId);
-                  final isCurrent = index == _currentVerseIndex;
-                  
-                  return InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      _scrollToVerse(index);
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isCurrent 
-                            ? AppColors.warmOrange 
-                            : (isRead ? AppColors.successColor.withOpacity(0.1) : Colors.white),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isCurrent 
-                              ? AppColors.warmOrange 
-                              : (isRead ? AppColors.successColor : AppColors.borderColor),
-                          width: 1.5,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$shlokaNum',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isCurrent 
-                              ? Colors.white 
-                              : (isRead ? AppColors.successColor : AppColors.primaryText),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Legend
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderColor),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildLegendItem(context, AppColors.warmOrange, 'Current', isFilled: true),
-                  _buildLegendItem(context, AppColors.successColor, 'Read', isFilled: false),
-                  _buildLegendItem(context, AppColors.borderColor, 'Unread', isFilled: false),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLegendItem(BuildContext context, Color color, String label, {required bool isFilled}) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: isFilled ? color : (color == AppColors.successColor ? color.withOpacity(0.1) : Colors.white),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: color, width: 1.5),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.secondaryText,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLanguageOption(BuildContext context, String code, String label) {
     final isSelected = _selectedLanguage == code;
     return ListTile(
@@ -984,84 +846,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
   Widget _buildMainContent(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0), // Full width
-      decoration: BoxDecoration(
-        color: _getReaderBackgroundColor(),
-      ),
+      color: _ShlokReaderColors.backgroundDark,
       child: Column(
         children: [
           _buildContentTabs(context),
-          // Progress Header - Tap to open Grid
-          if (_selectedContentTab == 0 && !_isLoadingVerses && _verses.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: InkWell(
-                onTap: () => _showVerseSelector(context),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.warmOrange.withOpacity(0.15),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Chapter Progress',
-                                  style: TextStyle(
-                                    color: AppColors.secondaryText,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  '${_readVerseIds.length}/${_verses.length}',
-                                  style: const TextStyle(
-                                    color: AppColors.warmOrange,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _verses.isEmpty 
-                                    ? 0 
-                                    : _readVerseIds.length / _verses.length,
-                                backgroundColor: AppColors.borderColor,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  AppColors.warmOrange,
-                                ),
-                                minHeight: 6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Icon(
-                        Icons.grid_view_rounded,
-                        color: AppColors.warmOrange,
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           Expanded(
             child: _selectedContentTab == 0
                 ? _buildChapterTab(context)
@@ -1074,15 +862,19 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
   Widget _buildContentTabs(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(12),
+        color: _ShlokReaderColors.zinc900,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
+        ),
       ),
       child: Row(
         children: [
-          _buildContentTab(0, 'Chapter', Icons.menu_book),
-          _buildContentTab(1, 'Notes', Icons.note),
+          _buildContentTab(0, 'Chapter', Icons.auto_stories),
+          _buildContentTab(1, 'Notes', Icons.description),
         ],
       ),
     );
@@ -1100,7 +892,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppColors.warmOrange.withOpacity(0.2)
+                ? _ShlokReaderColors.primary.withValues(alpha: 0.1)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
@@ -1109,19 +901,20 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
             children: [
               Icon(
                 icon,
-                size: 18,
-                color:
-                    isSelected ? AppColors.warmOrange : AppColors.tertiaryText,
+                size: 20,
+                color: isSelected
+                    ? _ShlokReaderColors.primary
+                    : Colors.grey.shade400,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   color: isSelected
-                      ? AppColors.warmOrange
-                      : AppColors.tertiaryText,
+                      ? _ShlokReaderColors.primary
+                      : Colors.grey.shade400,
                 ),
               ),
             ],
@@ -1200,190 +993,315 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
 
     return Column(
       children: [
+        _buildVerseProgressBar(context),
         Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            cacheExtent: 2000, // Keep more items alive for better scroll target detection
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-            itemCount: _verses.length,
-            itemBuilder: (context, index) {
-              final v = _verses[index];
-              final shlokaNum = index + 1;
-              final totalShlokas = _verses.length;
-              final verseId = v.verse.id;
-
-              // Get text for selected language (default: English)
-              final displayText = _getVerseTextForLanguage(v);
-              final verseTextForCopy = displayText;
-
-              // Use verse.id for unique keys (avoids duplicate GlobalKeys)
-              _verseKeys[verseId] ??= GlobalKey();
-
-              final isBookmarked = _bookmarkedVerseIds.contains(verseId);
-              final verseNotes =
-                  _chapterNotes.where((n) => n.verseId == verseId).toList();
-
-              return GestureDetector(
-                key: _verseKeys[verseId],
-                onLongPress: () => _showVerseContextMenu(
-                  context,
-                  verseId: verseId,
-                  verseText: verseTextForCopy,
-                  shlokaNum: shlokaNum,
-                  totalShlokas: totalShlokas,
-                  v: v,
-                ),
-                child: Container(
-                  // Clean reader layout - no heavy shadows
-                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: AppColors.tertiaryText.withOpacity(0.15),
-                        width: 1,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final viewportHeight = constraints.maxHeight;
+              return Stack(
+                children: [
+                  // Gradient line connecting verse numbers (fixed, full height)
+                  Positioned(
+                    left: 21,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 3,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              _ShlokReaderColors.primary,
+                              _ShlokReaderColors.primary.withValues(alpha: 0.6),
+                              _ShlokReaderColors.primary.withValues(alpha: 0.2),
+                              _ShlokReaderColors.primary.withValues(alpha: 0.05),
+                            ],
+                            stops: const [0.0, 0.2, 0.6, 1.0],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Shloka number + bookmark + read toggle
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Semantics(
-                                label: _readVerseIds.contains(verseId) 
-                                    ? 'Mark as unread' 
-                                    : 'Mark as read',
-                                button: true,
-                                child: GestureDetector(
-                                  onTap: () => _toggleReadStatus(verseId),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeInOut,
-                                    width: 28, // Slightly larger touch target
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: _readVerseIds.contains(verseId)
-                                            ? AppColors.successColor
-                                            : (_readerTheme == ReaderTheme.dark 
-                                                ? Colors.white.withOpacity(0.3) 
-                                                : AppColors.tertiaryText.withOpacity(0.3)),
-                                        width: 1.5,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      color: _readVerseIds.contains(verseId)
-                                          ? AppColors.successColor
-                                          : Colors.transparent,
-                                    ),
-                                    child: AnimatedSwitcher(
-                                      duration: const Duration(milliseconds: 300),
-                                      transitionBuilder: (child, anim) =>
-                                          ScaleTransition(scale: anim, child: child),
-                                      child: _readVerseIds.contains(verseId)
-                                          ? const Icon(
-                                              Icons.check,
-                                              key: ValueKey('icon_check'),
-                                              size: 18,
-                                              color: Colors.white,
-                                            )
-                                          : const SizedBox.shrink(key: ValueKey('icon_empty')),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                // Simple elegant Verse number
-                                '$shlokaNum',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.warmOrange,
-                                      fontFamily: 'Serif', // Elegant feel
-                                    ),
-                              ),
-                            ],
-                          ),
-                          GestureDetector(
-                            onTap: () => _toggleBookmark(verseId),
-                            child: Icon(
-                              isBookmarked
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_border,
-                              color: isBookmarked
-                                  ? AppColors.warmOrange
-                                  : AppColors.tertiaryText.withOpacity(0.6),
-                              size: 26,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Show verse in selected language
-                      Text(
-                        displayText,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: _getReaderTextColor(),
-                              height: 1.8, // Improved readability
-                              fontSize: _fontSize, // User setting
-                              fontFamily: _getFontFamily(), // User setting
-                              fontStyle: FontStyle.normal,
-                            ),
-                      ),
-                      // Note hint at bottom when this shlok has notes
-                      if (verseNotes.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.warmOrange.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.warmOrange.withOpacity(0.3),
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.note,
-                                size: 18,
-                                color: AppColors.warmOrange,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  verseNotes.first.note,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: AppColors.secondaryText,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                  PageView.builder(
+                    controller: _pageController,
+                    scrollDirection: Axis.vertical,
+                    physics: const PageScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    itemCount: _verses.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentVerseIndex = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final page = _pageController.hasClients
+                ? (_pageController.page ?? index.toDouble())
+                : index.toDouble();
+            final distance = (index - page).abs();
+            final scale = (1.0 - (distance * 0.06)).clamp(0.9, 1.0);
+            final opacity = (1.0 - (distance * 0.35)).clamp(0.45, 1.0);
+            final isActive = distance < 0.5;
+
+            return SizedBox(
+              height: viewportHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Verse count on far left (aligned with gradient line)
+                  SizedBox(
+                    width: 48,
+                    child: Center(
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isActive
+                              ? _ShlokReaderColors.primary
+                              : _ShlokReaderColors.primary.withValues(alpha: 0.4),
+                          border: Border.all(
+                            color: _ShlokReaderColors.backgroundDark,
+                            width: 2,
                           ),
                         ),
-                      ],
-                    ],
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${index + 1}',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isActive
+                                ? Colors.black
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Opacity(
+                          opacity: opacity,
+                          child: isActive
+                              ? _buildVersePageCard(context, index)
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(32),
+                                  child: ImageFiltered(
+                                    imageFilter: ImageFilter.blur(
+                                      sigmaX: 2,
+                                      sigmaY: 2,
+                                    ),
+                                    child: _buildVersePageCard(context, index),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+                ],
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildVersePageCard(BuildContext context, int index) {
+    final v = _verses[index];
+    final shlokaNum = index + 1;
+    final totalShlokas = _verses.length;
+    final verseId = v.verse.id;
+    final displayText = _getVerseTextForLanguage(v);
+    _verseKeys[verseId] ??= GlobalKey();
+    final isRead = _readVerseIds.contains(verseId);
+    final page = _pageController.hasClients ? (_pageController.page ?? index.toDouble()) : index.toDouble();
+    final isActive = (index - page).abs() < 0.5; // Centered card during scroll
+    final verseNotes =
+        _chapterNotes.where((n) => n.verseId == verseId).toList();
+    final snippet = displayText.length > 100
+        ? '${displayText.substring(0, 100)}...'
+        : displayText;
+
+    return Padding(
+      key: _verseKeys[verseId],
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onLongPress: () => _showVerseContextMenu(
+            context,
+            verseId: verseId,
+            verseText: displayText,
+            shlokaNum: shlokaNum,
+            totalShlokas: totalShlokas,
+            v: v,
+          ),
+          borderRadius: BorderRadius.circular(32),
+          splashColor: _ShlokReaderColors.primary.withValues(alpha: 0.1),
+          highlightColor: _ShlokReaderColors.primary.withValues(alpha: 0.05),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: AnimatedBuilder(
+              animation: _glowController,
+              builder: (context, child) {
+                final glowValue = 0.15 + (_glowController.value * 0.15);
+                return Container(
+                  constraints: const BoxConstraints(maxWidth: 540, minHeight: 180),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isRead
+                          ? [
+                              AppColors.successColor.withValues(alpha: 0.25),
+                              AppColors.successColor.withValues(alpha: 0.12),
+                            ]
+                          : [
+                              Colors.white.withValues(alpha: 0.06),
+                              Colors.white.withValues(alpha: 0.02),
+                            ],
+                    ),
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(
+                      color: isActive
+                          ? _ShlokReaderColors.primary
+                              .withValues(alpha: 0.2 + glowValue)
+                          : Colors.white.withValues(alpha: 0.06),
+                      width: isActive ? 2 : 1,
+                    ),
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 24,
+                              offset: const Offset(0, 12),
+                            ),
+                            BoxShadow(
+                              color: _ShlokReaderColors.primary
+                                  .withValues(alpha: glowValue),
+                              blurRadius: 20,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: child,
+                );
+              },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (isActive) _buildFloatingParticles(),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.28,
+                      ),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Text(
+                          isActive ? displayText : snippet,
+                          style: GoogleFonts.cinzel(
+                            fontSize: isActive ? _fontSize : 16,
+                            height: 1.8,
+                            fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
+                            color: isActive ? Colors.grey.shade100 : Colors.grey.shade500,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: isActive ? null : 4,
+                          overflow: isActive ? null : TextOverflow.ellipsis,
+                        ),
+                      ),
+                          ),
+                          if (verseNotes.isNotEmpty && isActive) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                              Icons.note,
+                              size: 18,
+                              color: _ShlokReaderColors.primary,
+                            ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      verseNotes.first.note,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade400,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingParticles() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _glowController,
+          builder: (context, _) {
+            return CustomPaint(
+              painter: _ParticlePainter(progress: _glowController.value),
+              size: Size.infinite,
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -1393,18 +1311,23 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.note_add, size: 64, color: AppColors.tertiaryText),
+            Icon(Icons.note_add, size: 64, color: Colors.grey.shade600),
             const SizedBox(height: 16),
             Text(
               'No notes yet',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Long-press a shlok and tap Notes to add a note',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.tertiaryText,
-                  ),
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.grey.shade400,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1421,15 +1344,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _ShlokReaderColors.surfaceDark,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1439,14 +1356,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
                 children: [
                   Text(
                     'Shloka ${note.shlokaNumber}',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.warmOrange,
-                        ),
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      color: _ShlokReaderColors.primary,
+                    ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    color: AppColors.tertiaryText,
+                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.grey.shade500),
                     onPressed: () async {
                       await _notesService.removeNote(note.verseId, note.note);
                       if (mounted) await _loadBookmarksAndNotes();
@@ -1457,10 +1373,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
               const SizedBox(height: 8),
               Text(
                 note.verseText,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: AppColors.primaryText,
-                    ),
+                style: GoogleFonts.inter(
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade300,
+                ),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1468,20 +1384,18 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warmOrange.withOpacity(0.1),
+                  color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.comment, size: 18, color: AppColors.warmOrange),
+                    Icon(Icons.comment, size: 18, color: _ShlokReaderColors.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         note.note,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.primaryText,
-                            ),
+                        style: GoogleFonts.inter(color: Colors.grey.shade300),
                       ),
                     ),
                   ],
@@ -1494,92 +1408,138 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen> {
     );
   }
 
+  Future<void> _toggleCenterVerseRead() async {
+    if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return;
+    final verseId = _verses[_currentVerseIndex].verse.id;
+    await _toggleReadStatus(verseId);
+    if (mounted && _readVerseIds.length == _verses.length && !_isCompleted) {
+      _completeChapter();
+    }
+  }
+
+  bool get _isCenterVerseRead {
+    if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return false;
+    return _readVerseIds.contains(_verses[_currentVerseIndex].verse.id);
+  }
+
   Widget _buildBottomBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: Colors.white.withOpacity(0.3),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      decoration: BoxDecoration(
+        color: _ShlokReaderColors.obsidianGreen.withValues(alpha: 0.95),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Complete button
+          _buildShlokNavButton(
+            icon: Icons.chevron_left,
+            onTap: _goToPrevChapter,
+            label: 'Previous Chapter',
+          ),
+          const SizedBox(width: 16),
           Semantics(
             button: true,
-            label: _isCompleted ? 'Chapter Completed' : 'Mark chapter as complete',
-            enabled: !_isCompleted,
+            label: _isCenterVerseRead ? 'Mark verse as unread' : 'Mark verse as read',
             child: GestureDetector(
-              onTap: _isCompleted ? null : _completeChapter,
+              onTap: _toggleCenterVerseRead,
               child: Container(
                 key: _completeButtonKey,
-                width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: _isCompleted
-                    ? AppColors.successColor.withOpacity(0.5)
-                    : AppColors.successColor,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.successColor.withOpacity(0.4),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _isCenterVerseRead
+                      ? AppColors.successColor
+                      : _ShlokReaderColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_isCenterVerseRead
+                              ? AppColors.successColor
+                              : _ShlokReaderColors.primary)
+                          .withValues(alpha: 0.4),
+                      blurRadius: 12,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _isCenterVerseRead ? Icons.check_circle : Icons.check,
+                  color: _isCenterVerseRead ? Colors.white : Colors.black,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                _isCompleted ? Icons.check : Icons.check,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
             ),
           ),
-          // Prev/Next arrows - move between chapters
-          Row(
-            children: [
-              _buildNavButton(
-                icon: Icons.arrow_back_ios_new,
-                onTap: _goToPrevChapter,
-                label: 'Previous Chapter',
-              ),
-              const SizedBox(width: 16),
-              _buildNavButton(
-                icon: Icons.arrow_forward_ios,
-                onTap: _goToNextChapter,
-                label: 'Next Chapter',
-              ),
-            ],
+          const SizedBox(width: 16),
+          _buildShlokNavButton(
+            icon: Icons.chevron_right,
+            onTap: _goToNextChapter,
+            label: 'Next Chapter',
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNavButton(
-      {required IconData icon, required VoidCallback onTap, required String label}) {
+  Widget _buildShlokNavButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String label,
+  }) {
     return Semantics(
       button: true,
       label: label,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 44,
-          height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: Icon(icon, size: 18, color: Colors.white),
         ),
-        child: Icon(icon, size: 20, color: AppColors.primaryText),
-      ),
       ),
     );
   }
+}
+
+/// Painter for floating particle effect (incense smoke style)
+class _ParticlePainter extends CustomPainter {
+  final double progress;
+
+  _ParticlePainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const particles = [
+      Offset(0.2, 0.8),
+      Offset(0.5, 0.7),
+      Offset(0.8, 0.75),
+      Offset(0.35, 0.9),
+      Offset(0.65, 0.85),
+    ];
+    for (var i = 0; i < particles.length; i++) {
+      final p = particles[i];
+      final yOffset = (progress * 2 + i * 0.2) % 1.0;
+      final x = p.dx * size.width + (i.isOdd ? 10 : -10) * progress;
+      final y = size.height - (p.dy * size.height * 0.6) - (yOffset * size.height * 0.4);
+      final radius = 2.0 + (i % 3);
+      final opacity = (0.03 + (1 - yOffset) * 0.04).clamp(0.0, 0.08);
+      final paint = Paint()
+        ..color = _ShlokReaderColors.primary.withValues(alpha: opacity)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(x, y), radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParticlePainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 /// Dialog for adding a note - manages TextEditingController lifecycle properly

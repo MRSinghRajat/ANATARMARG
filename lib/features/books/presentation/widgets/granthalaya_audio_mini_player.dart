@@ -41,14 +41,13 @@ class GranthalayaAudioMiniPlayer extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => FullAudioPlayerScreen(
                   title: title,
                   coverImageUrl: coverImageUrl,
-                  onClose: () => Navigator.pop(context),
                 ),
               ),
             );
@@ -122,15 +121,14 @@ class GranthalayaAudioMiniPlayer extends StatelessWidget {
               const SizedBox(width: 8),
               // Play button
               GestureDetector(
-                onTap: () {
+                onTap: () async {
                   onPlayPause?.call();
-                  Navigator.push(
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => FullAudioPlayerScreen(
                         title: title,
                         coverImageUrl: coverImageUrl,
-                        onClose: () => Navigator.pop(context),
                       ),
                     ),
                   );

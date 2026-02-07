@@ -84,8 +84,9 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 32),
                     onPressed: () {
-                      widget.onClose?.call();
-                      Navigator.of(context).pop();
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      }
                     },
                   ),
                   Text(

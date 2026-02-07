@@ -6,7 +6,7 @@ import '../../../../core/config/supabase_config.dart';
 class SupabaseProgressDataSource {
   final SupabaseService _supabase = SupabaseService();
 
-  bool get _canSave =>
+  bool get canPersist =>
       _supabase.isInitialized && _supabase.currentUserId != null;
 
   /// Upsert user book progress (completed_chapters, last_read_chapter_id, last_read_at)
@@ -16,7 +16,7 @@ class SupabaseProgressDataSource {
     String? lastReadChapterId,
     DateTime? lastReadAt,
   }) async {
-    if (!_canSave) return;
+    if (!canPersist) return;
     final userId = _supabase.currentUserId!;
     try {
       await _supabase.client!.from(SupabaseConfig.userBookProgressTable).upsert(
@@ -44,7 +44,7 @@ class SupabaseProgressDataSource {
     DateTime? startedAt,
     DateTime? completedAt,
   }) async {
-    if (!_canSave) return;
+    if (!canPersist) return;
     final userId = _supabase.currentUserId!;
     try {
       await _supabase.client!
@@ -68,13 +68,15 @@ class SupabaseProgressDataSource {
   }
 
   /// Upsert user verse/shlok progress (is_read, is_bookmarked, read_at)
+  /// [chapterId] optional, used by local fallback for chapter-verse mapping
   Future<void> upsertVerseProgress({
     required String verseId,
+    String? chapterId,
     bool isRead = false,
     bool isBookmarked = false,
     DateTime? readAt,
   }) async {
-    if (!_canSave) return;
+    if (!canPersist) return;
     final userId = _supabase.currentUserId!;
     try {
       await _supabase.client!
@@ -97,7 +99,7 @@ class SupabaseProgressDataSource {
 
   /// Get chapter progress for a user
   Future<Map<String, dynamic>?> getChapterProgress(String chapterId) async {
-    if (!_canSave) return null;
+    if (!canPersist) return null;
     try {
       final response = await _supabase.client!
           .from(SupabaseConfig.userChapterProgressTable)
@@ -114,7 +116,7 @@ class SupabaseProgressDataSource {
 
   /// Get set of read verse IDs for a chapter (from user_verse_progress joined with verses)
   Future<Set<String>> getReadVerseIdsForChapter(String chapterId) async {
-    if (!_canSave) return {};
+    if (!canPersist) return {};
     try {
       final verses = await _supabase.client!
           .from('verses')
@@ -138,7 +140,7 @@ class SupabaseProgressDataSource {
 
   /// Get user book progress
   Future<Map<String, dynamic>?> getBookProgress(String bookId) async {
-    if (!_canSave) return null;
+    if (!canPersist) return null;
     try {
       final response = await _supabase.client!
           .from(SupabaseConfig.userBookProgressTable)
@@ -159,7 +161,7 @@ class SupabaseProgressDataSource {
     required String chapterId,
     String? lastReadVerseId,
   }) async {
-    if (!_canSave) return;
+    if (!canPersist) return;
     final userId = _supabase.currentUserId!;
     final now = DateTime.now().toIso8601String();
     try {
@@ -203,7 +205,7 @@ class SupabaseProgressDataSource {
 
   /// Get set of bookmarked verse IDs
   Future<Set<String>> getBookmarkedVerseIds() async {
-    if (!_canSave) return {};
+    if (!canPersist) return {};
     try {
       final progress = await _supabase.client!
           .from(SupabaseConfig.userVerseProgressTable)
