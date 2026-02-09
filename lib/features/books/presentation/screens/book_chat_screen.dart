@@ -215,7 +215,6 @@ class _BookChatScreenState extends ConsumerState<BookChatScreen> {
                   },
                 ),
         ),
-
         Container(
           padding: const EdgeInsets.all(16),
           decoration: const BoxDecoration(
@@ -318,7 +317,8 @@ class _BookChatScreenState extends ConsumerState<BookChatScreen> {
               alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.75,
                 ),
@@ -329,8 +329,12 @@ class _BookChatScreenState extends ConsumerState<BookChatScreen> {
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
-                    bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
-                    bottomLeft: !isUser ? const Radius.circular(4) : const Radius.circular(16),
+                    bottomRight: isUser
+                        ? const Radius.circular(4)
+                        : const Radius.circular(16),
+                    bottomLeft: !isUser
+                        ? const Radius.circular(4)
+                        : const Radius.circular(16),
                   ),
                 ),
                 child: Text(

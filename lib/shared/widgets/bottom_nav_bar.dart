@@ -50,16 +50,16 @@ class BottomNavBar extends StatelessWidget {
                 context,
                 NavItem.quests,
                 Icons.self_improvement,
-                AppColors.prayerGold,
+                AppColors.earthBrown,
                 'PRAYER',
-                isCenter: true,
               ),
               _buildNavItem(
                 context,
                 NavItem.ashram,
                 Icons.temple_buddhist,
-                AppColors.earthBrown,
+                AppColors.ashramSaffron,
                 'ASHRAM',
+                isCenter: true,
               ),
               _buildNavItem(
                 context,
@@ -99,34 +99,41 @@ class BottomNavBar extends StatelessWidget {
         onTap: () => onTap(item),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.5),
-                    blurRadius: 8,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 24,
+            Transform.translate(
+              offset: const Offset(0, -16),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],

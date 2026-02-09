@@ -1,14 +1,17 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../providers/now_playing_provider.dart';
 
-/// Full-screen audio player with full controls. Shown when user expands mini player in Granthalaya.
-class FullAudioPlayerScreen extends StatefulWidget {
+/// Full-screen audio player. Opened when user taps the mini player bar.
+/// Uses shared NowPlayingProvider - no own AudioPlayer.
+class FullAudioPlayerScreen extends ConsumerWidget {
   final String title;
   final String? subtitle;
   final String? coverImageUrl;
+  final String? audioUrl;
   final VoidCallback? onClose;
 
   const FullAudioPlayerScreen({
@@ -16,66 +19,28 @@ class FullAudioPlayerScreen extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.coverImageUrl,
+    this.audioUrl,
     this.onClose,
   });
 
   @override
-  State<FullAudioPlayerScreen> createState() => _FullAudioPlayerScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(nowPlayingProvider);
+    if (state == null) {
+      return Scaffold(
+        backgroundColor: AppColors.charcoalDark,
+        body: const Center(child: CircularProgressIndicator(color: AppColors.matteGold)),
+      );
+    }
 
-class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
-  bool _isPlaying = false;
-  double _progress = 0.2; // 0.0 - 1.0
-  static const int _totalSeconds = 549; // 9:09
-  Timer? _progressTimer;
+    final notifier = ref.read(nowPlayingProvider.notifier);
+    final hasRealAudio = state.audioUrl != null && state.audioUrl!.isNotEmpty;
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _progressTimer?.cancel();
-    super.dispose();
-  }
-
-  void _togglePlay() {
-    setState(() {
-      _isPlaying = !_isPlaying;
-      if (_isPlaying) {
-        _progressTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-          if (!mounted) return;
-          setState(() {
-            _progress += 0.5 / _totalSeconds;
-            if (_progress >= 1.0) {
-              _progress = 1.0;
-              _progressTimer?.cancel();
-              _isPlaying = false;
-            }
-          });
-        });
-      } else {
-        _progressTimer?.cancel();
-      }
-    });
-  }
-
-  String _formatTime(double progress) {
-    final secs = (progress * _totalSeconds).round();
-    final m = secs ~/ 60;
-    final s = secs % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.charcoalDark,
       body: SafeArea(
         child: Column(
           children: [
-            // Header with close
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
@@ -83,11 +48,7 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 32),
-                    onPressed: () {
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop();
-                      }
-                    },
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                   Text(
                     'Now Playing',
@@ -105,7 +66,6 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // Cover art
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 48),
               child: AspectRatio(
@@ -123,9 +83,9 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: widget.coverImageUrl != null && widget.coverImageUrl!.isNotEmpty
+                    child: (state.coverUrl != null && state.coverUrl!.isNotEmpty)
                         ? CachedNetworkImage(
-                            imageUrl: widget.coverImageUrl!,
+                            imageUrl: state.coverUrl!,
                             fit: BoxFit.cover,
                             color: Colors.white.withOpacity(0.9),
                             colorBlendMode: BlendMode.modulate,
@@ -137,13 +97,12 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
               ),
             ),
             const SizedBox(height: 40),
-            // Title & subtitle
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
                   Text(
-                    widget.title,
+                    state.title,
                     style: GoogleFonts.crimsonPro(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -153,10 +112,10 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
+                  if (state.subtitle != null && state.subtitle!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      widget.subtitle!,
+                      state.subtitle!,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         color: AppColors.zinc500,
@@ -170,7 +129,6 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
               ),
             ),
             const Spacer(),
-            // Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -183,28 +141,29 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
                       overlayColor: AppColors.matteGold.withOpacity(0.2),
                     ),
                     child: Slider(
-                      value: _progress.clamp(0.0, 1.0),
-                      onChanged: (v) {
-                        setState(() => _progress = v);
-                        if (_isPlaying && _progress >= 1.0) {
-                          _progressTimer?.cancel();
-                          _isPlaying = false;
-                        }
-                      },
+                      value: state.progress.clamp(0.0, 1.0),
+                      onChanged: hasRealAudio && state.duration.inMilliseconds > 0
+                          ? (v) {
+                              final ms = (v * state.duration.inMilliseconds).round();
+                              notifier.seek(Duration(milliseconds: ms));
+                            }
+                          : null,
                     ),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _formatTime(_progress),
+                        state.positionFormatted,
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: AppColors.zinc500,
                         ),
                       ),
                       Text(
-                        _formatTime(1.0),
+                        state.duration.inMilliseconds > 0
+                            ? state.durationFormatted
+                            : '--:--',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: AppColors.zinc500,
@@ -216,49 +175,47 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // Controls: previous, play/pause, next
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
                   icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 40),
-                  onPressed: () {
-                    setState(() => _progress = 0);
-                    _progressTimer?.cancel();
-                    _isPlaying = false;
-                  },
+                  onPressed: () => notifier.seek(Duration.zero),
                 ),
                 const SizedBox(width: 24),
                 Material(
                   color: AppColors.matteGold,
                   shape: const CircleBorder(),
                   child: InkWell(
-                    onTap: _togglePlay,
+                    onTap: state.isLoading ? null : () => notifier.togglePlayPause(),
                     customBorder: const CircleBorder(),
                     child: SizedBox(
                       width: 72,
                       height: 72,
-                      child: Icon(
-                        _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        color: Colors.black,
-                        size: 48,
-                      ),
+                      child: state.isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(18),
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : Icon(
+                              state.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              color: Colors.black,
+                              size: 48,
+                            ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 24),
                 IconButton(
                   icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 40),
-                  onPressed: () {
-                    setState(() => _progress = 0);
-                    _progressTimer?.cancel();
-                    _isPlaying = false;
-                  },
+                  onPressed: () => notifier.seek(state.duration),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            // Optional: repeat, shuffle (simple icons)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -280,7 +237,7 @@ class _FullAudioPlayerScreenState extends State<FullAudioPlayerScreen> {
     );
   }
 
-  Widget _placeholderCover() {
+  static Widget _placeholderCover() {
     return Container(
       color: AppColors.charcoalCard,
       child: const Icon(Icons.music_note_rounded, color: AppColors.matteGold, size: 80),

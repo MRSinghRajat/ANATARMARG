@@ -8,6 +8,10 @@ class VerseContent {
   final String? context;
   final List<String>? relatedCharacters;
   final DateTime? createdAt;
+  /// Optional Devanagari verse text for daily verse full-screen (e.g. from AI).
+  final String? devanagariText;
+  /// Optional daily insight / sacred action suggestion (e.g. from AI).
+  final String? dailyInsight;
 
   VerseContent({
     required this.id,
@@ -19,6 +23,8 @@ class VerseContent {
     this.context,
     this.relatedCharacters,
     this.createdAt,
+    this.devanagariText,
+    this.dailyInsight,
   });
 
   factory VerseContent.fromJson(Map<String, dynamic> json) {
@@ -36,6 +42,8 @@ class VerseContent {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : null,
+      devanagariText: json['devanagariText'] as String?,
+      dailyInsight: json['dailyInsight'] as String?,
     );
   }
 
@@ -50,6 +58,8 @@ class VerseContent {
       'context': context,
       'relatedCharacters': relatedCharacters,
       'createdAt': createdAt?.toIso8601String(),
+      'devanagariText': devanagariText,
+      'dailyInsight': dailyInsight,
     };
   }
 }

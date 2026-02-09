@@ -1,147 +1,154 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../providers/now_playing_provider.dart';
 import '../screens/full_audio_player_screen.dart';
+import 'glass_shimmer_box.dart';
 
-/// Mini audio player shown only in Granthalaya (Listen mode). Dismissible; tap opens full player.
-class GranthalayaAudioMiniPlayer extends StatelessWidget {
-  final String title;
-  final String? coverImageUrl;
-  final double progress; // 0.0 - 1.0
+/// Mini audio player - uses NowPlayingProvider for real progress.
+/// Compact footer; shows position/duration (e.g. 1:23 / 4:56); tap opens full player.
+class GranthalayaAudioMiniPlayer extends ConsumerWidget {
   final VoidCallback onClose;
-  final VoidCallback? onPlayPause;
 
   const GranthalayaAudioMiniPlayer({
     super.key,
-    required this.title,
-    this.coverImageUrl,
-    this.progress = 0.2,
     required this.onClose,
-    this.onPlayPause,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.charcoalCard.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.matteGold.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => FullAudioPlayerScreen(
-                  title: title,
-                  coverImageUrl: coverImageUrl,
-                ),
-              ),
-            );
-          },
-          borderRadius: BorderRadius.circular(16),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(nowPlayingProvider);
+    if (state == null) return const SizedBox.shrink();
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 200),
+      builder: (context, value, child) => Opacity(opacity: value, child: child),
+      child: GlassShimmerBox(
+        child: Material(
+          color: Colors.transparent,
           child: Row(
             children: [
-              // Close button
               IconButton(
-                icon: const Icon(Icons.close, color: AppColors.zinc500, size: 20),
+                icon: const Icon(Icons.close, color: AppColors.zinc500, size: 18),
                 onPressed: onClose,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
-              const SizedBox(width: 4),
-              // Cover
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: coverImageUrl != null && coverImageUrl!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: coverImageUrl!,
-                          fit: BoxFit.cover,
-                          color: Colors.white.withOpacity(0.85),
-                          colorBlendMode: BlendMode.modulate,
-                          errorWidget: (_, __, ___) => _placeholder(),
-                        )
-                      : _placeholder(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Title & progress
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${(progress * 100).round()}% COMPLETED',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.matteGold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: progress.clamp(0.0, 1.0),
-                        minHeight: 4,
-                        backgroundColor: Colors.white.withOpacity(0.1),
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.matteGold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Play button
+              const SizedBox(width: 2),
               GestureDetector(
-                onTap: () async {
-                  onPlayPause?.call();
-                  await Navigator.push(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FullAudioPlayerScreen(
+                      title: state.title,
+                      subtitle: state.subtitle,
+                      coverImageUrl: state.coverUrl,
+                      audioUrl: state.audioUrl,
+                    ),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: state.coverUrl != null && state.coverUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: state.coverUrl!,
+                            fit: BoxFit.cover,
+                            color: Colors.white.withOpacity(0.9),
+                            colorBlendMode: BlendMode.modulate,
+                            errorWidget: (_, __, ___) => _placeholder(),
+                          )
+                        : _placeholder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => FullAudioPlayerScreen(
-                        title: title,
-                        coverImageUrl: coverImageUrl,
+                        title: state.title,
+                        subtitle: state.subtitle,
+                        coverImageUrl: state.coverUrl,
+                        audioUrl: state.audioUrl,
                       ),
                     ),
-                  );
-                },
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.matteGold,
-                    shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        state.title,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            state.positionFormatted,
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppColors.matteGold.withOpacity(0.9),
+                            ),
+                          ),
+                          Text(
+                            ' / ',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppColors.zinc500,
+                            ),
+                          ),
+                          Text(
+                            state.duration.inMilliseconds > 0
+                                ? state.durationFormatted
+                                : '--:--',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppColors.zinc500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          height: 3,
+                          child: LinearProgressIndicator(
+                            value: state.progress.clamp(0.0, 1.0),
+                            minHeight: 3,
+                            backgroundColor: Colors.white.withOpacity(0.08),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              state.isPlaying
+                                  ? AppColors.matteGold
+                                  : AppColors.matteGold.withOpacity(0.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+              const SizedBox(width: 6),
+              _PlayButton(
+                state: state,
+                onToggle: () => ref.read(nowPlayingProvider.notifier).togglePlayPause(),
               ),
             ],
           ),
@@ -153,7 +160,49 @@ class GranthalayaAudioMiniPlayer extends StatelessWidget {
   Widget _placeholder() {
     return Container(
       color: AppColors.charcoalDark,
-      child: const Icon(Icons.music_note_rounded, color: AppColors.matteGold, size: 24),
+      child: const Icon(Icons.music_note_rounded, color: AppColors.matteGold, size: 18),
+    );
+  }
+}
+
+class _PlayButton extends StatelessWidget {
+  final dynamic state;
+  final VoidCallback onToggle;
+
+  const _PlayButton({required this.state, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onToggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppColors.matteGold,
+          shape: BoxShape.circle,
+          boxShadow: state.isPlaying
+              ? [
+                  BoxShadow(
+                    color: AppColors.matteGold.withOpacity(0.4),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: state.isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(6),
+                child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
+              )
+            : Icon(
+                state.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: Colors.black,
+                size: 18,
+              ),
+      ),
     );
   }
 }

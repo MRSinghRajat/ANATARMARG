@@ -5,7 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
 import '../../../home/presentation/screens/aangan_screen.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
-import '../../../shop/presentation/screens/shop_screen.dart';
+import '../../../ashram/presentation/screens/ashram_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../prayer/presentation/screens/prayer_dashboard_screen.dart';
 
@@ -31,15 +31,16 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
+    final ashramIndex = 2;
+    final otherScreens = [
       AanganScreen(
         onBeginTap: () => _navigateTo(NavItem.quests), // Prayer tab
       ),
       const PrayerDashboardScreen(),
-      const ShopScreen(), // Ashram
       const BooksLibraryScreen(),
       const ProfileScreen(),
     ];
+    final otherIndex = _currentIndex > ashramIndex ? _currentIndex - 1 : _currentIndex;
 
     return PopScope(
       canPop: false,
@@ -63,11 +64,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppColors.primaryBackground,
-        body: IndexedStack(
-          index: _currentIndex,
-          children: screens,
-        ),
+        backgroundColor: _currentIndex == ashramIndex
+            ? AppColors.ashramBackgroundDark
+            : AppColors.primaryBackground,
+        body: _currentIndex == ashramIndex
+            ? const AshramScreen()
+            : IndexedStack(
+                index: otherIndex,
+                children: otherScreens,
+              ),
         bottomNavigationBar: BottomNavBar(
           currentItem: _currentItem,
           onTap: _navigateTo,

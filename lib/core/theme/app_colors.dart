@@ -68,4 +68,13 @@ class AppColors {
   static const Color prayerGold = Color(0xFFECB613);
   static const Color prayerTeal = Color(0xFF14B8A6);
   static const Color prayerMuted = Color(0xFFB9B29D);
+
+  // Ashram (Temple Mode) - dark theme
+  static const Color ashramBackgroundDark = Color(0xFF0F1115); // Obsidian
+  static const Color ashramGradientStart = Color(0xFF1A130F);
+  static const Color ashramGradientMid = Color(0xFF2A1B14);
+  static const Color ashramCardDark = Color(0xFF1A1D23);
+  static const Color ashramSaffron = Color(0xFFF59E0B); // Primary saffron gold
+  static const Color ashramAccentSaffron = Color(0xFFFF9933);
+  static const Color ashramAccentGold = Color(0xFFFFD700);
 }

@@ -377,7 +377,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: isSelected
-                  ? Border.all(color: _ProgressHubColors.primary.withOpacity(0.2))
+                  ? Border.all(
+                      color: _ProgressHubColors.primary.withOpacity(0.2))
                   : null,
             ),
             child: Column(
@@ -503,9 +504,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                   isActive: isActive,
                   percent: pct,
                   versesRemaining: remaining,
-                  onTap: _canTapChapter(ch, index)
-                      ? () => _openChapter(ch)
-                      : null,
+                  onTap:
+                      _canTapChapter(ch, index) ? () => _openChapter(ch) : null,
                 ),
               );
             }),
@@ -643,7 +643,8 @@ class _ChapterTimelineItem extends StatelessWidget {
                               ? Colors.grey.shade400
                               : (isActive
                                   ? Colors.white
-                                  : _ProgressHubColors.offWhite.withOpacity(0.9)),
+                                  : _ProgressHubColors.offWhite
+                                      .withOpacity(0.9)),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -700,7 +701,8 @@ class _ChapterTimelineItem extends StatelessWidget {
                             color: _ProgressHubColors.cardDark.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: _ProgressHubColors.goldAccent.withOpacity(0.15),
+                              color: _ProgressHubColors.goldAccent
+                                  .withOpacity(0.15),
                             ),
                           ),
                           child: Column(
@@ -717,7 +719,8 @@ class _ChapterTimelineItem extends StatelessWidget {
                               ),
                               const SizedBox(height: 12),
                               Material(
-                                color: _ProgressHubColors.primary.withOpacity(0.2),
+                                color:
+                                    _ProgressHubColors.primary.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(8),
                                 child: InkWell(
                                   onTap: onTap,
@@ -763,9 +766,11 @@ class _ChapterTimelineItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: _ProgressHubColors.primary,
           shape: BoxShape.circle,
-          border: Border.all(color: _ProgressHubColors.backgroundDeep, width: 2),
+          border:
+              Border.all(color: _ProgressHubColors.backgroundDeep, width: 2),
         ),
-        child: const Icon(Icons.check, size: 10, color: _ProgressHubColors.backgroundDeep),
+        child: const Icon(Icons.check,
+            size: 10, color: _ProgressHubColors.backgroundDeep),
       );
     }
     if (status == _ChapterStatus.inProgress && isActive) {

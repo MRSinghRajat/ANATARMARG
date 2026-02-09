@@ -117,10 +117,12 @@ class _DustCleaningWidgetState extends State<DustCleaningWidget> {
             key: _scratcherKey,
             brushSize: 60,
             threshold: 50,
-            // color: const Color(0xFF8D6E63).withOpacity(0.95), // Replaced by image
             image: Image.asset(
               "assets/images/dust_texture.png",
               fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: const Color(0xFF8D6E63).withOpacity(0.95),
+              ),
             ), 
             onChange: (value) {
               if (_showCleanMePrompt) {

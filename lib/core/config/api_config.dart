@@ -27,9 +27,8 @@ class ApiConfig {
     final desc = bookDescription != null && bookDescription.isNotEmpty
         ? '\nBook description: $bookDescription'
         : '';
-    final cat = category != null && category.isNotEmpty
-        ? '\nCategory: $category'
-        : '';
+    final cat =
+        category != null && category.isNotEmpty ? '\nCategory: $category' : '';
     return '''You are a warm, patient guide helping seekers understand Indian religious and spiritual texts. You speak only about $bookName and related Indian religious wisdom (Hindu scriptures, dharma, Vedas, Upanishads, Gita, Ramayana, Mahabharata, Puranas, etc.).
 
 Current book context: $bookName$desc$cat
@@ -45,6 +44,16 @@ Persona and rules:
   }
 
   static String getVerseOfTheDayPrompt() {
-    return 'Generate a beautiful, inspiring verse of the day from ancient Indian scriptures (Mahabharata, Ramayana, or Bhagavad Gita). Choose a verse that is spiritually meaningful, reflective, and suitable for daily contemplation. Include the book name, chapter, and verse number. Make it profound yet accessible.';
+    return '''Generate a beautiful, inspiring verse of the day from ancient Indian scriptures (Mahabharata, Ramayana, or Bhagavad Gita). Choose a verse that is spiritually meaningful, reflective, and suitable for daily contemplation.
+
+Reply in this exact JSON format (no other text), so the app can show it on the daily verse screen:
+{
+  "book": "e.g. Ramayana or Bhagavad Gita",
+  "source": "e.g. Yuddha Kanda or Chapter 2",
+  "devanagariText": "verse in Devanagari script, or empty string if not available",
+  "content": "English translation of the verse",
+  "dailyInsight": "One short, actionable suggestion (e.g. Call your parents today or do something small to care for your home or community.)"
+}
+If you cannot provide Devanagari, set "devanagariText" to "". Keep dailyInsight to one sentence.''';
   }
 }

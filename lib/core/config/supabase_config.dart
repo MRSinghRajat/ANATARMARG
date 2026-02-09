@@ -30,9 +30,15 @@ class SupabaseConfig {
 
   // Granthalaya (Library) dynamic content
   static const String deitiesTable = 'deities';
-  static const String granthalayaResourceCardsTable = 'granthalaya_resource_cards';
+  static const String granthalayaResourceCardsTable =
+      'granthalaya_resource_cards';
   static const String granthalayaDeepDiveTable = 'granthalaya_deep_dive';
-  static const String granthalayaAudioCategoriesTable = 'granthalaya_audio_categories';
-  static const String granthalayaAudioWisdomCardsTable = 'granthalaya_audio_wisdom_cards';
-  static const String granthalayaAudioInProgressTable = 'granthalaya_audio_in_progress';
+  static const String granthalayaAudioCategoriesTable =
+      'granthalaya_audio_categories';
+  static const String granthalayaAudioWisdomCardsTable =
+      'granthalaya_audio_wisdom_cards';
+  static const String granthalayaAudioInProgressTable =
+      'granthalaya_audio_in_progress';
+  static const String granthalayaChantsTable = 'granthalaya_chants';
+  static const String userAudioProgressTable = 'user_audio_progress';
 }

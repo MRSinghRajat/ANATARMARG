@@ -4,6 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/book_providers.dart';
+import '../providers/now_playing_provider.dart';
+import '../../data/models/granthalaya_models.dart';
 
 /// Single audio item info for "now playing" and play actions.
 class AudioItemInfo {
@@ -11,12 +13,15 @@ class AudioItemInfo {
   final String? subtitle;
   final String? coverUrl;
   final String duration;
+  /// Playable audio URL (e.g. from Supabase Storage). When set, player will stream this URL.
+  final String? audioUrl;
 
   const AudioItemInfo({
     required this.title,
     this.subtitle,
     this.coverUrl,
     this.duration = '0:00',
+    this.audioUrl,
   });
 }
 
@@ -51,16 +56,40 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
   }
 
   Widget _buildInProgressSection() {
-    final inProgressAsync = ref.watch(audioInProgressProvider);
-    final items = inProgressAsync.valueOrNull ?? [];
-    final fallback = [
-      (tag: 'Itihasa • Chapter 4', title: 'Bhagavad Gita', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCeFNfyF3TMbtQ7up4KjskhDXsUja_ezF57r7yXtsw7qht7MWETTO5t-dTRJ5yKLGjVidywqNDN_tYKaEhCT-GW6PgKdHyCJivzZEk3MFKeenhqQE9lW9dmulcDAGEtzqlDKk9-V_1vAxfrsXu5ER-bNWtcVzRI4zSyvvmNDPJ58EPRheqIFknQUzuOF0zLsTHepqZozzC058V3Vhz4FC7I0MqtbnhK3mRrEBauKk-OBOllQvmPoUhxzI3oicigPXbW4HNzglsA3JZD', current: '12:45', total: '28:30', progress: 0.45, isActive: true),
-      (tag: 'Shruti • Isha', title: 'Mukhya Upanishads', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCJl1L6fIrykeLWmdy0V5EC5-Eh4nRFTBiIJmZvfBncpvgMivobf5NbOHIFWkBndaaRvC4YCHyOTgYrn17GM4YRUqu02UjdT4uoTbH-Qgy1FmIfhhsA0Q21QwyKikc1JvvZApGs7fH_6m_pQ48kHemmVpGJUfO0f-idW3Am5Dmyv8mGgIQlPOWu75jym4UITWgp7x6KSH22NMoTXUhrWu_mF-XQ-pykoUCH1RnyCP6zvd3oYGw_0Gh7KrpdRZrmDrJCq4lPaP81wgPO', current: '02:15', total: '15:00', progress: 0.15, isActive: false),
-    ];
+    final userProgressAsync = ref.watch(userAudioProgressProvider);
+    final nowPlaying = ref.watch(nowPlayingProvider);
+    final userItems = userProgressAsync.valueOrNull ?? [];
 
-    final displayItems = items.isNotEmpty
-        ? items.map((m) => (tag: m.tag, title: m.title, imageUrl: m.imageUrl, current: m.currentFormatted, total: m.totalFormatted, progress: m.progress, isActive: m.isActiveItem)).toList()
-        : fallback;
+    final defaultImageUrl = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv';
+
+    List<({String tag, String title, String imageUrl, String current, String total, double progress, bool isActive, String? audioUrl})> displayItems = [];
+
+    if (nowPlaying != null) {
+      displayItems.add((
+        tag: nowPlaying.subtitle ?? 'Now Playing',
+        title: nowPlaying.title,
+        imageUrl: nowPlaying.coverUrl ?? defaultImageUrl,
+        current: nowPlaying.positionFormatted,
+        total: nowPlaying.duration.inMilliseconds > 0 ? nowPlaying.durationFormatted : '--:--',
+        progress: nowPlaying.progress,
+        isActive: true,
+        audioUrl: nowPlaying.audioUrl,
+      ));
+    }
+
+    for (final m in userItems) {
+      if (nowPlaying != null && m.title == nowPlaying.title) continue;
+      displayItems.add((
+        tag: m.tag,
+        title: m.title,
+        imageUrl: m.imageUrl ?? defaultImageUrl,
+        current: m.currentFormatted,
+        total: m.totalFormatted,
+        progress: m.progress,
+        isActive: false,
+        audioUrl: m.audioUrl,
+      ));
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,7 +135,21 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
         const SizedBox(height: 20),
         SizedBox(
           height: 448,
-          child: ListView.separated(
+          child: displayItems.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      'Play a chant or audio to see it here',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              : ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),
@@ -122,6 +165,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                 total: item.total,
                 progress: item.progress,
                 isActive: item.isActive,
+                audioUrl: item.audioUrl,
               );
             },
           ),
@@ -138,11 +182,13 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
     required String total,
     required double progress,
     required bool isActive,
+    String? audioUrl,
   }) {
+    final info = AudioItemInfo(title: title, coverUrl: imageUrl, duration: total, audioUrl: audioUrl);
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => widget.onPlay(AudioItemInfo(title: title, coverUrl: imageUrl, duration: total)),
+        onTap: () => widget.onPlay(info),
         borderRadius: BorderRadius.circular(24),
         child: Opacity(
           opacity: isActive ? 1 : 0.7,
@@ -217,7 +263,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                                   color: AppColors.matteGold.withOpacity(0.9),
                                   shape: const CircleBorder(),
                                   child: InkWell(
-                                    onTap: () => widget.onPlay(AudioItemInfo(title: title, coverUrl: imageUrl, duration: total)),
+                                    onTap: () => widget.onPlay(info),
                                     customBorder: const CircleBorder(),
                                     child: const SizedBox(width: 48, height: 48, child: Icon(Icons.play_arrow, color: Colors.black, size: 32)),
                                   ),
@@ -295,7 +341,10 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
     final selectedSlug = categories.isNotEmpty && _sacredLibraryCategoryIndex < categories.length
         ? categories[_sacredLibraryCategoryIndex].slug
         : 'audio_books';
-    final wisdomAsync = ref.watch(audioWisdomCardsProvider(selectedSlug));
+    final isChantsTab = selectedSlug == 'chants';
+    final chantsAsync = ref.watch(chantsProvider);
+    final chants = chantsAsync.valueOrNull ?? [];
+    final wisdomAsync = ref.watch(audioWisdomCardsProvider(isChantsTab ? null : selectedSlug));
     final wisdomCards = wisdomAsync.valueOrNull ?? [];
     final fallbackCards = [
       (title: 'Shiva Purana', subtitle: '42 Tracks • 12 Cantos', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCJl1L6fIrykeLWmdy0V5EC5-Eh4nRFTBiIJmZvfBncpvgMivobf5NbOHIFWkBndaaRvC4YCHyOTgYrn17GM4YRUqu02UjdT4uoTbH-Qgy1FmIfhhsA0Q21QwyKikc1JvvZApGs7fH_6m_pQ48kHemmVpGJUfO0f-idW3Am5Dmyv8mGgIQlPOWu75jym4UITWgp7x6KSH22NMoTXUhrWu_mF-XQ-pykoUCH1RnyCP6zvd3oYGw_0Gh7KrpdRZrmDrJCq4lPaP81wgPO'),
@@ -303,8 +352,8 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
       (title: 'Sama Veda', subtitle: '1875 Melodies', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCeFNfyF3TMbtQ7up4KjskhDXsUja_ezF57r7yXtsw7qht7MWETTO5t-dTRJ5yKLGjVidywqNDN_tYKaEhCT-GW6PgKdHyCJivzZEk3MFKeenhqQE9lW9dmulcDAGEtzqlDKk9-V_1vAxfrsXu5ER-bNWtcVzRI4zSyvvmNDPJ58EPRheqIFknQUzuOF0zLsTHepqZozzC058V3Vhz4FC7I0MqtbnhK3mRrEBauKk-OBOllQvmPoUhxzI3oicigPXbW4HNzglsA3JZD'),
     ];
     final displayCards = wisdomCards.isNotEmpty
-        ? wisdomCards.map((c) => (title: c.title, subtitle: c.subtitle, imageUrl: c.imageUrl)).toList()
-        : fallbackCards;
+        ? wisdomCards.map((c) => (title: c.title, subtitle: c.subtitle, imageUrl: c.imageUrl, audioUrl: c.audioUrl)).toList()
+        : fallbackCards.map((c) => (title: c.title, subtitle: c.subtitle, imageUrl: c.imageUrl, audioUrl: null as String?)).toList();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -365,20 +414,137 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
             decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05)))),
           ),
           const SizedBox(height: 24),
-          ...displayCards.map((card) => Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: _buildWisdomCard(card.title, card.subtitle, card.imageUrl),
-              )),
+          if (isChantsTab && chants.isNotEmpty)
+            ...chants.map((chant) => Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: _buildChantCard(chant),
+                ))
+          else
+            ...displayCards.map((card) => Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: _buildWisdomCard(card.title, card.subtitle, card.imageUrl, audioUrl: card.audioUrl),
+                )),
         ],
       ),
     );
   }
 
-  Widget _buildWisdomCard(String title, String subtitle, String imageUrl) {
+  Widget _buildChantCard(ChantModel chant) {
+    final imageUrl = chant.imageUrl ?? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv';
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => widget.onPlay(AudioItemInfo(title: title, subtitle: subtitle, coverUrl: imageUrl)),
+        onTap: () => widget.onPlay(AudioItemInfo(
+          title: chant.title,
+          subtitle: chant.subtitle,
+          coverUrl: imageUrl,
+          duration: chant.durationFormatted,
+          audioUrl: chant.effectiveAudioUrl.isNotEmpty ? chant.effectiveAudioUrl : null,
+        )),
+        borderRadius: BorderRadius.circular(32),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF141414).withOpacity(0.8),
+                const Color(0xFF0A0A0A),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: AppColors.matteGold.withOpacity(0.1)),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => _placeholder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      chant.title,
+                      style: GoogleFonts.crimsonPro(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFF1F5F9),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      chant.subtitle ?? chant.durationFormatted,
+                      style: GoogleFonts.cinzel(
+                        fontSize: 10,
+                        color: AppColors.matteGold.withOpacity(0.6),
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => widget.onPlay(AudioItemInfo(
+                          title: chant.title,
+                          subtitle: chant.subtitle,
+                          coverUrl: imageUrl,
+                          duration: chant.durationFormatted,
+                          audioUrl: chant.effectiveAudioUrl.isNotEmpty ? chant.effectiveAudioUrl : null,
+                        )),
+                        borderRadius: BorderRadius.circular(999),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.play_arrow, color: AppColors.matteGold, size: 14),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Play',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.matteGold,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWisdomCard(String title, String subtitle, String imageUrl, {String? audioUrl}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onPlay(AudioItemInfo(title: title, subtitle: subtitle, coverUrl: imageUrl, audioUrl: audioUrl)),
         borderRadius: BorderRadius.circular(32),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -475,13 +641,13 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
   Widget _buildDivinePresenceSection() {
     final deitiesAsync = ref.watch(deitiesProvider);
     final deities = deitiesAsync.valueOrNull ?? [];
-    final fallback = [
-      (name: 'Shiva', description: 'The cosmic dancer who performs the Ananda Tandava, creating and destroying the universe.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv'),
-      (name: 'Vishnu', description: 'The sustainer of the universe, reclining on the serpent Shesha in the causal ocean.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv'),
-      (name: 'Devi', description: 'The supreme feminine energy, embodying power, knowledge, and compassion.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCd_4JNasICaIaHij84HkpIMICry2qj9vQbv4E418yGFsZvKbS4Wk5J2i4pPOqk6gM2mWCKAS7JczuUgHfnRi0fUli5hU8gZovvHqoWo1GI22rS613kTYAxJVowoCXRgFDR7-97bUilllW6Z6rM_MEB4Hk9fe8yAcF-871rkAWzHsFNmpVDH0R7w0OW0g-tlL9Ncib0jHHxIuN-3O-lrpEiRaVouZoSikGTJQqEE0fD1rbpaJNRwDvfadeu6GWnWi2-30rmN0BAjiQr'),
+    const fallback = [
+      (name: 'Shiva', slug: 'shiva', description: 'The cosmic dancer who performs the Ananda Tandava, creating and destroying the universe.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv'),
+      (name: 'Vishnu', slug: 'vishnu', description: 'The sustainer of the universe, reclining on the serpent Shesha in the causal ocean.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv'),
+      (name: 'Devi', slug: 'devi', description: 'The supreme feminine energy, embodying power, knowledge, and compassion.', imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCd_4JNasICaIaHij84HkpIMICry2qj9vQbv4E418yGFsZvKbS4Wk5J2i4pPOqk6gM2mWCKAS7JczuUgHfnRi0fUli5hU8gZovvHqoWo1GI22rS613kTYAxJVowoCXRgFDR7-97bUilllW6Z6rM_MEB4Hk9fe8yAcF-871rkAWzHsFNmpVDH0R7w0OW0g-tlL9Ncib0jHHxIuN-3O-lrpEiRaVouZoSikGTJQqEE0fD1rbpaJNRwDvfadeu6GWnWi2-30rmN0BAjiQr'),
     ];
     final displayItems = deities.isNotEmpty
-        ? deities.map((d) => (name: d.name, description: d.description ?? '', imageUrl: d.imageUrl ?? '')).toList()
+        ? deities.map((d) => (name: d.name, slug: d.slug, description: d.description ?? '', imageUrl: d.imageUrl ?? '')).toList()
         : fallback;
 
     return Column(
@@ -525,7 +691,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
             separatorBuilder: (_, __) => const SizedBox(width: 20),
             itemBuilder: (_, i) {
               final item = displayItems[i];
-              return _buildDivineCard(item.name, item.description, item.imageUrl);
+              return _buildDivineCard(item.name, item.slug, item.description, item.imageUrl);
             },
           ),
         ),
@@ -533,11 +699,39 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
     );
   }
 
-  Widget _buildDivineCard(String name, String description, String imageUrl) {
+  void _showDeityChantsSheet(String deityName, String deitySlug, String imageUrl) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F0F0F),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final chantsAsync = ref.watch(chantsByDeityProvider(deitySlug));
+            final chants = chantsAsync.valueOrNull ?? [];
+            return DraggableScrollableSheet(
+              initialChildSize: 0.5,
+              minChildSize: 0.3,
+              maxChildSize: 0.85,
+              expand: false,
+              builder: (_, controller) => _DeityChantsSheetContent(
+                sheetController: controller,
+                deityName: deityName,
+                chants: chants,
+                buildChantCard: _buildChantCard,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDivineCard(String name, String slug, String description, String imageUrl) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => widget.onPlay(AudioItemInfo(title: name, subtitle: description, coverUrl: imageUrl)),
+        onTap: () => _showDeityChantsSheet(name, slug, imageUrl),
         borderRadius: BorderRadius.circular(24),
         child: Container(
           width: 240,
@@ -750,6 +944,105 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
     return Container(
       color: AppColors.manuscriptDark,
       child: const Icon(Icons.image, color: AppColors.matteGold, size: 48),
+    );
+  }
+}
+
+/// Sheet content: only the drag handle moves the sheet; list scroll is independent.
+class _DeityChantsSheetContent extends StatefulWidget {
+  final ScrollController sheetController;
+  final String deityName;
+  final List<ChantModel> chants;
+  final Widget Function(ChantModel) buildChantCard;
+
+  const _DeityChantsSheetContent({
+    required this.sheetController,
+    required this.deityName,
+    required this.chants,
+    required this.buildChantCard,
+  });
+
+  @override
+  State<_DeityChantsSheetContent> createState() => _DeityChantsSheetContentState();
+}
+
+class _DeityChantsSheetContentState extends State<_DeityChantsSheetContent> {
+  late final ScrollController _contentScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _contentScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chants = widget.chants;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragUpdate: (DragUpdateDetails d) {
+            if (!widget.sheetController.hasClients) return;
+            final pos = widget.sheetController.position;
+            final newOffset = (widget.sheetController.offset + d.delta.dy)
+                .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+            widget.sheetController.jumpTo(newOffset);
+          },
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(top: 12),
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            '${widget.deityName} - Chants',
+            style: GoogleFonts.crimsonPro(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        Expanded(
+          child: chants.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    'No chants for this deity yet.',
+                    style: GoogleFonts.inter(fontSize: 14, color: Colors.white54),
+                  ),
+                )
+              : Stack(
+                  children: [
+                    ListView(
+                      controller: widget.sheetController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [SizedBox(height: 10000)],
+                    ),
+                    ListView.builder(
+                      controller: _contentScrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      itemCount: chants.length,
+                      itemBuilder: (_, i) {
+                        final chant = chants[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: widget.buildChantCard(chant),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+        ),
+      ],
     );
   }
 }

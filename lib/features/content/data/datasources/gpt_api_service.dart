@@ -204,7 +204,7 @@ class GPTApiService {
       {
         'role': 'system',
         'content':
-            'You are a wise guide helping users understand ancient Indian scriptures. Provide a beautiful, inspiring verse of the day that is spiritually meaningful and suitable for daily contemplation. Format: Book Name Chapter:Verse - Verse text. Include a brief reflection.',
+            'You are a wise guide. Reply only with valid JSON in the exact format requested. No markdown, no extra text.',
       },
       {
         'role': 'user',
@@ -212,34 +212,58 @@ class GPTApiService {
       },
     ]);
 
-    final content = response['choices'][0]['message']['content'] as String;
+    final raw = response['choices'][0]['message']['content'] as String;
+    final trimmed = raw.trim();
 
-    // Parse the verse reference and content
-    final lines = content.split('\n');
-    String verseReference = 'Verse of the Day';
-    String verseText = content;
-
-    // Try to extract reference from first line
-    if (lines.isNotEmpty) {
-      final firstLine = lines[0].trim();
-      if (firstLine.contains(':') || firstLine.contains('Chapter')) {
-        verseReference = firstLine;
-        verseText = lines.skip(1).join('\n').trim();
-      }
+    // Try to parse JSON (strip markdown code block if present)
+    String jsonStr = trimmed;
+    if (trimmed.startsWith('```')) {
+      final end = trimmed.indexOf('```', 3);
+      jsonStr = end > 0 ? trimmed.substring(3, end).trim() : trimmed;
     }
-
-    return VerseContent(
-      id: 'verse_of_day_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}',
-      book: 'Daily Wisdom',
-      chapter: null,
-      title: verseReference,
-      content: verseText,
-      context: verseText.length > 300
-          ? '${verseText.substring(0, 300)}...'
-          : verseText,
-      relatedCharacters: null,
-      createdAt: DateTime.now(),
-    );
+    try {
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final book = map['book'] as String? ?? 'Daily Wisdom';
+      final source = map['source'] as String? ?? '';
+      final devanagariText = map['devanagariText'] as String?;
+      final content = map['content'] as String? ?? '';
+      final dailyInsight = map['dailyInsight'] as String?;
+      if (content.isEmpty) throw FormatException('missing content');
+      return VerseContent(
+        id: 'verse_of_day_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}',
+        book: book,
+        chapter: null,
+        title: source,
+        content: content,
+        context: content.length > 300 ? '${content.substring(0, 300)}...' : content,
+        relatedCharacters: null,
+        createdAt: DateTime.now(),
+        devanagariText: (devanagariText != null && devanagariText.isNotEmpty) ? devanagariText : null,
+        dailyInsight: dailyInsight,
+      );
+    } catch (_) {
+      // Fallback: plain text response
+      final lines = trimmed.split('\n');
+      String verseReference = 'Verse of the Day';
+      String verseText = trimmed;
+      if (lines.isNotEmpty) {
+        final firstLine = lines[0].trim();
+        if (firstLine.contains(':') || firstLine.contains('Chapter')) {
+          verseReference = firstLine;
+          verseText = lines.skip(1).join('\n').trim();
+        }
+      }
+      return VerseContent(
+        id: 'verse_of_day_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}',
+        book: 'Daily Wisdom',
+        chapter: null,
+        title: verseReference,
+        content: verseText,
+        context: verseText.length > 300 ? '${verseText.substring(0, 300)}...' : verseText,
+        relatedCharacters: null,
+        createdAt: DateTime.now(),
+      );
+    }
   }
 
   Future<Map<String, dynamic>> _makeChatRequest(
