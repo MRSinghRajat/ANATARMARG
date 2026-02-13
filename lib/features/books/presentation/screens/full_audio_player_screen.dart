@@ -27,9 +27,9 @@ class FullAudioPlayerScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(nowPlayingProvider);
     if (state == null) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: AppColors.charcoalDark,
-        body: const Center(child: CircularProgressIndicator(color: AppColors.matteGold)),
+        body: Center(child: CircularProgressIndicator(color: AppColors.matteGold)),
       );
     }
 

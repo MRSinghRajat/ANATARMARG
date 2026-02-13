@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/services/supabase_service.dart';
+import '../../../../core/utils/app_router.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -90,6 +91,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       label: const Text('Continue with Google'),
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Sign up with Email (OOB magic link)
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        if (!SupabaseService().isInitialized) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Supabase is not configured. Add SUPABASE_URL and SUPABASE_ANON_KEY to .env',
+                                ),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        if (context.mounted) {
+                          Navigator.pushNamed(context, AppRouter.signUp);
+                        }
+                      },
+                      icon: const Icon(Icons.email_outlined, size: 22),
+                      label: const Text('Sign up with Email'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white54),
                       ),
                     ),
                     const SizedBox(height: 16),

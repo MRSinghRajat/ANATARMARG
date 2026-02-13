@@ -1,5 +1,6 @@
 package com.example.antar_marg
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// FlutterFragmentActivity is required for RevenueCat Paywalls to work properly
+class MainActivity : FlutterFragmentActivity()

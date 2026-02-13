@@ -4,7 +4,7 @@ import '../../core/theme/app_colors.dart';
 enum NavItem {
   home,
   books,
-  quests,
+  chat,
   ashram,
   profile,
 }
@@ -48,10 +48,10 @@ class BottomNavBar extends StatelessWidget {
               ),
               _buildNavItem(
                 context,
-                NavItem.quests,
-                Icons.self_improvement,
+                NavItem.chat,
+                Icons.auto_awesome,
                 AppColors.earthBrown,
-                'PRAYER',
+                'AI GURU',
               ),
               _buildNavItem(
                 context,
@@ -73,7 +73,7 @@ class BottomNavBar extends StatelessWidget {
                 NavItem.profile,
                 Icons.person,
                 AppColors.earthBrown,
-                'SELF',
+                'PROFILE',
                 hasNotification: true,
               ),
             ],
@@ -125,14 +125,21 @@ class BottomNavBar extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+            SizedBox(
+              width: 72,
+              height: 14,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ),
@@ -181,12 +188,22 @@ class BottomNavBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? color : Colors.grey.shade400,
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          SizedBox(
+            width: 72,
+            height: 14,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? color : Colors.grey.shade400,
+                  fontSize: 10,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
           ),
         ],

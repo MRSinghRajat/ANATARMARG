@@ -60,7 +60,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
     final nowPlaying = ref.watch(nowPlayingProvider);
     final userItems = userProgressAsync.valueOrNull ?? [];
 
-    final defaultImageUrl = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv';
+    const defaultImageUrl = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxEcRo7ik8Jy87-HtauEuHdKTHi8GdIKmqcGT7A5tLs9Hd-Wq91i1xIZpcgTgMFEyViD600BqtPNRVbEyrpPj7PkicrXavkLAdieCs-HG7T-CmNq5Vn8RU9C9G_OcPnb9-KFF_c-E5hYmG2dRuaRslH5YuWAypzoerq_3o2MelRx0QBg-6De5K0GHxsWNTnKgpBjNkH0lRv2pe0ovaqx7zwlv1MiE_idLjwiWDvZHbG-Fz9GDBrle5Za0lmTsTVd--0et2rE3iJwOv';
 
     List<({String tag, String title, String imageUrl, String current, String total, double progress, bool isActive, String? audioUrl})> displayItems = [];
 
@@ -514,7 +514,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.play_arrow, color: AppColors.matteGold, size: 14),
+                              const Icon(Icons.play_arrow, color: AppColors.matteGold, size: 14),
                               const SizedBox(width: 8),
                               Text(
                                 'Play',
@@ -612,7 +612,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.shuffle, color: AppColors.matteGold, size: 14),
+                              const Icon(Icons.shuffle, color: AppColors.matteGold, size: 14),
                               const SizedBox(width: 8),
                               Text(
                                 'Shuffle Play',
@@ -799,7 +799,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.volume_up, color: Colors.black, size: 18),
+                                const Icon(Icons.volume_up, color: Colors.black, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Listen to Story',
@@ -912,7 +912,7 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.play_circle, color: Colors.black, size: 16),
+                                  const Icon(Icons.play_circle, color: Colors.black, size: 16),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Play Now',
@@ -1025,7 +1025,7 @@ class _DeityChantsSheetContentState extends State<_DeityChantsSheetContent> {
                     ListView(
                       controller: widget.sheetController,
                       physics: const NeverScrollableScrollPhysics(),
-                      children: [SizedBox(height: 10000)],
+                      children: const [SizedBox(height: 10000)],
                     ),
                     ListView.builder(
                       controller: _contentScrollController,

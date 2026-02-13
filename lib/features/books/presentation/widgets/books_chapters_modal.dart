@@ -4,19 +4,24 @@ import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
 import '../../data/repositories/book_repository.dart';
 import '../../data/repositories/chapter_repository.dart';
+import '../../data/repositories/book_progress_repository.dart';
 
 /// Books & Chapters bottom sheet - like the reference UI
 /// Shows all books, expandable to chapters. Tap chapter to open.
+/// Chapters are locked until previous is completed; premium users can open any.
 class BooksChaptersModal extends StatefulWidget {
   final BookModel currentBook;
   final ChapterModel? currentChapter;
   final Function(BookModel book, ChapterModel chapter) onChapterSelected;
+  /// If true, all chapters are tappable. If false, only completed + next are tappable.
+  final bool isPremium;
 
   const BooksChaptersModal({
     super.key,
     required this.currentBook,
     this.currentChapter,
     required this.onChapterSelected,
+    this.isPremium = false,
   });
 
   @override
@@ -26,8 +31,10 @@ class BooksChaptersModal extends StatefulWidget {
 class _BooksChaptersModalState extends State<BooksChaptersModal> {
   final BookRepository _bookRepo = BookRepository();
   final ChapterRepository _chapterRepo = ChapterRepository();
+  final BookProgressRepository _progressRepo = BookProgressRepository();
   List<BookModel> _books = [];
   final Map<String, List<ChapterModel>> _chaptersByBook = {};
+  final Map<String, int> _completedChaptersByBook = {};
   String _searchQuery = '';
   String? _expandedBookId;
 
@@ -45,7 +52,14 @@ class _BooksChaptersModalState extends State<BooksChaptersModal> {
   Future<void> _loadChaptersForBook(String bookId) async {
     if (_chaptersByBook.containsKey(bookId)) return;
     final chapters = await _chapterRepo.getChaptersForBook(bookId);
-    setState(() => _chaptersByBook[bookId] = chapters);
+    final progress = await _progressRepo.getBookProgress(bookId);
+    final completed = (progress?['completed_chapters'] as int?) ?? 0;
+    if (mounted) {
+      setState(() {
+        _chaptersByBook[bookId] = chapters;
+        _completedChaptersByBook[bookId] = completed;
+      });
+    }
   }
 
   String _getBookShortName(BookModel book) {
@@ -156,6 +170,8 @@ class _BooksChaptersModalState extends State<BooksChaptersModal> {
                   shortName: _getBookShortName(book),
                   isExpanded: isExpanded,
                   chapters: chapters,
+                  completedChapters: _completedChaptersByBook[book.id] ?? 0,
+                  isPremium: widget.isPremium,
                   currentBook: widget.currentBook,
                   currentChapter: widget.currentChapter,
                   onTap: () async {
@@ -185,6 +201,8 @@ class _BookChapterTile extends StatelessWidget {
   final String shortName;
   final bool isExpanded;
   final List<ChapterModel> chapters;
+  final int completedChapters;
+  final bool isPremium;
   final BookModel currentBook;
   final ChapterModel? currentChapter;
   final VoidCallback onTap;
@@ -196,11 +214,19 @@ class _BookChapterTile extends StatelessWidget {
     required this.shortName,
     required this.isExpanded,
     required this.chapters,
+    required this.completedChapters,
+    required this.isPremium,
     required this.currentBook,
     this.currentChapter,
     required this.onTap,
     required this.onChapterTap,
   });
+
+  /// Chapter at index i is unlocked if premium or i <= completedChapters (ch 0 always unlocked).
+  bool _isChapterUnlocked(int chapterIndex) {
+    if (isPremium) return true;
+    return chapterIndex <= completedChapters;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -227,18 +253,23 @@ class _BookChapterTile extends StatelessWidget {
           onTap: onTap,
         ),
         if (isExpanded && chapters.isNotEmpty)
-          ...chapters.map((chapter) {
+          ...chapters.asMap().entries.map((entry) {
+            final chapterIndex = entry.key;
+            final chapter = entry.value;
             final isSelected =
                 currentBook.id == book.id && currentChapter?.id == chapter.id;
+            final unlocked = _isChapterUnlocked(chapterIndex);
             return Padding(
               padding: const EdgeInsets.only(left: 24, right: 16, bottom: 4),
               child: ListTile(
                 leading: Icon(
-                  Icons.menu_book,
+                  unlocked ? Icons.menu_book : Icons.lock_outline,
                   size: 20,
                   color: isSelected
                       ? AppColors.warmOrange
-                      : AppColors.tertiaryText,
+                      : (unlocked
+                          ? AppColors.tertiaryText
+                          : AppColors.tertiaryText.withOpacity(0.6)),
                 ),
                 title: Text(
                   chapter.displayTitle,
@@ -247,11 +278,25 @@ class _BookChapterTile extends StatelessWidget {
                         isSelected ? FontWeight.bold : FontWeight.normal,
                     color: isSelected
                         ? AppColors.warmOrange
-                        : AppColors.primaryText,
+                        : (unlocked
+                            ? AppColors.primaryText
+                            : AppColors.primaryText.withOpacity(0.6)),
                   ),
                 ),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () => onChapterTap(chapter),
+                trailing: unlocked
+                    ? const Icon(Icons.chevron_right, size: 20)
+                    : Icon(
+                        Icons.lock,
+                        size: 18,
+                        color: Colors.grey.shade500,
+                      ),
+                onTap: () {
+                  if (unlocked) {
+                    onChapterTap(chapter);
+                  } else {
+                    // Optional: show snackbar
+                  }
+                },
               ),
             );
           }),

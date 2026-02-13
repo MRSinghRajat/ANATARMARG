@@ -111,7 +111,7 @@ class AshramVerseDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.lightbulb_outline,
                         color: AppColors.ashramAccentGold,
                         size: 20,

@@ -77,4 +77,10 @@ class AppColors {
   static const Color ashramSaffron = Color(0xFFF59E0B); // Primary saffron gold
   static const Color ashramAccentSaffron = Color(0xFFFF9933);
   static const Color ashramAccentGold = Color(0xFFFFD700);
+
+  // Common dark theme colors
+  static const Color backgroundDark = Color(0xFF0F1115);
+  static const Color primaryOrange = Color(0xFFF59E0B);
+  static const Color cardDark = Color(0xFF1A1D23);
+  static const Color deepPurple = Color(0xFF7C3AED);
 }

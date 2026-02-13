@@ -7,7 +7,8 @@ import '../../../home/presentation/screens/aangan_screen.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
 import '../../../ashram/presentation/screens/ashram_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
-import '../../../prayer/presentation/screens/prayer_dashboard_screen.dart';
+import '../../../chat/presentation/screens/spiritual_chat_screen.dart';
+import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 
 class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
@@ -21,26 +22,42 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   NavItem _currentItem = NavItem.home;
   int _currentIndex = 0;
   DateTime? _lastBackPress;
+  final SanctuaryCustomizationService _customizationService = SanctuaryCustomizationService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize customization service early
+    _customizationService.initialize();
+  }
 
   void _navigateTo(NavItem item) {
+    final newIndex = _getIndexForNavItem(item);
+    
+    // If navigating TO Ashram, refresh customization from Supabase
+    if (newIndex == 2 && _currentIndex != 2) {
+      _customizationService.refresh();
+    }
+    
     setState(() {
       _currentItem = item;
-      _currentIndex = _getIndexForNavItem(item);
+      _currentIndex = newIndex;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final ashramIndex = 2;
-    final otherScreens = [
+    // Use IndexedStack for ALL screens to preserve state
+    final screens = [
       AanganScreen(
-        onBeginTap: () => _navigateTo(NavItem.quests), // Prayer tab
+        key: const ValueKey('aangan'),
+        onBeginTap: () => _navigateTo(NavItem.chat),
       ),
-      const PrayerDashboardScreen(),
-      const BooksLibraryScreen(),
-      const ProfileScreen(),
+      const SpiritualChatScreen(key: ValueKey('chat')),
+      const AshramScreen(key: ValueKey('ashram')),
+      const BooksLibraryScreen(key: ValueKey('books')),
+      const ProfileScreen(key: ValueKey('profile')),
     ];
-    final otherIndex = _currentIndex > ashramIndex ? _currentIndex - 1 : _currentIndex;
 
     return PopScope(
       canPop: false,
@@ -64,15 +81,13 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _currentIndex == ashramIndex
+        backgroundColor: _currentIndex == 2
             ? AppColors.ashramBackgroundDark
             : AppColors.primaryBackground,
-        body: _currentIndex == ashramIndex
-            ? const AshramScreen()
-            : IndexedStack(
-                index: otherIndex,
-                children: otherScreens,
-              ),
+        body: IndexedStack(
+          index: _currentIndex,
+          children: screens,
+        ),
         bottomNavigationBar: BottomNavBar(
           currentItem: _currentItem,
           onTap: _navigateTo,
@@ -85,8 +100,8 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
     switch (item) {
       case NavItem.home:
         return 0;
-      case NavItem.quests:
-        return 1; // Prayer
+      case NavItem.chat:
+        return 1;
       case NavItem.ashram:
         return 2; // Ashram
       case NavItem.books:

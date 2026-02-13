@@ -1022,7 +1022,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => Container(
                       color: AppColors.manuscriptDark,
-                      child: Icon(
+                      child: const Icon(
                         Icons.music_note,
                         color: AppColors.matteGold,
                         size: 32,
@@ -1060,7 +1060,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.play_circle_fill,
                           color: AppColors.matteGold,
                           size: 24,
@@ -1295,7 +1295,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   child: CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Icon(Icons.person,
+                    errorWidget: (_, __, ___) => const Icon(Icons.person,
                         color: AppColors.matteGold, size: 32),
                   ),
                 ),
@@ -1494,7 +1494,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                 ),
                 child: Stack(
                   children: [
-                    Positioned(
+                    const Positioned(
                       top: 0,
                       right: 0,
                       child: Opacity(

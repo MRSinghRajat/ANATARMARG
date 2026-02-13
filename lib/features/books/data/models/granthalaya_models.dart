@@ -1,4 +1,5 @@
 /// Models for Granthalaya dynamic content from Supabase
+library;
 
 class DeityModel {
   final String id;

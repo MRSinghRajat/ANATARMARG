@@ -8,6 +8,11 @@ class SupabaseConfig {
   static String get googleWebClientId =>
       dotenv.env['GOOGLE_WEB_CLIENT_ID'] ?? '';
 
+  /// Redirect URL for email OTP/magic link (OOB). Add this to Supabase Auth URL allow list.
+  /// e.g. antarmarg://auth-callback
+  static String get authRedirectUrl =>
+      dotenv.env['SUPABASE_AUTH_REDIRECT_URL'] ?? 'antarmarg://auth-callback';
+
   // Table names
   static const String parvasTable = 'parvas';
   static const String questStagesTable = 'quest_stages';

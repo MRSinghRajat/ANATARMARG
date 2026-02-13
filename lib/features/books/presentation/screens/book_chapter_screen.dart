@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/guide_animation_service.dart';
 import '../../../../shared/services/avatar_growth_service.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../../shared/services/premium_service.dart';
 import '../../../../shared/widgets/coin_earned_overlay.dart';
 import '../../../../core/utils/coin_calculator.dart';
 import '../../data/models/book_model.dart';
@@ -86,6 +87,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   String? _loadError;
   final GlobalKey _completeButtonKey = GlobalKey();
   late AnimationController _glowController;
+  bool _isPremium = false;
 
   String get _chapterId =>
       widget.chapter?.id ?? 'bg_chapter_${widget.chapterNumber ?? 1}';
@@ -154,9 +156,25 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       duration: const Duration(milliseconds: 2500),
     )..repeat(reverse: true);
     GuideAnimationService().setState(GuideState.speaking);
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
     _loadPreferences();
     _loadChapter();
     _loadBookmarksAndNotes();
+  }
+
+  /// First verse index that is not read (in order). Max allowed verse index = this value.
+  int get _firstUnreadVerseIndex {
+    for (var i = 0; i < _verses.length; i++) {
+      if (!_readVerseIds.contains(_verses[i].verse.id)) return i;
+    }
+    return _verses.length; // all read
+  }
+
+  bool _canNavigateToVerseIndex(int index) {
+    if (_isPremium) return true;
+    return index <= _firstUnreadVerseIndex;
   }
 
   void _onPageScroll() {
@@ -273,6 +291,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     try {
       final verses =
           await _verseRepository.getVersesWithAllTranslations(_chapterId);
+      final readIds = await _progressRepository.getReadVerseIds(_chapterId);
+      final isPremium = await PremiumService.instance.isPremium;
       var idx = widget.initialVerseIndex;
       if (idx == null || idx >= verses.length) {
         final lastReadVerseId =
@@ -282,9 +302,20 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           if (found >= 0) idx = found;
         }
       }
-      final int resolvedIdx = (idx != null && idx < verses.length) ? idx : 0;
+      int resolvedIdx = (idx != null && idx < verses.length) ? idx : 0;
+      if (!isPremium) {
+        int firstUnread = verses.length;
+        for (var i = 0; i < verses.length; i++) {
+          if (!readIds.contains(verses[i].verse.id)) {
+            firstUnread = i;
+            break;
+          }
+        }
+        resolvedIdx = resolvedIdx.clamp(0, firstUnread);
+      }
       setState(() {
         _verses = verses;
+        _readVerseIds = readIds;
         _isLoadingVerses = false;
         _loadError = null;
         _currentVerseIndex = resolvedIdx;
@@ -526,6 +557,19 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   void _goToNextChapter() async {
     final next = _getNextChapter();
     if (next == null) return;
+    if (!_isPremium && !_isCompleted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Complete this chapter to unlock the next, or upgrade to Premium for full access.',
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -611,6 +655,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       builder: (modalContext) => BooksChaptersModal(
         currentBook: widget.book,
         currentChapter: widget.chapter,
+        isPremium: _isPremium,
         onChapterSelected: (book, chapter) {
           Navigator.pop(modalContext); // Close modal
           Navigator.pushReplacement(
@@ -694,7 +739,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
               child: Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: _ShlokReaderColors.zinc800,
                   shape: BoxShape.circle,
                 ),
@@ -1032,6 +1077,30 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                     ),
                     itemCount: _verses.length,
           onPageChanged: (index) {
+            if (!_canNavigateToVerseIndex(index)) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Complete the current verse to unlock the next. Premium unlocks all.',
+                    ),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _pageController.hasClients) {
+                  final allowed = _firstUnreadVerseIndex.clamp(0, _verses.length - 1);
+                  _pageController.animateToPage(
+                    allowed,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                  setState(() => _currentVerseIndex = allowed);
+                }
+              });
+              return;
+            }
             setState(() {
               _currentVerseIndex = index;
             });
@@ -1254,7 +1323,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
+                                  const Icon(
                               Icons.note,
                               size: 18,
                               color: _ShlokReaderColors.primary,
@@ -1390,7 +1459,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.comment, size: 18, color: _ShlokReaderColors.primary),
+                    const Icon(Icons.comment, size: 18, color: _ShlokReaderColors.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1438,6 +1507,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             icon: Icons.chevron_left,
             onTap: _goToPrevChapter,
             label: 'Previous Chapter',
+            enabled: true,
           ),
           const SizedBox(width: 16),
           Semantics(
@@ -1477,6 +1547,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             icon: Icons.chevron_right,
             onTap: _goToNextChapter,
             label: 'Next Chapter',
+            enabled: _isPremium || _isCompleted,
           ),
         ],
       ),
@@ -1487,21 +1558,30 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     required IconData icon,
     required VoidCallback onTap,
     required String label,
+    bool enabled = true,
   }) {
     return Semantics(
       button: true,
       label: label,
+      enabled: enabled,
       child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        onTap: enabled ? onTap : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.4,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: enabled ? Colors.white : Colors.grey,
+            ),
           ),
-          child: Icon(icon, size: 18, color: Colors.white),
         ),
       ),
     );

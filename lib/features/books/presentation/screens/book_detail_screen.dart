@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../shared/services/premium_service.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
 import '../../data/repositories/chapter_repository.dart';
@@ -48,6 +49,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   // ignore: unused_field - used for future notes badge
   Map<String, List<VerseNoteModel>> _notesByChapter = {};
   bool _isLoading = true;
+  bool _isPremium = false;
 
   int _selectedTab = 0; // 0: Chapters, 1: Chat, 2: Notes
 
@@ -55,6 +57,9 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   void initState() {
     super.initState();
     _loadChapters();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
   }
 
   Future<void> _loadChapters() async {
@@ -127,6 +132,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   }
 
   bool _canTapChapter(ChapterModel ch, int index) {
+    if (_isPremium) return true;
     final status = _chapterStatus(ch, index);
     return status != _ChapterStatus.locked;
   }

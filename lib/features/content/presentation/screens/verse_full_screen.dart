@@ -293,7 +293,7 @@ class VerseFullScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              Icon(Icons.filter_vintage_rounded, color: _gold, size: 20),
+              const Icon(Icons.filter_vintage_rounded, color: _gold, size: 20),
               const SizedBox(width: 8),
               Text(
                 'SACRED ACTION',

@@ -83,77 +83,11 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
       );
     }
 
-    // Show prayer option (skip for quest flow - go back to quest path)
     if (widget.questStageKey != null) {
       Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted) Navigator.pop(context);
       });
-      return;
     }
-
-    // Show prayer option for daily tasks
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        _showPrayerOption();
-      }
-    });
-  }
-
-  void _showPrayerOption() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.favorite,
-              size: 48,
-              color: AppColors.warmOrange,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Would you like to pray?',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Take a moment for reflection and prayer',
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Skip'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(
-                        context,
-                        '/prayer',
-                        arguments: {'bonusCoins': 10},
-                      ).then((_) {
-                        Navigator.pop(context); // Return to home after prayer
-                      });
-                    },
-                    child: const Text('Pray'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override

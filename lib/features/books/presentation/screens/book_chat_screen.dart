@@ -282,9 +282,9 @@ class _BookChatScreenState extends ConsumerState<BookChatScreen> {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.cardBackground,
-                borderRadius: const BorderRadius.only(
+                borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                   bottomLeft: Radius.circular(4),

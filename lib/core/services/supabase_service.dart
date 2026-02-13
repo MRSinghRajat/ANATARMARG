@@ -102,4 +102,45 @@ class SupabaseService {
     await _client!.auth.signOut();
     await GoogleSignIn().signOut();
   }
+
+  /// Sign in with email using OOB (magic link). Sends a link to [email];
+  /// [fullName] is stored in user_metadata. Uses SupabaseConfig.authRedirectUrl
+  /// unless [emailRedirectTo] is provided; add that URL to Supabase Auth URL allow list.
+  Future<void> signInWithOtp({
+    required String email,
+    String? fullName,
+    String? emailRedirectTo,
+  }) async {
+    if (_client == null) {
+      throw Exception('Supabase client not initialized');
+    }
+    final redirectTo =
+        emailRedirectTo ?? SupabaseConfig.authRedirectUrl;
+    await _client!.auth.signInWithOtp(
+      email: email.trim().toLowerCase(),
+      emailRedirectTo: redirectTo.isNotEmpty ? redirectTo : null,
+      data: fullName != null && fullName.trim().isNotEmpty
+          ? {'full_name': fullName.trim()}
+          : null,
+      shouldCreateUser: true,
+    );
+  }
+
+  /// Recover session when app is opened from the magic link (OOB callback).
+  /// Parses refresh_token from the URI (fragment or query) and calls setSession.
+  Future<bool> recoverSessionFromUri(Uri uri) async {
+    if (_client == null) return false;
+    try {
+      final params = uri.fragment.isNotEmpty
+          ? Uri.splitQueryString(uri.fragment)
+          : uri.queryParameters;
+      final refreshToken = params['refresh_token'];
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+      await _client!.auth.setSession(refreshToken);
+      return true;
+    } catch (e) {
+      print('recoverSessionFromUri error: $e');
+      return false;
+    }
+  }
 }

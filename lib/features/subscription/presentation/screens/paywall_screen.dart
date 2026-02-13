@@ -1,0 +1,705 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
+
+import '../../../../core/services/revenuecat_service.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../data/models/subscription_models.dart';
+
+/// Paywall screen that displays subscription options.
+/// 
+/// This screen can use either:
+/// 1. RevenueCat's built-in Paywall UI (if configured in dashboard)
+/// 2. Custom paywall UI (fallback)
+class PaywallScreen extends StatefulWidget {
+  /// If true, shows a close button to dismiss the paywall
+  final bool showCloseButton;
+  
+  /// Callback when subscription is successful
+  final VoidCallback? onSubscriptionSuccess;
+  
+  /// Callback when user dismisses the paywall
+  final VoidCallback? onDismiss;
+
+  const PaywallScreen({
+    super.key,
+    this.showCloseButton = true,
+    this.onSubscriptionSuccess,
+    this.onDismiss,
+  });
+
+  /// Show paywall as a modal bottom sheet
+  static Future<bool?> showAsBottomSheet(BuildContext context) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: AppColors.backgroundDark,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: PaywallScreen(
+            showCloseButton: true,
+            onSubscriptionSuccess: () => Navigator.pop(context, true),
+            onDismiss: () => Navigator.pop(context, false),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show paywall as a full screen dialog
+  static Future<bool?> showAsDialog(BuildContext context) {
+    return Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => PaywallScreen(
+          showCloseButton: true,
+          onSubscriptionSuccess: () => Navigator.pop(context, true),
+          onDismiss: () => Navigator.pop(context, false),
+        ),
+      ),
+    );
+  }
+
+  /// Present RevenueCat's native paywall (if configured in dashboard)
+  static Future<PaywallResult> presentRevenueCatPaywall() async {
+    try {
+      return await RevenueCatUI.presentPaywall();
+    } catch (e) {
+      debugPrint('RevenueCat Paywall error: $e');
+      return PaywallResult.error;
+    }
+  }
+
+  /// Present RevenueCat's native paywall for a specific offering
+  static Future<PaywallResult> presentPaywallForOffering(Offering offering) async {
+    try {
+      return await RevenueCatUI.presentPaywallIfNeeded(
+        offering.identifier,
+      );
+    } catch (e) {
+      debugPrint('RevenueCat Paywall error: $e');
+      return PaywallResult.error;
+    }
+  }
+
+  @override
+  State<PaywallScreen> createState() => _PaywallScreenState();
+}
+
+class _PaywallScreenState extends State<PaywallScreen> {
+  final RevenueCatService _revenueCat = RevenueCatService.instance;
+  
+  List<SubscriptionPlan> _plans = [];
+  SubscriptionPlan? _selectedPlan;
+  bool _isLoading = true;
+  bool _isPurchasing = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOfferings();
+  }
+
+  Future<void> _loadOfferings() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _revenueCat.refreshOfferings();
+      final packages = _revenueCat.availablePackages;
+      
+      if (packages.isEmpty) {
+        setState(() {
+          _error = 'No subscription plans available';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final plans = packages
+          .map((p) => SubscriptionPlan.fromPackage(p))
+          .toList();
+
+      // Sort: monthly, yearly, lifetime
+      plans.sort((a, b) {
+        const order = {
+          SubscriptionPlanType.monthly: 0,
+          SubscriptionPlanType.yearly: 1,
+          SubscriptionPlanType.lifetime: 2,
+        };
+        return order[a.type]!.compareTo(order[b.type]!);
+      });
+
+      setState(() {
+        _plans = plans;
+        // Default select yearly (best value)
+        _selectedPlan = plans.firstWhere(
+          (p) => p.isBestValue,
+          orElse: () => plans.first,
+        );
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to load plans: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _purchase() async {
+    if (_selectedPlan?.package == null) return;
+
+    setState(() => _isPurchasing = true);
+
+    try {
+      final result = await _revenueCat.purchasePackage(_selectedPlan!.package!);
+      
+      if (result.success && result.isPremium) {
+        widget.onSubscriptionSuccess?.call();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Welcome to Antar Marg Pro! 🎉'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else if (result.cancelled) {
+        // User cancelled - do nothing
+      } else if (result.errorMessage != null) {
+        _showError(result.errorMessage!);
+      }
+    } catch (e) {
+      _showError('Purchase failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isPurchasing = false);
+      }
+    }
+  }
+
+  Future<void> _restore() async {
+    setState(() => _isPurchasing = true);
+
+    try {
+      final result = await _revenueCat.restorePurchases();
+      
+      if (result.success && result.isPremium) {
+        widget.onSubscriptionSuccess?.call();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Purchases restored successfully! 🎉'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else if (result.success && !result.restoredPurchases) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No previous purchases found'),
+            ),
+          );
+        }
+      } else if (result.errorMessage != null) {
+        _showError(result.errorMessage!);
+      }
+    } catch (e) {
+      _showError('Restore failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isPurchasing = false);
+      }
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundDark,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header
+            _buildHeader(),
+            
+            // Content
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryOrange,
+                      ),
+                    )
+                  : _error != null
+                      ? _buildError()
+                      : _buildContent(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          if (widget.showCloseButton)
+            IconButton(
+              onPressed: widget.onDismiss ?? () => Navigator.pop(context),
+              icon: const Icon(Icons.close, color: Colors.white),
+            )
+          else
+            const SizedBox(width: 48),
+          const Spacer(),
+          TextButton(
+            onPressed: _isPurchasing ? null : _restore,
+            child: Text(
+              'Restore Purchases',
+              style: GoogleFonts.poppins(
+                color: AppColors.primaryOrange,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _loadOfferings,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryOrange,
+              ),
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          // Title and subtitle
+          _buildTitle(),
+          const SizedBox(height: 24),
+          
+          // Features list
+          _buildFeatures(),
+          const SizedBox(height: 32),
+          
+          // Plan selection
+          _buildPlanSelection(),
+          const SizedBox(height: 24),
+          
+          // Purchase button
+          _buildPurchaseButton(),
+          const SizedBox(height: 16),
+          
+          // Terms
+          _buildTerms(),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitle() {
+    return Column(
+      children: [
+        // Premium badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primaryOrange.withOpacity(0.2),
+                Colors.amber.withOpacity(0.2),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.primaryOrange.withOpacity(0.5),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.star,
+                color: Colors.amber,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'ANTAR MARG PRO',
+                style: GoogleFonts.poppins(
+                  color: Colors.amber,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        Text(
+          'Unlock Your Full\nSpiritual Journey',
+          style: GoogleFonts.cormorantGaramond(
+            color: Colors.white,
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        
+        Text(
+          'Get unlimited access to all features and content',
+          style: GoogleFonts.poppins(
+            color: Colors.white70,
+            fontSize: 14,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatures() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+        ),
+      ),
+      child: Column(
+        children: PremiumFeatures.features.map((feature) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  feature.icon,
+                  style: const TextStyle(fontSize: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        feature.title,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        feature.description,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 20,
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildPlanSelection() {
+    return Column(
+      children: _plans.map((plan) {
+        final isSelected = _selectedPlan?.id == plan.id;
+        
+        return GestureDetector(
+          onTap: () => setState(() => _selectedPlan = plan),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? LinearGradient(
+                      colors: [
+                        AppColors.primaryOrange.withOpacity(0.2),
+                        AppColors.primaryOrange.withOpacity(0.1),
+                      ],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primaryOrange
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Radio indicator
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.primaryOrange
+                          : Colors.white54,
+                      width: 2,
+                    ),
+                  ),
+                  child: isSelected
+                      ? Center(
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.primaryOrange,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 16),
+                
+                // Plan details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            plan.title,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (plan.savings != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: plan.isBestValue
+                                    ? Colors.green
+                                    : AppColors.primaryOrange,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                plan.savings!,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        plan.description,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Price
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      plan.priceString ?? '',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      plan.period ?? '',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPurchaseButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isPurchasing ? null : _purchase,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryOrange,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: _isPurchasing
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Text(
+                'Continue with ${_selectedPlan?.title ?? 'Plan'}',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTerms() {
+    return Column(
+      children: [
+        Text(
+          'Cancel anytime. Subscriptions auto-renew until cancelled.',
+          style: GoogleFonts.poppins(
+            color: Colors.white38,
+            fontSize: 11,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton(
+              onPressed: () {
+                // Open terms URL
+              },
+              child: Text(
+                'Terms of Use',
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+            Text(
+              ' • ',
+              style: GoogleFonts.poppins(
+                color: Colors.white38,
+                fontSize: 11,
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                // Open privacy URL
+              },
+              child: Text(
+                'Privacy Policy',
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}

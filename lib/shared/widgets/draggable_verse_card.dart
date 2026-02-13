@@ -86,7 +86,7 @@ class _DraggableVerseCardState extends State<DraggableVerseCard> {
         ListView(
           controller: sheetController,
           physics: const NeverScrollableScrollPhysics(),
-          children: [SizedBox(height: 10000)],
+          children: const [SizedBox(height: 10000)],
         ),
         _buildContentScroll(context, verse),
       ],

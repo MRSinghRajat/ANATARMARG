@@ -14,7 +14,8 @@ class GPTApiService {
 
   final SupabaseService _supabase = SupabaseService();
 
-  static const String _model = 'gpt-4';
+  // Using gpt-4o-mini - fast, cheap, and widely available
+  static const String _model = 'gpt-4o-mini';
   static const int _maxTokens = 1000;
 
   Future<VerseContent> getVerse({
@@ -197,6 +198,70 @@ class GPTApiService {
     return response['choices'][0]['message']['content'] as String;
   }
 
+  /// Chat with a spiritual service (numerology, kundli, tarot, etc.)
+  /// Uses a custom system prompt and conversation history.
+  /// [imageBase64] - Optional base64 encoded image for services like palmistry
+  Future<String> chatWithSpiritualService({
+    required String systemPrompt,
+    required String userMessage,
+    required List<Map<String, String>> history,
+    String? imageBase64,
+  }) async {
+    // For vision requests, we don't include history to avoid confusion
+    // The image should be analyzed fresh without prior context
+    final messages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content': systemPrompt,
+      },
+    ];
+
+    // Only include history for non-image requests
+    if (imageBase64 == null || imageBase64.isEmpty) {
+      messages.addAll(history.map((h) => Map<String, dynamic>.from(h)));
+    }
+
+    // Build user message - with or without image
+    if (imageBase64 != null && imageBase64.isNotEmpty) {
+      print('Sending palm image to GPT (base64 length: ${imageBase64.length})');
+      // Vision-enabled message with image - text FIRST, then image
+      messages.add({
+        'role': 'user',
+        'content': [
+          {
+            'type': 'image_url',
+            'image_url': {
+              'url': 'data:image/jpeg;base64,$imageBase64',
+              'detail': 'high',
+            },
+          },
+          {
+            'type': 'text',
+            'text': userMessage,
+          },
+        ],
+      });
+    } else {
+      // Text-only message
+      messages.add({
+        'role': 'user',
+        'content': userMessage,
+      });
+    }
+
+    try {
+      final response = await _makeChatRequest(
+        messages,
+        maxTokens: 2500, // Allow longer responses for readings
+        timeout: const Duration(seconds: 120), // Longer timeout for vision analysis
+      );
+      return response['choices'][0]['message']['content'] as String;
+    } catch (e) {
+      print('Spiritual chat error: $e');
+      rethrow;
+    }
+  }
+
   Future<VerseContent> getVerseOfTheDay() async {
     final prompt = ApiConfig.getVerseOfTheDayPrompt();
 
@@ -228,7 +293,7 @@ class GPTApiService {
       final devanagariText = map['devanagariText'] as String?;
       final content = map['content'] as String? ?? '';
       final dailyInsight = map['dailyInsight'] as String?;
-      if (content.isEmpty) throw FormatException('missing content');
+      if (content.isEmpty) throw const FormatException('missing content');
       return VerseContent(
         id: 'verse_of_day_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}',
         book: book,
@@ -267,13 +332,23 @@ class GPTApiService {
   }
 
   Future<Map<String, dynamic>> _makeChatRequest(
-      List<Map<String, dynamic>> messages) async {
-    if (AppConfig.gptApiKey.isEmpty) {
-      throw Exception('GPT API key not configured');
+    List<Map<String, dynamic>> messages, {
+    int? maxTokens,
+    Duration? timeout,
+  }) async {
+    final apiKey = AppConfig.gptApiKey;
+    print('GPT API Key length: ${apiKey.length}');
+    print('GPT API Key starts with: ${apiKey.length > 10 ? apiKey.substring(0, 10) : apiKey}...');
+    
+    if (apiKey.isEmpty) {
+      throw Exception('GPT API key not configured. Please add GPT_API_KEY to your .env file.');
     }
 
     final url =
         Uri.parse('${AppConfig.gptApiBaseUrl}${ApiConfig.chatEndpoint}');
+
+    print('Making GPT request to: $url');
+    print('Using model: $_model, maxTokens: ${maxTokens ?? _maxTokens}');
 
     final response = await http
         .post(
@@ -285,15 +360,18 @@ class GPTApiService {
           body: jsonEncode({
             'model': _model,
             'messages': messages,
-            'max_tokens': _maxTokens,
+            'max_tokens': maxTokens ?? _maxTokens,
             'temperature': 0.7,
           }),
         )
-        .timeout(ApiConfig.requestTimeout);
+        .timeout(timeout ?? ApiConfig.requestTimeout);
+
+    print('GPT response status: ${response.statusCode}');
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
+      print('GPT API error body: ${response.body}');
       throw Exception(
           'GPT API error: ${response.statusCode} - ${response.body}');
     }
