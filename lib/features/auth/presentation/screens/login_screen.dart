@@ -65,7 +65,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           await SupabaseService().signInWithGoogle();
                           if (context.mounted) {
                             Navigator.pushReplacementNamed(
-                                context, '/animated-onboarding');
+                                context, AppRouter.home);
                           }
                         } catch (e) {
                           if (context.mounted) {
@@ -129,20 +129,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TextButton(
                       onPressed: () {
                         Navigator.pushReplacementNamed(
-                            context, '/animated-onboarding');
+                            context, AppRouter.home);
                       },
                       child: const Text('Continue without signing in'),
                     ),
                     const SizedBox(height: 16),
 
                     // Apple Sign In (iOS only - will be implemented later)
-                    // For now, skip Apple sign-in on Android
                     if (Theme.of(context).platform == TargetPlatform.iOS)
                       ElevatedButton.icon(
                         onPressed: () {
                           // TODO: Implement Apple Sign In
                           Navigator.pushReplacementNamed(
-                              context, '/animated-onboarding');
+                              context, AppRouter.home);
                         },
                         icon: const Icon(Icons.apple, size: 24),
                         label: const Text('Continue with Apple'),
@@ -150,6 +149,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           minimumSize: const Size(double.infinity, 50),
                         ),
                       ),
+
+                    const SizedBox(height: 12),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 12),
+
+                    // ─── Preview Onboarding (test shortcut) ───
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pushNamed(
+                            context, AppRouter.spiritualOnboarding);
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 20),
+                      label: const Text('Preview Onboarding'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        foregroundColor: const Color(0xFFD4AF37),
+                        side: const BorderSide(
+                          color: Color(0x55D4AF37),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

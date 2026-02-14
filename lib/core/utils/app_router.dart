@@ -4,6 +4,7 @@ import '../../features/auth/presentation/screens/sign_up_screen.dart';
 import '../../features/navigation/presentation/screens/main_navigation_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/onboarding/presentation/screens/animated_onboarding_screen.dart';
+import '../../features/onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 import '../../features/content/presentation/screens/reading_screen.dart';
 import '../../features/content/presentation/screens/verse_full_screen.dart';
 import '../../features/content/data/models/verse_model.dart';
@@ -17,6 +18,7 @@ class AppRouter {
   static const String signUp = '/sign-up';
   static const String onboarding = '/onboarding';
   static const String animatedOnboarding = '/animated-onboarding';
+  static const String spiritualOnboarding = '/spiritual-onboarding';
   static const String home = '/home';
   static const String reading = '/reading';
   static const String verseFullScreen = '/verse-full-screen';
@@ -36,6 +38,9 @@ class AppRouter {
       case animatedOnboarding:
         return MaterialPageRoute(
             builder: (_) => const AnimatedOnboardingScreen());
+      case spiritualOnboarding:
+        return MaterialPageRoute(
+            builder: (_) => const SpiritualOnboardingScreen());
       case home:
         return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
       case reading:

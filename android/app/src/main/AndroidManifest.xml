@@ -11,7 +11,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     
     <application
-        android:label="Ashrae Playground"
+        android:label="Antar Marg"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

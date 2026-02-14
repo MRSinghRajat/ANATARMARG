@@ -24,7 +24,7 @@ class CustomizableOmSanctuary extends StatefulWidget {
 
 class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
     with TickerProviderStateMixin {
-  static const String _om = 'ॐ';
+  // Symbol is now dynamic based on OmStyle.symbol getter
   
   late AnimationController _ringController1;
   late AnimationController _ringController2;
@@ -143,6 +143,135 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         _particleController.stop();
         _breatheController.stop();
         return;
+
+      // === NEW ANIMATION STYLES ===
+
+      case SanctuaryAnimationStyle.hypnotic:
+        _ringController1.duration = const Duration(seconds: 15);
+        _ringController2.duration = const Duration(seconds: 12);
+        _glowController.duration = const Duration(milliseconds: 1500);
+        _breatheController.duration = const Duration(seconds: 3);
+        break;
+
+      case SanctuaryAnimationStyle.aurora:
+        _ringController1.duration = const Duration(seconds: 90);
+        _ringController2.duration = const Duration(seconds: 70);
+        _glowController.duration = const Duration(seconds: 6);
+        _breatheController.duration = const Duration(seconds: 7);
+        break;
+
+      case SanctuaryAnimationStyle.heartbeat:
+        _ringController1.duration = const Duration(seconds: 50);
+        _ringController2.duration = const Duration(seconds: 40);
+        _glowController.duration = const Duration(milliseconds: 600);
+        _breatheController.duration = const Duration(milliseconds: 800);
+        break;
+
+      case SanctuaryAnimationStyle.tidal:
+        _ringController1.duration = const Duration(seconds: 70);
+        _ringController2.duration = const Duration(seconds: 55);
+        _glowController.duration = const Duration(seconds: 4);
+        _breatheController.duration = const Duration(seconds: 5);
+        break;
+
+      case SanctuaryAnimationStyle.cosmic:
+        _ringController1.duration = const Duration(seconds: 100);
+        _ringController2.duration = const Duration(seconds: 80);
+        _glowController.duration = const Duration(seconds: 4);
+        _breatheController.duration = const Duration(seconds: 10);
+        break;
+
+      case SanctuaryAnimationStyle.spiral:
+        _ringController1.duration = const Duration(seconds: 25);
+        _ringController2.duration = const Duration(seconds: 18);
+        _glowController.duration = const Duration(seconds: 2);
+        _breatheController.duration = const Duration(seconds: 3);
+        break;
+
+      case SanctuaryAnimationStyle.pendulum:
+        _ringController1.duration = const Duration(seconds: 60);
+        _ringController2.duration = const Duration(seconds: 45);
+        _glowController.duration = const Duration(seconds: 3);
+        _breatheController.duration = const Duration(seconds: 2);
+        break;
+
+      case SanctuaryAnimationStyle.vibrate:
+        _ringController1.duration = const Duration(seconds: 35);
+        _ringController2.duration = const Duration(seconds: 28);
+        _glowController.duration = const Duration(milliseconds: 300);
+        _breatheController.duration = const Duration(milliseconds: 500);
+        break;
+
+      case SanctuaryAnimationStyle.floatMotion:
+        _ringController1.duration = const Duration(seconds: 55);
+        _ringController2.duration = const Duration(seconds: 42);
+        _glowController.duration = const Duration(seconds: 3);
+        _breatheController.duration = const Duration(seconds: 5);
+        break;
+
+      case SanctuaryAnimationStyle.bounce:
+        _ringController1.duration = const Duration(seconds: 45);
+        _ringController2.duration = const Duration(seconds: 35);
+        _glowController.duration = const Duration(seconds: 1);
+        _breatheController.duration = const Duration(milliseconds: 1200);
+        break;
+
+      case SanctuaryAnimationStyle.orbit:
+        _ringController1.duration = const Duration(seconds: 30);
+        _ringController2.duration = const Duration(seconds: 22);
+        _glowController.duration = const Duration(seconds: 2);
+        _breatheController.duration = const Duration(seconds: 3);
+        break;
+
+      case SanctuaryAnimationStyle.twinkle:
+        _ringController1.duration = const Duration(seconds: 50);
+        _ringController2.duration = const Duration(seconds: 38);
+        _glowController.duration = const Duration(milliseconds: 700);
+        _breatheController.duration = const Duration(seconds: 2);
+        _particleController.duration = const Duration(seconds: 2);
+        break;
+
+      case SanctuaryAnimationStyle.wave:
+        _ringController1.duration = const Duration(seconds: 40);
+        _ringController2.duration = const Duration(seconds: 30);
+        _glowController.duration = const Duration(seconds: 2);
+        _breatheController.duration = const Duration(seconds: 4);
+        break;
+
+      case SanctuaryAnimationStyle.morph:
+        _ringController1.duration = const Duration(seconds: 35);
+        _ringController2.duration = const Duration(seconds: 25);
+        _glowController.duration = const Duration(seconds: 3);
+        _breatheController.duration = const Duration(seconds: 6);
+        break;
+
+      case SanctuaryAnimationStyle.ripple:
+        _ringController1.duration = const Duration(seconds: 60);
+        _ringController2.duration = const Duration(seconds: 45);
+        _glowController.duration = const Duration(seconds: 2);
+        _breatheController.duration = const Duration(seconds: 3);
+        break;
+
+      case SanctuaryAnimationStyle.cascade:
+        _ringController1.duration = const Duration(seconds: 45);
+        _ringController2.duration = const Duration(seconds: 32);
+        _glowController.duration = const Duration(seconds: 2);
+        _breatheController.duration = const Duration(seconds: 4);
+        break;
+
+      case SanctuaryAnimationStyle.flow:
+        _ringController1.duration = const Duration(seconds: 65);
+        _ringController2.duration = const Duration(seconds: 50);
+        _glowController.duration = const Duration(seconds: 4);
+        _breatheController.duration = const Duration(seconds: 5);
+        break;
+
+      case SanctuaryAnimationStyle.zenMode:
+        _ringController1.duration = const Duration(seconds: 180);
+        _ringController2.duration = const Duration(seconds: 150);
+        _glowController.duration = const Duration(seconds: 8);
+        _breatheController.duration = const Duration(seconds: 12);
+        break;
     }
     
     // Restart animations with new durations
@@ -158,9 +287,23 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
   @override
   void didUpdateWidget(CustomizableOmSanctuary oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.customization != oldWidget.customization && widget.customization != null) {
+    final newConfig = widget.customization;
+    if (newConfig == null) return;
+    // Update when parent passes a new preview so the sanctuary reflects it
+    final refChanged = newConfig != oldWidget.customization;
+    final contentChanged = newConfig.omStyle != _customization.omStyle ||
+        newConfig.ringStyle != _customization.ringStyle ||
+        newConfig.ringColor != _customization.ringColor ||
+        newConfig.frameStyle != _customization.frameStyle ||
+        newConfig.animationStyle != _customization.animationStyle ||
+        newConfig.backgroundStyle != _customization.backgroundStyle ||
+        newConfig.glowColor != _customization.glowColor ||
+        newConfig.deityImage != _customization.deityImage ||
+        newConfig.specialEffect != _customization.specialEffect ||
+        newConfig.particleStyle != _customization.particleStyle;
+    if (refChanged || contentChanged) {
       setState(() {
-        _customization = widget.customization!;
+        _customization = newConfig;
         _updateAnimationSpeeds();
       });
     }
@@ -443,6 +586,321 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
       
       case RingStyle.none:
         return [];
+
+      // === NEW RING STYLES ===
+
+      case RingStyle.fibonacci:
+        // Golden spiral — triple ring with fibonacci scaling
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.95, color1, 1.2),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi * 1.618,
+            child: _buildRing(widget.size * 0.76, color2.withOpacity(0.6), 0.8),
+          ),
+          Transform.rotate(
+            angle: _ringController3.value * 2 * math.pi * 2.618,
+            child: _buildRing(widget.size * 0.58, color1.withOpacity(0.35), 0.6),
+          ),
+        ];
+
+      case RingStyle.dna:
+        // Double helix — two rings with vertical offset illusion
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _CosmicDotsPainter(
+                color: color1,
+                secondaryColor: color2,
+                isRainbow: isRainbow,
+                rainbowColors: ringColor.gradientColors,
+              ),
+            ),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi + math.pi / 4,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _CosmicDotsPainter(
+                color: color2,
+                secondaryColor: color1,
+                isRainbow: isRainbow,
+                rainbowColors: ringColor.gradientColors,
+              ),
+            ),
+          ),
+        ];
+
+      case RingStyle.galaxy:
+        // Galaxy spiral — mandala with slow counter-rotation
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi * 0.5,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _MandalaPainter(
+                color: color1,
+                progress: _ringController1.value,
+              ),
+            ),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi * 0.3,
+            child: _buildRing(widget.size * 0.7, color2.withOpacity(0.3), 0.5),
+          ),
+        ];
+
+      case RingStyle.zodiac:
+        // Zodiac — chakra ring variant
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi * 0.1,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _ChakraRingPainter(
+                color: color1,
+                secondaryColor: color2,
+              ),
+            ),
+          ),
+        ];
+
+      case RingStyle.waves:
+        // Sound waves — multiple concentric expanding rings
+        return [
+          for (var i = 0; i < 4; i++)
+            Transform.rotate(
+              angle: 0,
+              child: _buildRing(
+                widget.size * (0.6 + i * 0.12),
+                color1.withOpacity(0.5 - i * 0.1),
+                1.0 - i * 0.15,
+              ),
+            ),
+        ];
+
+      case RingStyle.fire:
+        // Fire ring — mandala with warm glow
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi * 2,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _MandalaPainter(
+                color: color1,
+                progress: _ringController1.value,
+              ),
+            ),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi * 1.5,
+            child: _buildRing(widget.size * 0.85, color2.withOpacity(0.4), 2),
+          ),
+        ];
+
+      case RingStyle.auroraRing:
+        // Aurora — triple ring with offset phases
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.95, color1.withOpacity(0.6), 1.5),
+          ),
+          Transform.rotate(
+            angle: _ringController2.value * 2 * math.pi + math.pi / 3,
+            child: _buildRing(widget.size * 0.88, color2.withOpacity(0.4), 1),
+          ),
+          Transform.rotate(
+            angle: -_ringController3.value * 2 * math.pi + math.pi * 2 / 3,
+            child: _buildRing(widget.size * 0.81, color1.withOpacity(0.25), 0.8),
+          ),
+        ];
+
+      case RingStyle.infinity:
+        // Infinity — double ring crossing
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.9, color1, 1.2),
+          ),
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi + math.pi / 2,
+            child: _buildRing(widget.size * 0.9, color2.withOpacity(0.5), 1.2),
+          ),
+        ];
+
+      case RingStyle.sacred:
+        // Flower of life — 6 overlapping circles
+        return [
+          for (var i = 0; i < 6; i++)
+            Transform.translate(
+              offset: Offset(
+                math.cos(i * math.pi / 3 + _ringController1.value * 2 * math.pi) * widget.size * 0.15,
+                math.sin(i * math.pi / 3 + _ringController1.value * 2 * math.pi) * widget.size * 0.15,
+              ),
+              child: _buildRing(widget.size * 0.5, color1.withOpacity(0.2), 0.5),
+            ),
+        ];
+
+      case RingStyle.pulseRing:
+        // Pulsing dots
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _CosmicDotsPainter(
+                color: color1,
+                secondaryColor: color2,
+                isRainbow: isRainbow,
+                rainbowColors: ringColor.gradientColors,
+              ),
+            ),
+          ),
+        ];
+
+      case RingStyle.orbit:
+        // Orbital paths — multiple ellipses
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.95, color1, 1),
+          ),
+          Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..scale(1.0, 0.6),
+            child: Transform.rotate(
+              angle: _ringController2.value * 2 * math.pi,
+              child: _buildRing(widget.size * 0.85, color2.withOpacity(0.4), 0.8),
+            ),
+          ),
+          Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..scale(0.6, 1.0),
+            child: Transform.rotate(
+              angle: -_ringController3.value * 2 * math.pi,
+              child: _buildRing(widget.size * 0.85, color1.withOpacity(0.3), 0.6),
+            ),
+          ),
+        ];
+
+      case RingStyle.prism:
+        // Prism — rotating triangle + circle
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.95, color1, 1.2),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.75, color2.withOpacity(0.4), 0.8),
+          ),
+        ];
+
+      case RingStyle.quantum:
+        // Quantum — fast multi-orbit
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 4 * math.pi,
+            child: _buildRing(widget.size * 0.9, color1, 0.8),
+          ),
+          Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..rotateX(math.pi / 4),
+            child: Transform.rotate(
+              angle: -_ringController2.value * 4 * math.pi,
+              child: _buildRing(widget.size * 0.9, color2.withOpacity(0.5), 0.8),
+            ),
+          ),
+          Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..rotateY(math.pi / 4),
+            child: Transform.rotate(
+              angle: _ringController3.value * 4 * math.pi,
+              child: _buildRing(widget.size * 0.9, color1.withOpacity(0.3), 0.8),
+            ),
+          ),
+        ];
+
+      case RingStyle.tornado:
+        // Tornado spiral — decreasing size stack
+        return [
+          for (var i = 0; i < 5; i++)
+            Transform.rotate(
+              angle: _ringController1.value * 2 * math.pi + i * 0.3,
+              child: _buildRing(
+                widget.size * (0.95 - i * 0.12),
+                color1.withOpacity(0.6 - i * 0.1),
+                1.5 - i * 0.2,
+              ),
+            ),
+        ];
+
+      case RingStyle.ripple:
+        // Water ripples — multiple concentric thin rings
+        return [
+          for (var i = 0; i < 5; i++)
+            _buildRing(
+              widget.size * (0.5 + i * 0.1),
+              color1.withOpacity(0.4 - i * 0.06),
+              0.5,
+            ),
+        ];
+
+      case RingStyle.constellation:
+        // Constellation — cosmic dots with connections
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi * 0.2,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _CosmicDotsPainter(
+                color: color1,
+                secondaryColor: color2,
+                isRainbow: isRainbow,
+                rainbowColors: ringColor.gradientColors,
+              ),
+            ),
+          ),
+          _buildRing(widget.size * 0.9, color1.withOpacity(0.15), 0.3),
+        ];
+
+      case RingStyle.matrixRing:
+        // Matrix — single thin ring + cosmic dots
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi * 3,
+            child: _buildRing(widget.size * 0.95, color1.withOpacity(0.4), 0.5),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi * 2,
+            child: CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _CosmicDotsPainter(
+                color: color1,
+                secondaryColor: color2,
+                isRainbow: false,
+                rainbowColors: ringColor.gradientColors,
+              ),
+            ),
+          ),
+        ];
+
+      case RingStyle.diamond:
+        // Diamond facets — rotating double rings
+        return [
+          Transform.rotate(
+            angle: _ringController1.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.95, color1, 2),
+          ),
+          Transform.rotate(
+            angle: -_ringController2.value * 2 * math.pi,
+            child: _buildRing(widget.size * 0.82, color2.withOpacity(0.5), 1.5),
+          ),
+        ];
     }
   }
 
@@ -487,7 +945,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         }
         
         return Text(
-          _om,
+          omStyle.symbol,
           style: _getOmTextStyle(omStyle, glowColor, glowIntensity, blurRadius),
         );
       },
@@ -569,6 +1027,421 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
               color: _customization.ringColor.secondaryColor.withOpacity(glowIntensity * 0.5),
               blurRadius: blurRadius * 2,
             ),
+          ],
+        );
+
+      case OmStyle.neon:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w300,
+          color: const Color(0xFF0B1623),
+          shadows: [
+            Shadow(color: glow.withOpacity(glowIntensity), blurRadius: blurRadius * 2),
+            Shadow(color: color.withOpacity(glowIntensity), blurRadius: blurRadius * 4),
+            Shadow(color: color.withOpacity(glowIntensity * 0.5), blurRadius: 2),
+          ],
+        );
+
+      case OmStyle.galaxy:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF4169E1),
+          shadows: [
+            Shadow(color: const Color(0xFF9B59B6).withOpacity(glowIntensity), blurRadius: blurRadius * 1.5),
+            Shadow(color: const Color(0xFF45B7D1).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.golden3d:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 1.05,
+          height: 1,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFFD4AF37),
+          shadows: [
+            const Shadow(color: Color(0xFF8B6914), offset: Offset(2, 3), blurRadius: 0),
+            const Shadow(color: Color(0xFF6B4F12), offset: Offset(3, 5), blurRadius: 1),
+            Shadow(color: glow.withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+          ],
+        );
+
+      case OmStyle.flame:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w500,
+          color: const Color(0xFFFF4500),
+          shadows: [
+            Shadow(color: const Color(0xFFFF6600).withOpacity(glowIntensity), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFFD700).withOpacity(glowIntensity * 0.8), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFFFF0000).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.crystal:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 0.95,
+          height: 1,
+          fontWeight: FontWeight.w200,
+          color: const Color(0xFFB0E0E6),
+          shadows: [
+            Shadow(color: const Color(0xFF87CEEB).withOpacity(glowIntensity), blurRadius: blurRadius * 0.5),
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.zen:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          fontWeight: FontWeight.w300,
+          color: color.withOpacity(0.7),
+        );
+
+      case OmStyle.shadow:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 1.05,
+          height: 1,
+          fontWeight: FontWeight.w600,
+          color: color,
+          shadows: [
+            Shadow(color: Colors.black.withOpacity(0.8), offset: const Offset(3, 3), blurRadius: 6),
+            Shadow(color: Colors.black.withOpacity(0.4), offset: const Offset(6, 6), blurRadius: 12),
+            Shadow(color: glow.withOpacity(glowIntensity * 0.3), blurRadius: blurRadius),
+          ],
+        );
+
+      case OmStyle.holographic:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: Colors.white,
+          shadows: [
+            Shadow(color: const Color(0xFFFF6B6B).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius, offset: const Offset(-2, 0)),
+            Shadow(color: const Color(0xFF4ECDC4).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius, offset: const Offset(2, 0)),
+            Shadow(color: const Color(0xFFFFE66D).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.runic:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.95,
+          height: 1,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFFC9A96E),
+          shadows: [
+            Shadow(color: const Color(0xFF8B6914).withOpacity(glowIntensity), blurRadius: blurRadius * 0.3),
+          ],
+        );
+
+      case OmStyle.watercolor:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w300,
+          color: color.withOpacity(0.6),
+          shadows: [
+            Shadow(color: color.withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 3),
+            Shadow(color: _customization.ringColor.secondaryColor.withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 5),
+          ],
+        );
+
+      case OmStyle.glitch:
+        return GoogleFonts.notoSansDevanagari(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          shadows: [
+            Shadow(color: const Color(0xFFFF0000).withOpacity(0.7), offset: const Offset(-3, 0), blurRadius: 0),
+            Shadow(color: const Color(0xFF00FFFF).withOpacity(0.7), offset: const Offset(3, 0), blurRadius: 0),
+          ],
+        );
+
+      case OmStyle.aurora:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF00C9A7),
+          shadows: [
+            Shadow(color: const Color(0xFF00E5FF).withOpacity(glowIntensity), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFF9B59B6).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.voidStyle:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 1.05,
+          height: 1,
+          fontWeight: FontWeight.w200,
+          color: const Color(0xFF0B1623),
+          shadows: [
+            Shadow(color: color.withOpacity(glowIntensity), blurRadius: 2),
+            Shadow(color: glow.withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.sacred:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          fontWeight: FontWeight.w500,
+          color: color,
+          shadows: [
+            Shadow(color: glow.withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 0.5),
+          ],
+        );
+
+      case OmStyle.cosmic:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF1B0A3C),
+          shadows: [
+            Shadow(color: const Color(0xFF9B59B6).withOpacity(glowIntensity), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFF3498DB).withOpacity(glowIntensity * 0.7), blurRadius: blurRadius * 4),
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.3), blurRadius: 1),
+          ],
+        );
+
+      case OmStyle.matrix:
+        return GoogleFonts.notoSansDevanagari(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF00FF41),
+          shadows: [
+            Shadow(color: const Color(0xFF00FF41).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius),
+          ],
+        );
+
+      case OmStyle.ethereal:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 1.1,
+          height: 1,
+          fontWeight: FontWeight.w200,
+          color: Colors.white.withOpacity(0.4),
+          shadows: [
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.tribal:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          fontWeight: FontWeight.w900,
+          color: color,
+          shadows: [
+            Shadow(color: Colors.black.withOpacity(0.5), offset: const Offset(1, 1), blurRadius: 0),
+          ],
+        );
+
+      case OmStyle.chakraOm:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFFFF0000),
+          shadows: [
+            Shadow(color: const Color(0xFFFF9933).withOpacity(glowIntensity * 0.8), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFFFF00).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFF00FF00).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 3),
+            Shadow(color: const Color(0xFF9B59B6).withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 4),
+          ],
+        );
+
+      case OmStyle.lotusOm:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFFF8BBD9),
+          shadows: [
+            Shadow(color: const Color(0xFFE91E63).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFF48FB1).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      // --- Sacred Symbols ---
+      case OmStyle.swastik:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFFFF9933), // Saffron
+          shadows: [
+            Shadow(color: const Color(0xFFFF6600).withOpacity(glowIntensity * 0.7), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFFCC00).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 1.5),
+          ],
+        );
+
+      case OmStyle.trishul:
+        return TextStyle(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          color: const Color(0xFFB0C4DE), // Steel blue - Shiva's energy
+          shadows: [
+            Shadow(color: const Color(0xFF6495ED).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFF4169E1).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.shriSymbol:
+        return GoogleFonts.notoSerifDevanagari(
+          fontSize: baseSize * 0.75,
+          height: 1,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFFD4AF37), // Gold
+          shadows: [
+            Shadow(color: const Color(0xFFFFD700).withOpacity(glowIntensity * 0.8), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFDAA520).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.rangoli:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFFF69B4), // Hot pink
+          shadows: [
+            Shadow(color: const Color(0xFFFF1493).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFF6EB4).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFFFF00FF).withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.lotusSymbol:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFF8BBD9), // Soft pink
+          shadows: [
+            Shadow(color: const Color(0xFFE91E63).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFF48FB1).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 1.5),
+          ],
+        );
+
+      case OmStyle.kalash:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFCD853F), // Copper
+          shadows: [
+            Shadow(color: const Color(0xFFB8860B).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFDAA520).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.damaru:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFDEB887), // Burlywood
+          shadows: [
+            Shadow(color: const Color(0xFF8B4513).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFA0522D).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.shankha:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFFFF5EE), // Seashell white
+          shadows: [
+            Shadow(color: const Color(0xFFFFE4C4).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFF5DEB3).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.sudarshan:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFFFD700), // Gold - Vishnu's weapon
+          shadows: [
+            Shadow(color: const Color(0xFFFF8C00).withOpacity(glowIntensity * 0.7), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFF4500).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFFFFD700).withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.diya:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFFFB347), // Warm flame
+          shadows: [
+            Shadow(color: const Color(0xFFFF8C00).withOpacity(glowIntensity * 0.7), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFF6347).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 1.5),
+            Shadow(color: const Color(0xFFFFD700).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.namaste:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFF0E68C), // Khaki gold
+          shadows: [
+            Shadow(color: const Color(0xFFD4AF37).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius),
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 1.5),
+          ],
+        );
+
+      case OmStyle.aum:
+        return GoogleFonts.cormorantGaramond(
+          fontSize: baseSize * 0.9,
+          height: 1,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFFFFD700),
+          shadows: [
+            Shadow(color: const Color(0xFFDAA520).withOpacity(glowIntensity * 0.8), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFFFA500).withOpacity(glowIntensity * 0.5), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.mandalaSymbol:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFDDA0DD), // Plum
+          shadows: [
+            Shadow(color: const Color(0xFF9B59B6).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFF8E44AD).withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 2),
+            Shadow(color: const Color(0xFFE8DAEF).withOpacity(glowIntensity * 0.2), blurRadius: blurRadius * 3),
+          ],
+        );
+
+      case OmStyle.yantraSymbol:
+        return TextStyle(
+          fontSize: baseSize * 0.85,
+          height: 1,
+          color: const Color(0xFFE74C3C), // Sacred red
+          shadows: [
+            Shadow(color: const Color(0xFFFF6347).withOpacity(glowIntensity * 0.6), blurRadius: blurRadius),
+            Shadow(color: const Color(0xFFD4AF37).withOpacity(glowIntensity * 0.4), blurRadius: blurRadius * 2),
+          ],
+        );
+
+      case OmStyle.bindu:
+        return TextStyle(
+          fontSize: baseSize * 0.7,
+          height: 1,
+          fontWeight: FontWeight.w900,
+          color: Colors.white,
+          shadows: [
+            Shadow(color: glow.withOpacity(glowIntensity * 0.8), blurRadius: blurRadius),
+            Shadow(color: Colors.white.withOpacity(glowIntensity * 0.6), blurRadius: blurRadius * 2),
+            Shadow(color: glow.withOpacity(glowIntensity * 0.3), blurRadius: blurRadius * 3),
           ],
         );
     }
@@ -1281,6 +2154,213 @@ class _FramePainter extends CustomPainter {
       
       case FrameStyle.tribal:
         _drawTribalFrame(canvas, center, radius, paint);
+        break;
+
+      // === NEW FRAME STYLES ===
+
+      case FrameStyle.infinityFrame:
+        // Figure-8 infinity
+        _drawPolygon(canvas, center, radius, 8, paint);
+        _drawPolygon(canvas, center, radius * 0.7, 8, paint..color = color.withOpacity(0.15));
+        break;
+
+      case FrameStyle.chakraFrame:
+        // 7 dots around circle
+        canvas.drawCircle(center, radius, paint..style = PaintingStyle.stroke);
+        for (var i = 0; i < 7; i++) {
+          final angle = i * 2 * math.pi / 7 - math.pi / 2;
+          canvas.drawCircle(
+            Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle)),
+            4, paint..style = PaintingStyle.fill..color = color.withOpacity(0.6),
+          );
+        }
+        paint.style = PaintingStyle.stroke;
+        break;
+
+      case FrameStyle.galaxyFrame:
+        // Spiral dots
+        for (var i = 0; i < 40; i++) {
+          final t = i / 40.0;
+          final angle = t * 4 * math.pi + progress * 2 * math.pi;
+          final r = radius * 0.4 + radius * 0.6 * t;
+          canvas.drawCircle(
+            Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle)),
+            2 * (1 - t * 0.5), paint..style = PaintingStyle.fill..color = color.withOpacity(0.5 * (1 - t)),
+          );
+        }
+        break;
+
+      case FrameStyle.vine:
+        // Wavy vine circle
+        final vinePath = Path();
+        for (var i = 0; i < 360; i++) {
+          final angle = i * math.pi / 180;
+          final wave = math.sin(i * 6 * math.pi / 180) * radius * 0.05;
+          final r = radius + wave;
+          final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
+          if (i == 0) vinePath.moveTo(p.dx, p.dy); else vinePath.lineTo(p.dx, p.dy);
+        }
+        vinePath.close();
+        canvas.drawPath(vinePath, paint..style = PaintingStyle.stroke);
+        break;
+
+      case FrameStyle.dragon:
+        // Zigzag circle
+        final dragonPath = Path();
+        for (var i = 0; i < 24; i++) {
+          final angle = i * 2 * math.pi / 24;
+          final r = (i % 2 == 0) ? radius : radius * 0.88;
+          final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
+          if (i == 0) dragonPath.moveTo(p.dx, p.dy); else dragonPath.lineTo(p.dx, p.dy);
+        }
+        dragonPath.close();
+        canvas.drawPath(dragonPath, paint);
+        break;
+
+      case FrameStyle.phoenix:
+        // Wings — two arcs
+        _drawPolygon(canvas, center, radius, 6, paint);
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius * 0.8),
+          -math.pi * 0.8, math.pi * 0.6, false, paint..color = color.withOpacity(0.3),
+        );
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius * 0.8),
+          math.pi * 0.2, math.pi * 0.6, false, paint..color = color.withOpacity(0.3),
+        );
+        break;
+
+      case FrameStyle.mandalaFrame:
+        // Mandala — circle + inner hexagons
+        canvas.drawCircle(center, radius, paint..color = color.withOpacity(0.5));
+        _drawPolygon(canvas, center, radius * 0.85, 6, paint..color = color.withOpacity(0.3));
+        _drawPolygon(canvas, center, radius * 0.7, 12, paint..color = color.withOpacity(0.2));
+        break;
+
+      case FrameStyle.crystalFrame:
+        // Crystal facets — irregular polygon
+        _drawPolygon(canvas, center, radius, 12, paint);
+        _drawPolygon(canvas, center, radius * 0.75, 6, paint..color = color.withOpacity(0.2));
+        break;
+
+      case FrameStyle.shield:
+        // Shield shape
+        _drawPolygon(canvas, center, radius, 5, paint);
+        _drawPolygon(canvas, center, radius * 0.8, 5, paint..color = color.withOpacity(0.2));
+        break;
+
+      case FrameStyle.wings:
+        // Angel wings — arcs on sides
+        canvas.drawCircle(center, radius * 0.7, paint..color = color.withOpacity(0.2));
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset(center.dx - radius * 0.3, center.dy), radius: radius),
+          -math.pi * 0.4, math.pi * 0.8, false, paint..color = color.withOpacity(0.4),
+        );
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset(center.dx + radius * 0.3, center.dy), radius: radius),
+          math.pi * 0.6, math.pi * 0.8, false, paint..color = color.withOpacity(0.4),
+        );
+        break;
+
+      case FrameStyle.thirdEye:
+        // Eye of providence — diamond + circle
+        _drawPolygon(canvas, center, radius, 3, paint);
+        canvas.drawCircle(center, radius * 0.5, paint..color = color.withOpacity(0.3));
+        break;
+
+      case FrameStyle.trishul:
+        // Trident — three prongs + circle
+        canvas.drawCircle(center, radius * 0.85, paint..color = color.withOpacity(0.2));
+        for (var i = 0; i < 3; i++) {
+          final angle = -math.pi / 2 + (i - 1) * 0.4;
+          canvas.drawLine(
+            center,
+            Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle)),
+            paint..color = color.withOpacity(0.5)..strokeWidth = 2,
+          );
+        }
+        break;
+
+      case FrameStyle.conch:
+        // Spiral
+        final conchPath = Path();
+        for (var i = 0; i < 720; i++) {
+          final t = i / 720.0;
+          final angle = t * 4 * math.pi;
+          final r = radius * 0.3 + radius * 0.7 * t;
+          final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
+          if (i == 0) conchPath.moveTo(p.dx, p.dy); else conchPath.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(conchPath, paint..color = color.withOpacity(0.4));
+        break;
+
+      case FrameStyle.dharmaWheel:
+        // Wheel with 8 spokes
+        canvas.drawCircle(center, radius, paint);
+        canvas.drawCircle(center, radius * 0.3, paint..color = color.withOpacity(0.3));
+        for (var i = 0; i < 8; i++) {
+          final angle = i * math.pi / 4;
+          canvas.drawLine(
+            Offset(center.dx + radius * 0.3 * math.cos(angle), center.dy + radius * 0.3 * math.sin(angle)),
+            Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle)),
+            paint..color = color.withOpacity(0.4)..strokeWidth = 1.5,
+          );
+        }
+        break;
+
+      case FrameStyle.flameFrame:
+        // Flame tips around circle
+        final flamePath = Path();
+        for (var i = 0; i < 16; i++) {
+          final angle = i * 2 * math.pi / 16;
+          final tipR = (i % 2 == 0) ? radius * 1.1 : radius * 0.9;
+          final p = Offset(center.dx + tipR * math.cos(angle), center.dy + tipR * math.sin(angle));
+          if (i == 0) flamePath.moveTo(p.dx, p.dy); else flamePath.lineTo(p.dx, p.dy);
+        }
+        flamePath.close();
+        canvas.drawPath(flamePath, paint);
+        break;
+
+      case FrameStyle.pentagon:
+        _drawPolygon(canvas, center, radius, 5, paint);
+        _drawPolygon(canvas, center, radius * 0.85, 5, paint..color = color.withOpacity(0.2));
+        break;
+
+      case FrameStyle.star:
+        // 5-point star
+        final starPath = Path();
+        for (var i = 0; i < 10; i++) {
+          final angle = i * math.pi / 5 - math.pi / 2;
+          final r = (i % 2 == 0) ? radius : radius * 0.5;
+          final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
+          if (i == 0) starPath.moveTo(p.dx, p.dy); else starPath.lineTo(p.dx, p.dy);
+        }
+        starPath.close();
+        canvas.drawPath(starPath, paint);
+        break;
+
+      case FrameStyle.decagon:
+        _drawPolygon(canvas, center, radius, 10, paint);
+        _drawPolygon(canvas, center, radius * 0.9, 10, paint..color = color.withOpacity(0.15));
+        break;
+
+      case FrameStyle.vesica:
+        // Two overlapping circles
+        canvas.drawCircle(Offset(center.dx - radius * 0.25, center.dy), radius * 0.8, paint..color = color.withOpacity(0.3));
+        canvas.drawCircle(Offset(center.dx + radius * 0.25, center.dy), radius * 0.8, paint..color = color.withOpacity(0.3));
+        break;
+
+      case FrameStyle.spiral:
+        // Spiral frame
+        final spiralPath = Path();
+        for (var i = 0; i < 360 * 3; i++) {
+          final t = i / (360.0 * 3);
+          final angle = t * 6 * math.pi;
+          final r = radius * 0.2 + radius * 0.8 * t;
+          final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
+          if (i == 0) spiralPath.moveTo(p.dx, p.dy); else spiralPath.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(spiralPath, paint..color = color.withOpacity(0.3));
         break;
     }
   }
@@ -2172,7 +3252,6 @@ class _ParticleSystemPainter extends CustomPainter {
   }
 
   void _drawOrbs(Canvas canvas, Size size) {
-    final random = math.Random(99);
     final center = Offset(size.width / 2, size.height / 2);
     
     for (var i = 0; i < 8; i++) {

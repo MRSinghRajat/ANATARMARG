@@ -183,7 +183,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onPressed: () {
                     Navigator.pushReplacementNamed(
                       context,
-                      AppRouter.animatedOnboarding,
+                      AppRouter.home,
                     );
                   },
                 ),

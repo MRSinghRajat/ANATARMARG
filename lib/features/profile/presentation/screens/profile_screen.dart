@@ -740,6 +740,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   // TODO: Show about dialog
                 },
               ),
+
+              const Divider(color: Colors.white12, height: 1),
+
+              // DEV: Test onboarding
+              _buildSettingsTile(
+                icon: Icons.play_circle_outline,
+                title: 'Test Onboarding',
+                onTap: () {
+                  Navigator.pushNamed(context, AppRouter.spiritualOnboarding);
+                },
+              ),
             ],
           ),
         ),

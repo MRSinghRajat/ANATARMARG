@@ -32,11 +32,14 @@ class AshramScreen extends ConsumerStatefulWidget {
   ConsumerState<AshramScreen> createState() => _AshramScreenState();
 }
 
-class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBindingObserver {
+class _AshramScreenState extends ConsumerState<AshramScreen>
+    with WidgetsBindingObserver {
   final CoinService _coinService = CoinService();
   final AvatarRepository _avatarRepository = AvatarRepository();
-  final SanctuaryCustomizationService _customizationService = SanctuaryCustomizationService();
-  final AshramDailyVerseRepository _verseRepository = AshramDailyVerseRepository();
+  final SanctuaryCustomizationService _customizationService =
+      SanctuaryCustomizationService();
+  final AshramDailyVerseRepository _verseRepository =
+      AshramDailyVerseRepository();
   final DailyTaskService _taskService = DailyTaskService.instance;
   final CustomHabitService _habitService = CustomHabitService.instance;
 
@@ -94,8 +97,9 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
 
   Future<void> _initializeCustomization() async {
     await _customizationSubscription?.cancel();
-    
-    _customizationSubscription = _customizationService.customizationStream.listen((customization) {
+
+    _customizationSubscription =
+        _customizationService.customizationStream.listen((customization) {
       if (mounted) {
         setState(() {
           _currentCustomization = customization;
@@ -103,9 +107,9 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
         });
       }
     });
-    
+
     await _customizationService.ensureInitialized();
-    
+
     if (mounted) {
       setState(() {
         _currentCustomization = _customizationService.currentCustomization;
@@ -124,7 +128,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
       if (mounted) setState(() => _progress = progress);
     });
 
-    _achievementSubscription = _taskService.achievementUnlockedStream.listen((achievement) {
+    _achievementSubscription =
+        _taskService.achievementUnlockedStream.listen((achievement) {
       if (mounted) {
         AchievementUnlockDialog.show(context, achievement);
       }
@@ -193,9 +198,9 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
     // Only animate if task is being completed (not uncompleted)
     final wasCompleted = task.isCompleted;
     final taskKey = _taskKeys[task.id];
-    
+
     final result = await _taskService.toggleTask(task);
-    
+
     if (mounted && result.success && result.coinsEarned > 0 && !wasCompleted) {
       // Show flying coins animation
       if (taskKey != null) {
@@ -213,9 +218,9 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
     // Only animate if habit is being completed (not uncompleted)
     final wasCompleted = habit.isCompletedToday;
     final habitKey = _habitKeys[habit.id];
-    
+
     final result = await _habitService.toggleHabit(habit);
-    
+
     if (mounted && result.success && result.coinsEarned > 0 && !wasCompleted) {
       // Show flying coins animation
       if (habitKey != null) {
@@ -253,11 +258,17 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
   }
 
   // Getters for task organization
-  List<UserDailyTask> get _pendingTasks => _tasks.where((t) => t.isPending).toList();
-  List<UserDailyTask> get _completedTasks => _tasks.where((t) => t.isCompleted).toList();
-  List<CustomHabit> get _todaysHabits => _habits.where((h) => h.isScheduledForToday).toList();
-  List<CustomHabit> get _pendingHabits => _todaysHabits.where((h) => !_habitService.isCompletedToday(h.id)).toList();
-  List<CustomHabit> get _completedHabits => _todaysHabits.where((h) => _habitService.isCompletedToday(h.id)).toList();
+  List<UserDailyTask> get _pendingTasks =>
+      _tasks.where((t) => t.isPending).toList();
+  List<UserDailyTask> get _completedTasks =>
+      _tasks.where((t) => t.isCompleted).toList();
+  List<CustomHabit> get _todaysHabits =>
+      _habits.where((h) => h.isScheduledForToday).toList();
+  List<CustomHabit> get _pendingHabits => _todaysHabits
+      .where((h) => !_habitService.isCompletedToday(h.id))
+      .toList();
+  List<CustomHabit> get _completedHabits =>
+      _todaysHabits.where((h) => _habitService.isCompletedToday(h.id)).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +284,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
           children: [
             // Geometry overlay
             const Positioned.fill(child: _GeometryOverlay()),
-            
+
             // Layer 1: OM section (top 50%)
             Positioned(
               top: 0,
@@ -300,7 +311,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                         // OM Sanctuary
                         Expanded(
                           child: Center(
-                            child: _customizationLoaded && _currentCustomization != null
+                            child: _customizationLoaded &&
+                                    _currentCustomization != null
                                 ? CustomizableOmSanctuary(
                                     size: 280,
                                     customization: _currentCustomization!,
@@ -314,20 +326,21 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                 ],
               ),
             ),
-            
+
             // Layer 2: Draggable task sheet
             Positioned.fill(
               child: DraggableScrollableSheet(
-                initialChildSize: 0.50,
-                minChildSize: 0.50,
+                initialChildSize: 0.40,
+                minChildSize: 0.35,
                 maxChildSize: 0.95,
                 snap: true,
-                snapSizes: const [0.50, 0.70, 0.95],
+                snapSizes: const [0.35, 0.50, 0.70, 0.95],
                 builder: (context, scrollController) {
                   return Container(
                     decoration: BoxDecoration(
                       color: AppColors.ashramBackgroundDark,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(24)),
                       border: Border(
                         top: BorderSide(
                           color: Colors.white.withOpacity(0.05),
@@ -405,7 +418,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: _buildSectionHeader(
                 title: "Today's Tasks",
-                subtitle: '${_completedTasks.length}/${_tasks.length} completed',
+                subtitle:
+                    '${_completedTasks.length}/${_tasks.length} completed',
                 icon: Icons.check_circle_outline,
               ),
             ),
@@ -454,7 +468,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.celebration, color: Colors.green, size: 32),
+                      const Icon(Icons.celebration,
+                          color: Colors.green, size: 32),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
@@ -492,7 +507,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                 child: _buildSectionHeader(
                   title: 'My Habits',
-                  subtitle: '${_completedHabits.length}/${_todaysHabits.length} today',
+                  subtitle:
+                      '${_completedHabits.length}/${_todaysHabits.length} today',
                   icon: Icons.repeat,
                   action: TextButton(
                     onPressed: _showAddHabitSheet,
@@ -540,7 +556,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                 child: _buildSectionHeader(
                   title: 'Completed Today',
-                  subtitle: '${_completedTasks.length + _completedHabits.length} items',
+                  subtitle:
+                      '${_completedTasks.length + _completedHabits.length} items',
                   icon: Icons.done_all,
                 ),
               ),
@@ -690,7 +707,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.primaryOrange.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
@@ -798,7 +816,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                 // Stats Row (coins only; streak is shown on Self/Profile tab)
                 KeyedSubtree(
                   key: _coinCounterKey,
-                  child: _buildPremiumStatBubble('$coins', Icons.monetization_on, Colors.amber),
+                  child: _buildPremiumStatBubble(
+                      '$coins', Icons.monetization_on, Colors.amber),
                 ),
               ],
             );
@@ -912,7 +931,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                        child: const Text('Delete',
+                            style: TextStyle(color: Colors.red)),
                       ),
                     ],
                   ),

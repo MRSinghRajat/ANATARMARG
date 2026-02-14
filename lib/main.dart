@@ -10,6 +10,10 @@ import 'core/services/supabase_service.dart';
 import 'core/services/revenuecat_service.dart';
 import 'shared/services/avatar_growth_service.dart';
 import 'shared/services/premium_service.dart';
+import 'features/onboarding/presentation/screens/spiritual_onboarding_screen.dart';
+
+/// Checked during startup to decide initial route
+bool _onboardingComplete = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,22 +54,25 @@ void main() async {
   // Initialize sound manager and start playing bird singing sound
   await SoundManager().initialize();
 
+  // Check if onboarding has been completed
+  _onboardingComplete = await SpiritualOnboardingScreen.isOnboardingComplete();
+
   runApp(
     const ProviderScope(
-      child: AshraePlaygroundApp(),
+      child: AntarMargApp(),
     ),
   );
 
 }
 
-class AshraePlaygroundApp extends StatefulWidget {
-  const AshraePlaygroundApp({super.key});
+class AntarMargApp extends StatefulWidget {
+  const AntarMargApp({super.key});
 
   @override
-  State<AshraePlaygroundApp> createState() => _AshraePlaygroundAppState();
+  State<AntarMargApp> createState() => _AntarMargAppState();
 }
 
-class _AshraePlaygroundAppState extends State<AshraePlaygroundApp> {
+class _AntarMargAppState extends State<AntarMargApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _appLinks = AppLinks();
 
@@ -86,7 +93,7 @@ class _AshraePlaygroundAppState extends State<AshraePlaygroundApp> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_navigatorKey.currentContext != null) {
               Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
-                AppRouter.animatedOnboarding,
+                AppRouter.home,
                 (route) => false,
               );
             }
@@ -103,7 +110,7 @@ class _AshraePlaygroundAppState extends State<AshraePlaygroundApp> {
         SupabaseService().recoverSessionFromUri(uri).then((recovered) {
           if (recovered && _navigatorKey.currentContext != null) {
             Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
-              AppRouter.animatedOnboarding,
+              AppRouter.home,
               (route) => false,
             );
           }
@@ -119,7 +126,7 @@ class _AshraePlaygroundAppState extends State<AshraePlaygroundApp> {
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialRoute: AppRouter.login,
+      initialRoute: _onboardingComplete ? AppRouter.login : AppRouter.spiritualOnboarding,
       onGenerateRoute: AppRouter.generateRoute,
     );
   }
