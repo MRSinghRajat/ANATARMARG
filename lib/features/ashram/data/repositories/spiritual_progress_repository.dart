@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../models/user_spiritual_progress_model.dart';
 
 /// Repository for managing user's spiritual progress
@@ -38,7 +39,7 @@ class SpiritualProgressRepository {
     if (_userId == null) return null;
 
     try {
-      final now = DateTime.now();
+      final now = AppClock.now();
       final dateStr = now.toIso8601String().split('T')[0];
       
       final response = await _supabase
@@ -65,7 +66,7 @@ class SpiritualProgressRepository {
       final progress = await getProgress();
       if (progress == null) return null;
 
-      final now = DateTime.now();
+      final now = AppClock.now();
       final today = DateTime(now.year, now.month, now.day);
       
       int newStreak = progress.currentStreak;
@@ -276,7 +277,7 @@ class SpiritualProgressRepository {
       final progress = await getProgress();
       if (progress == null || progress.streakFreezeAvailable <= 0) return false;
 
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final today = AppClock.now().toIso8601String().split('T')[0];
 
       await _supabase
           .from('user_spiritual_progress')

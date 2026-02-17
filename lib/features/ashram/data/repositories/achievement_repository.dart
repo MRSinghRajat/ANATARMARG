@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../models/achievement_model.dart';
 import '../models/user_spiritual_progress_model.dart';
 
@@ -215,7 +216,7 @@ class AchievementRepository {
     if (_userId == null) return [];
 
     try {
-      final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+      final weekAgo = AppClock.now().subtract(const Duration(days: 7));
 
       final response = await _supabase
           .from('user_achievements')

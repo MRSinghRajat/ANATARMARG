@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../models/affirmation_model.dart';
 
 /// Provides daily affirmations for the Ashram stream.
@@ -33,7 +34,7 @@ class AffirmationRepository {
   }
 
   String _todayString() {
-    final n = DateTime.now();
+    final n = AppClock.now();
     return '${n.year}_${n.month}_${n.day}';
   }
 

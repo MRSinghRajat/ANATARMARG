@@ -1,25 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 
 enum ReaderTheme { light, paper, dark }
-enum ReaderFont { serif, sans, rounded }
+enum ReaderFont { serif, sans, rounded, mono, slab }
+enum ReaderLayout { scroll, card }
 
 class ReaderSettingsModal extends StatefulWidget {
   final double currentFontSize;
   final ReaderTheme currentTheme;
   final ReaderFont currentFont;
+  final ReaderLayout currentLayout;
   final Function(double) onFontSizeChanged;
   final Function(ReaderTheme) onThemeChanged;
   final Function(ReaderFont) onFontChanged;
+  final Function(ReaderLayout) onLayoutChanged;
 
   const ReaderSettingsModal({
     super.key,
     required this.currentFontSize,
     required this.currentTheme,
     required this.currentFont,
+    this.currentLayout = ReaderLayout.scroll,
     required this.onFontSizeChanged,
     required this.onThemeChanged,
     required this.onFontChanged,
+    required this.onLayoutChanged,
   });
 
   @override
@@ -28,15 +34,18 @@ class ReaderSettingsModal extends StatefulWidget {
 
 class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
   late double _fontSize;
-  late ReaderTheme _theme;
   late ReaderFont _font;
+  late ReaderLayout _layout;
+
+  static const Color _darkBg = Color(0xFF1E1E1E);
+  static const Color _darkText = Color(0xFFE8E8E8);
 
   @override
   void initState() {
     super.initState();
     _fontSize = widget.currentFontSize;
-    _theme = widget.currentTheme;
     _font = widget.currentFont;
+    _layout = widget.currentLayout;
   }
 
   @override
@@ -44,8 +53,9 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor(),
+        color: _darkBg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -53,7 +63,7 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
         children: [
           _buildHeader(),
           const SizedBox(height: 24),
-          _buildThemeSection(),
+          _buildLayoutSection(),
           const SizedBox(height: 24),
           _buildFontSizeSection(),
           const SizedBox(height: 24),
@@ -62,19 +72,6 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
         ],
       ),
     );
-  }
-
-  Color _getModalBackgroundColor() {
-    switch (_theme) {
-      case ReaderTheme.dark:
-        return const Color(0xFF1E1E1E);
-      default:
-        return Colors.white;
-    }
-  }
-
-  Color _getTextColor() {
-    return _theme == ReaderTheme.dark ? Colors.white : AppColors.primaryText;
   }
 
   Widget _buildHeader() {
@@ -86,72 +83,14 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: _getTextColor(),
+            color: _darkText,
           ),
         ),
         IconButton(
           onPressed: () => Navigator.pop(context),
-          icon: Icon(Icons.close, color: _getTextColor().withOpacity(0.7)),
+          icon: Icon(Icons.close, color: _darkText.withOpacity(0.7)),
         ),
       ],
-    );
-  }
-
-  Widget _buildThemeSection() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildThemeOption(ReaderTheme.light, Colors.white, 'Light'),
-        _buildThemeOption(ReaderTheme.paper, const Color(0xFFF9F7F2), 'Paper'), // Warm/Sepia
-        _buildThemeOption(ReaderTheme.dark, const Color(0xFF121212), 'Dark'),
-      ],
-    );
-  }
-
-  Widget _buildThemeOption(ReaderTheme theme, Color color, String label) {
-    // Use local state _theme
-    final isSelected = _theme == theme;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _theme = theme); // Immediate UI update
-        widget.onThemeChanged(theme);
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? AppColors.warmOrange : Colors.grey.withOpacity(0.3),
-                width: isSelected ? 2 : 1,
-              ),
-              boxShadow: [
-                if (isSelected)
-                  BoxShadow(
-                    color: AppColors.warmOrange.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-              ],
-            ),
-            child: isSelected
-                ? const Icon(Icons.check, color: AppColors.warmOrange)
-                : null,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? AppColors.warmOrange : _getTextColor().withOpacity(0.7),
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -164,13 +103,13 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: _getTextColor().withOpacity(0.7),
+            color: _darkText.withOpacity(0.7),
           ),
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Text('A', style: TextStyle(fontSize: 14, color: _getTextColor())),
+            Text('A', style: TextStyle(fontSize: 14, color: _darkText)),
             Expanded(
               child: SliderTheme(
                 data: SliderThemeData(
@@ -178,19 +117,19 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
                   thumbColor: AppColors.warmOrange,
                   inactiveTrackColor: AppColors.warmOrange.withOpacity(0.2),
                 ),
-                  child: Slider(
+                child: Slider(
                   value: _fontSize,
                   min: 14,
                   max: 32,
-                  divisions: 9, // 14, 16, 18, 20...
+                  divisions: 9,
                   onChanged: (val) {
-                    setState(() => _fontSize = val); // Immediate UI update
+                    setState(() => _fontSize = val);
                     widget.onFontSizeChanged(val);
                   },
                 ),
               ),
             ),
-            Text('A', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _getTextColor())),
+            Text('A', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _darkText)),
           ],
         ),
       ],
@@ -198,57 +137,64 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
   }
 
   Widget _buildFontFamilySection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _theme == ReaderTheme.dark // Use local state
-            ? Colors.white.withOpacity(0.05) 
-            : Colors.grey.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          _buildFontOption(ReaderFont.serif, 'Serif'),
-          _buildFontOption(ReaderFont.sans, 'Sans'),
-          _buildFontOption(ReaderFont.rounded, 'Round'),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Font Style',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: _darkText.withOpacity(0.7),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildFontOption(ReaderFont.serif, 'Serif'),
+              _buildFontOption(ReaderFont.sans, 'Sans'),
+              _buildFontOption(ReaderFont.rounded, 'Rounded'),
+              _buildFontOption(ReaderFont.mono, 'Mono'),
+              _buildFontOption(ReaderFont.slab, 'Slab'),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildFontOption(ReaderFont font, String label) {
     final isSelected = _font == font;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() => _font = font);
-          widget.onFontChanged(font);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected 
-                ? (_theme == ReaderTheme.dark ? Colors.white.withOpacity(0.15) : Colors.white)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected && _theme != ReaderTheme.dark
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
+    return GestureDetector(
+      onTap: () {
+        setState(() => _font = font);
+        widget.onFontChanged(font);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.warmOrange : Colors.transparent,
+            width: 1,
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: _getTextColor(),
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontFamily: _getFontFamily(font),
-            ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: _darkText,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontFamily: _getFontFamily(font),
+            fontSize: 14,
           ),
         ),
       ),
@@ -258,11 +204,76 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
   String? _getFontFamily(ReaderFont font) {
     switch (font) {
       case ReaderFont.serif:
-        return 'Serif'; // Ensure this uses system serif or specific font if added
+        return GoogleFonts.crimsonPro().fontFamily;
       case ReaderFont.sans:
-        return null; // Default system sans
+        return GoogleFonts.inter().fontFamily;
       case ReaderFont.rounded:
-        return 'VarelaRound'; // If available, otherwise maybe just sans
+        return GoogleFonts.varelaRound().fontFamily;
+      case ReaderFont.mono:
+        return GoogleFonts.jetBrainsMono().fontFamily;
+      case ReaderFont.slab:
+        return GoogleFonts.robotoSlab().fontFamily;
     }
+  }
+
+  Widget _buildLayoutSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Reading Layout',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: _darkText.withOpacity(0.7),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildLayoutOption(ReaderLayout.scroll, 'Scroll', Icons.view_day),
+            const SizedBox(width: 12),
+            _buildLayoutOption(ReaderLayout.card, 'Card', Icons.view_carousel),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLayoutOption(ReaderLayout layout, String label, IconData icon) {
+    final isSelected = _layout == layout;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _layout = layout);
+          widget.onLayoutChanged(layout);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.warmOrange : Colors.white.withOpacity(0.08),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 24, color: isSelected ? AppColors.warmOrange : _darkText.withOpacity(0.5)),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? AppColors.warmOrange : _darkText.withOpacity(0.7),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

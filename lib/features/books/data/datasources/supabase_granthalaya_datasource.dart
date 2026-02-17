@@ -229,6 +229,122 @@ class SupabaseGranthalayaDataSource {
     }
   }
 
+  /// Fetch a single deity by slug (for detail screen)
+  Future<DeityModel?> getDeityBySlug(String slug) async {
+    if (!_supabase.isInitialized) return null;
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.deitiesTable)
+          .select()
+          .eq('slug', slug)
+          .maybeSingle();
+      if (response == null) return null;
+      return DeityModel.fromJson(response);
+    } catch (e) {
+      print('Error fetching deity by slug: $e');
+      return null;
+    }
+  }
+
+  /// Fetch all sacred texts, optionally filtered by deity
+  Future<List<SacredTextModel>> getSacredTexts({String? deitySlug}) async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      var query = _supabase.client!
+          .from('sacred_texts')
+          .select()
+          .eq('is_active', true);
+      if (deitySlug != null && deitySlug.isNotEmpty) {
+        query = query.eq('deity_slug', deitySlug);
+      }
+      final response = await query.order('order_index', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => SacredTextModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching sacred texts: $e');
+      return [];
+    }
+  }
+
+  /// Fetch a single sacred text by slug
+  Future<SacredTextModel?> getSacredTextBySlug(String slug) async {
+    if (!_supabase.isInitialized) return null;
+    try {
+      final response = await _supabase.client!
+          .from('sacred_texts')
+          .select()
+          .eq('slug', slug)
+          .maybeSingle();
+      if (response == null) return null;
+      return SacredTextModel.fromJson(response);
+    } catch (e) {
+      print('Error fetching sacred text: $e');
+      return null;
+    }
+  }
+
+  /// Fetch all sacred stories, optionally filtered by deity
+  Future<List<SacredStoryModel>> getSacredStories({String? deitySlug}) async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      var query = _supabase.client!
+          .from('sacred_stories')
+          .select()
+          .eq('is_active', true);
+      if (deitySlug != null && deitySlug.isNotEmpty) {
+        query = query.eq('deity_slug', deitySlug);
+      }
+      final response = await query.order('order_index', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => SacredStoryModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching sacred stories: $e');
+      return [];
+    }
+  }
+
+  /// Fetch distinct categories from sacred_stories
+  Future<List<String>> getSacredStoryCategories() async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from('sacred_stories')
+          .select('category')
+          .eq('is_active', true);
+      final list = _toList(response);
+      final cats = list
+          .map((j) => (j as Map<String, dynamic>)['category'] as String?)
+          .where((c) => c != null && c.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+      cats.sort();
+      return cats;
+    } catch (e) {
+      print('Error fetching sacred story categories: $e');
+      return [];
+    }
+  }
+
+  /// Fetch books that are linked to a deity via deity_slugs array
+  Future<List<Map<String, dynamic>>> getBooksByDeity(String deitySlug) async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from('books')
+          .select()
+          .contains('deity_slugs', [deitySlug]);
+      return _toList(response).cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching books by deity: $e');
+      return [];
+    }
+  }
+
   /// Upsert user audio progress (when playing or position changes).
   Future<void> upsertUserAudioProgress({
     required String title,

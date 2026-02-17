@@ -1,3 +1,5 @@
+import '../../../../core/utils/app_clock.dart';
+
 /// Frequency options for custom habits
 enum HabitFrequency {
   daily,
@@ -75,10 +77,10 @@ class CustomHabit {
     if (frequency == HabitFrequency.daily) return true;
     if (frequency == HabitFrequency.weekly) {
       // Show weekly habits on Sunday
-      return DateTime.now().weekday == DateTime.sunday;
+      return AppClock.now().weekday == DateTime.sunday;
     }
     if (frequency == HabitFrequency.specificDays && specificDays != null) {
-      final todayWeekday = DateTime.now().weekday % 7; // Convert to 0=Sunday
+      final todayWeekday = AppClock.now().weekday % 7; // Convert to 0=Sunday
       return specificDays!.contains(todayWeekday);
     }
     return true;
@@ -87,7 +89,7 @@ class CustomHabit {
   /// Check if completed today
   bool get isCompletedToday {
     if (lastCompletedDate == null) return false;
-    final now = DateTime.now();
+    final now = AppClock.now();
     final today = DateTime(now.year, now.month, now.day);
     final lastCompleted = DateTime(
       lastCompletedDate!.year,

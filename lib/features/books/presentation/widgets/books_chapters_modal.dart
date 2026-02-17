@@ -15,6 +15,8 @@ class BooksChaptersModal extends StatefulWidget {
   final Function(BookModel book, ChapterModel chapter) onChapterSelected;
   /// If true, all chapters are tappable. If false, only completed + next are tappable.
   final bool isPremium;
+  /// When true, only show the current book's chapters (e.g. Gita-only when in Gita verse page).
+  final bool restrictToCurrentBook;
 
   const BooksChaptersModal({
     super.key,
@@ -22,6 +24,7 @@ class BooksChaptersModal extends StatefulWidget {
     this.currentChapter,
     required this.onChapterSelected,
     this.isPremium = false,
+    this.restrictToCurrentBook = false,
   });
 
   @override
@@ -42,6 +45,10 @@ class _BooksChaptersModalState extends State<BooksChaptersModal> {
   void initState() {
     super.initState();
     _loadBooks();
+    if (widget.restrictToCurrentBook) {
+      _expandedBookId = widget.currentBook.id;
+      _loadChaptersForBook(widget.currentBook.id);
+    }
   }
 
   Future<void> _loadBooks() async {
@@ -77,8 +84,12 @@ class _BooksChaptersModalState extends State<BooksChaptersModal> {
   }
 
   List<BookModel> get _filteredBooks {
-    if (_searchQuery.isEmpty) return _books;
-    return _books
+    var list = _books;
+    if (widget.restrictToCurrentBook) {
+      list = list.where((b) => b.id == widget.currentBook.id).toList();
+    }
+    if (_searchQuery.isEmpty) return list;
+    return list
         .where((b) =>
             b.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             _getBookShortName(b)

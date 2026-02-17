@@ -40,9 +40,9 @@ class PaywallScreen extends StatefulWidget {
         minChildSize: 0.5,
         maxChildSize: 0.95,
         builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppColors.backgroundDark,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: PaywallScreen(
             showCloseButton: true,

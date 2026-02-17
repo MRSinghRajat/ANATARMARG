@@ -1,3 +1,5 @@
+import '../../../../core/utils/app_clock.dart';
+
 /// Model for user's overall spiritual progress
 class UserSpiritualProgress {
   final String id;
@@ -97,7 +99,7 @@ class UserSpiritualProgress {
   /// Check if streak is active (completed something today or yesterday)
   bool get isStreakActive {
     if (lastActivityDate == null) return false;
-    final now = DateTime.now();
+    final now = AppClock.now();
     final today = DateTime(now.year, now.month, now.day);
     final lastActivity = DateTime(
       lastActivityDate!.year,
@@ -111,7 +113,7 @@ class UserSpiritualProgress {
   /// Check if user completed tasks today
   bool get completedToday {
     if (lastActivityDate == null) return false;
-    final now = DateTime.now();
+    final now = AppClock.now();
     final today = DateTime(now.year, now.month, now.day);
     final lastActivity = DateTime(
       lastActivityDate!.year,
@@ -123,7 +125,7 @@ class UserSpiritualProgress {
 
   /// Days since journey started
   int get daysSinceStart {
-    return DateTime.now().difference(journeyStartDate).inDays;
+    return AppClock.now().difference(journeyStartDate).inDays;
   }
 
   factory UserSpiritualProgress.fromJson(Map<String, dynamic> json) {
@@ -149,13 +151,13 @@ class UserSpiritualProgress {
       experiencePoints: json['experience_points'] as int? ?? 0,
       journeyStartDate: json['journey_start_date'] != null
           ? DateTime.parse(json['journey_start_date'] as String)
-          : DateTime.now(),
+          : AppClock.now(),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
-          : DateTime.now(),
+          : AppClock.now(),
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)
-          : DateTime.now(),
+          : AppClock.now(),
     );
   }
 
@@ -226,7 +228,7 @@ class UserSpiritualProgress {
 
   /// Create empty progress for new users
   factory UserSpiritualProgress.empty(String userId) {
-    final now = DateTime.now();
+    final now = AppClock.now();
     return UserSpiritualProgress(
       id: '',
       userId: userId,

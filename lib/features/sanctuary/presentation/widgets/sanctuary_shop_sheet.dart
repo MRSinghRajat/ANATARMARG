@@ -147,9 +147,9 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
   Widget _buildFixedHeader() {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppColors.ashramBackgroundDark,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

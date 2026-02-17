@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../models/custom_habit_model.dart';
 
 /// Repository for managing user's custom habits
@@ -139,7 +140,7 @@ class CustomHabitRepository {
     if (_userId == null) return false;
 
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final today = AppClock.now().toIso8601String().split('T')[0];
 
       // Insert completion record
       await _supabase
@@ -166,7 +167,7 @@ class CustomHabitRepository {
     if (_userId == null) return false;
 
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final today = AppClock.now().toIso8601String().split('T')[0];
 
       await _supabase
           .from('user_habit_completions')
@@ -191,7 +192,7 @@ class CustomHabitRepository {
       final habit = await _getHabit(habitId);
       if (habit == null) return;
 
-      final today = DateTime.now();
+      final today = AppClock.now();
       final todayDate = DateTime(today.year, today.month, today.day);
       
       int newStreak = habit.currentStreak;
@@ -336,7 +337,7 @@ class CustomHabitRepository {
     if (_userId == null) return false;
 
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final today = AppClock.now().toIso8601String().split('T')[0];
 
       final response = await _supabase
           .from('user_habit_completions')
@@ -358,7 +359,7 @@ class CustomHabitRepository {
     if (_userId == null) return [];
 
     try {
-      final startDate = DateTime.now().subtract(Duration(days: days));
+      final startDate = AppClock.now().subtract(Duration(days: days));
 
       final response = await _supabase
           .from('user_habit_completions')

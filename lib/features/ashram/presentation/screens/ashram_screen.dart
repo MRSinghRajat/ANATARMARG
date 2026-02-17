@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/widgets/flying_coins_animation.dart';
@@ -18,12 +20,20 @@ import '../../data/models/achievement_model.dart';
 import '../../data/services/daily_task_service.dart';
 import '../../data/services/custom_habit_service.dart';
 import '../../data/repositories/ashram_daily_verse_repository.dart';
-import '../../data/models/ashram_daily_verse_model.dart';
 import '../widgets/daily_task_card.dart';
 import '../widgets/custom_habit_card.dart';
 import '../widgets/add_habit_sheet.dart';
 import '../widgets/achievement_unlock_dialog.dart';
+import '../../../books/data/repositories/daily_story_repository.dart';
+import '../../../books/presentation/screens/story_reader_screen.dart';
 import 'ashram_verse_detail_screen.dart';
+import 'meditation_guide_screen.dart';
+import 'gratitude_practice_screen.dart';
+import 'seva_help_screen.dart';
+import 'dana_practice_screen.dart';
+import 'chant_player_screen.dart';
+import 'japa_counter_screen.dart';
+import 'habit_detail_screen.dart';
 
 class AshramScreen extends ConsumerStatefulWidget {
   const AshramScreen({super.key});
@@ -48,9 +58,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   SanctuaryCustomization? _currentCustomization;
   StreamSubscription<SanctuaryCustomization>? _customizationSubscription;
   bool _customizationLoaded = false;
-  AshramDailyVerseModel? _dailyVerse;
-  bool _verseLoading = true;
-
   // Task system state
   List<UserDailyTask> _tasks = [];
   List<CustomHabit> _habits = [];
@@ -72,7 +79,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     _coinService.initialize();
     _initializeCustomization();
     _initializeTaskSystem();
-    _loadDailyVerse();
   }
 
   @override
@@ -165,51 +171,137 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     }
   }
 
-  Future<void> _loadDailyVerse() async {
-    try {
-      final verse = await _verseRepository.getTodaysVerse();
-      if (mounted) {
-        setState(() {
-          _dailyVerse = verse;
-          _verseLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _dailyVerse = null;
-          _verseLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _onVerseTap() async {
-    if (_dailyVerse == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AshramVerseDetailScreen(verse: _dailyVerse!),
-      ),
-    );
-    await _loadDailyVerse();
-  }
-
   Future<void> _onTaskTap(UserDailyTask task) async {
-    // Only animate if task is being completed (not uncompleted)
     final wasCompleted = task.isCompleted;
     final taskKey = _taskKeys[task.id];
 
     final result = await _taskService.toggleTask(task);
 
+    // Fire-and-forget: don't await the coin animation
     if (mounted && result.success && result.coinsEarned > 0 && !wasCompleted) {
-      // Show flying coins animation
       if (taskKey != null) {
-        await FlyingCoinsAnimation.show(
+        FlyingCoinsAnimation.show(
           context,
           amount: result.coinsEarned,
           fromKey: taskKey,
           toKey: _coinCounterKey,
         );
+      }
+    }
+  }
+
+  /// Slugs that have a dedicated screen to navigate to
+  static const _navigableSlugs = {
+    'daily_verse',
+    'daily_story',
+    'daily_meditation',
+    'morning_meditation',
+    'pranayama',
+    'gratitude_journal',
+    'gratitude_practice',
+    'help_someone',
+    'donate',
+    'listen_chant',
+    'japa_108',
+  };
+
+  bool _hasScreen(UserDailyTask task) =>
+      _navigableSlugs.contains(task.slug);
+
+  Future<void> _navigateToTaskScreen(UserDailyTask task) async {
+    Widget? screen;
+    final slug = task.slug;
+
+    switch (slug) {
+      case 'daily_verse':
+        final verse = await _verseRepository.getTodaysVerse();
+        if (verse == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No verse available today')),
+          );
+          return;
+        }
+        screen = AshramVerseDetailScreen(verse: verse!);
+        break;
+
+      case 'daily_story':
+        // Fetch today's story (single row, not all 365)
+        try {
+          final repo = DailyStoryRepository();
+          final story = await repo.getStoryForToday();
+          if (story == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('No stories available')),
+              );
+            }
+            return;
+          }
+          screen = StoryReaderScreen(story: story);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to load story: $e')),
+            );
+          }
+          return;
+        }
+        break;
+
+      case 'daily_meditation':
+      case 'morning_meditation':
+      case 'pranayama':
+        screen = MeditationGuideScreen(
+          slug: slug,
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'gratitude_journal':
+      case 'gratitude_practice':
+        screen = GratitudePracticeScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'help_someone':
+        screen = SevaHelpScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'donate':
+        screen = DanaPracticeScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'listen_chant':
+        screen = ChantPlayerScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'japa_108':
+        screen = JapaCounterScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      default:
+        // No dedicated screen - just toggle
+        _onTaskTap(task);
+        return;
+    }
+
+    if (mounted) {
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => screen!),
+      );
+      // If screen returned true (completed), and task isn't already complete,
+      // auto-complete it
+      if (result == true && !task.isCompleted) {
+        await _onTaskTap(task);
       }
     }
   }
@@ -392,13 +484,10 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
           ),
         ),
 
-        // Daily Verse Card
-        if (!_verseLoading && _dailyVerse != null)
+        // Debug date picker (only in debug builds)
+        if (kDebugMode)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: _buildDailyVerseCard(),
-            ),
+            child: _buildDebugDateBanner(),
           ),
 
         // Loading indicator
@@ -438,6 +527,9 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                       child: DailyTaskCard(
                         task: task,
                         onTap: () => _onTaskTap(task),
+                        onNavigate: _hasScreen(task)
+                            ? () => _navigateToTaskScreen(task)
+                            : null,
                         rewardsKey: _getTaskKey(task.id),
                       ),
                     );
@@ -539,6 +631,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                         habit: habit,
                         isCompleted: _habitService.isCompletedToday(habit.id),
                         onTap: () => _onHabitTap(habit),
+                        onNavigate: () => _navigateToHabitDetail(habit),
                         onLongPress: () => _showHabitOptions(habit),
                         animationKey: _getHabitKey(habit.id),
                       ),
@@ -596,7 +689,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                       padding: const EdgeInsets.only(bottom: 8),
                       child: CompletedHabitTile(
                         habit: habit,
-                        onTap: () => _onHabitTap(habit),
+                        onTap: () => _navigateToHabitDetail(habit),
                       ),
                     );
                   },
@@ -659,117 +752,130 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     );
   }
 
-  Widget _buildDailyVerseCard() {
-    final v = _dailyVerse!;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _onVerseTap,
-        borderRadius: BorderRadius.circular(16),
+  // ─── Debug Date Picker (kDebugMode only) ───
+
+  Widget _buildDebugDateBanner() {
+    final isOverridden = AppClock.isOverridden;
+    final displayDate = AppClock.now();
+    final dateLabel =
+        '${displayDate.year}-${displayDate.month.toString().padLeft(2, '0')}-${displayDate.day.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: GestureDetector(
+        onTap: () => _showDebugDatePicker(),
         child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primaryOrange.withOpacity(0.2),
-                AppColors.primaryOrange.withOpacity(0.08),
-              ],
+            color: isOverridden
+                ? Colors.orange.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isOverridden
+                  ? Colors.orange.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.08),
             ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primaryOrange.withOpacity(0.3)),
           ),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryOrange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.primaryOrange.withOpacity(0.3),
-                  ),
-                ),
-                child: const Icon(
-                  Icons.menu_book,
-                  color: AppColors.primaryOrange,
-                  size: 24,
-                ),
+              Icon(
+                Icons.bug_report_rounded,
+                size: 18,
+                color: isOverridden ? Colors.orange : Colors.grey.shade500,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryOrange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '+5 coins',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.amber,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          'VERSE OF THE DAY',
-                          style: GoogleFonts.poppins(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primaryOrange.withOpacity(0.8),
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
                     Text(
-                      v.bookName,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      isOverridden ? 'DEBUG: Date Override Active' : 'DEBUG: Tap to change date',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isOverridden ? Colors.orange : Colors.grey.shade400,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      v.hindiOrEnglishText.length > 60
-                          ? '${v.hindiOrEnglishText.substring(0, 60)}...'
-                          : v.hindiOrEnglishText,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.7),
+                      'Current: $dateLabel${isOverridden ? "  (simulated)" : "  (real)"}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 14,
-                color: Colors.white.withOpacity(0.5),
-              ),
+              if (isOverridden)
+                GestureDetector(
+                  onTap: () => _onDebugDateChanged(null),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Reset',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade300,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _showDebugDatePicker() async {
+    final now = AppClock.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2024, 1, 1),
+      lastDate: DateTime(2030, 12, 31),
+      helpText: 'Pick a date to simulate',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Colors.orange,
+              onPrimary: Colors.black,
+              surface: Color(0xFF1A1A2E),
+              onSurface: Colors.white,
+            ),
+            dialogBackgroundColor: const Color(0xFF1A1A2E),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      _onDebugDateChanged(picked);
+    }
+  }
+
+  void _onDebugDateChanged(DateTime? date) {
+    AppClock.setDebugDate(date);
+    // Re-initialize everything for the new "day"
+    setState(() {
+      _isLoading = true;
+      _tasks = [];
+    });
+    _taskService.refresh();
+    _habitService.refresh();
+    // Small delay to let streams update
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    });
   }
 
   Widget _buildPremiumHeader(BuildContext context) {
@@ -853,6 +959,18 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _navigateToHabitDetail(CustomHabit habit) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => HabitDetailScreen(habit: habit),
+      ),
+    );
+    // Refresh if habit was deleted or edited
+    if (result == true) {
+      _habitService.refresh();
+    }
   }
 
   void _showHabitOptions(CustomHabit habit) {

@@ -1,6 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/services/supabase_service.dart';
-import '../../../../shared/services/premium_service.dart';
 
 /// Service to track and manage consultation usage for free tier limits.
 /// Free users get 3 consultations per month.

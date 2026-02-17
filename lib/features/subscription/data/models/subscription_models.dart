@@ -160,10 +160,8 @@ class SubscriptionStatus {
     if (entitlement.expirationDate != null) {
       expDate = DateTime.tryParse(entitlement.expirationDate!);
     }
-    if (entitlement.latestPurchaseDate != null) {
-      purchDate = DateTime.tryParse(entitlement.latestPurchaseDate!);
-    }
-
+    purchDate = DateTime.tryParse(entitlement.latestPurchaseDate!);
+  
     return SubscriptionStatus(
       isActive: entitlement.isActive,
       isLifetime: expDate == null, // No expiration = lifetime

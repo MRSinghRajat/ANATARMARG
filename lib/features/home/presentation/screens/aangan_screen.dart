@@ -853,7 +853,7 @@ class _GodRaysPainter extends CustomPainter {
           maxRadius,
           [
             Color.fromRGBO(244, 228, 182, rayOpacity),
-            Color.fromRGBO(212, 175, 55, 0),
+            const Color.fromRGBO(212, 175, 55, 0),
           ],
           [0.0, 1.0],
         );
@@ -869,7 +869,7 @@ class _GodRaysPainter extends CustomPainter {
         80,
         [
           Color.fromRGBO(244, 228, 182, glowIntensity),
-          Color.fromRGBO(212, 175, 55, 0),
+          const Color.fromRGBO(212, 175, 55, 0),
         ],
       );
     canvas.drawCircle(Offset(cx, cy), 80, glowPaint);

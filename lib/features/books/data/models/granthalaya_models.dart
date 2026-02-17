@@ -6,8 +6,20 @@ class DeityModel {
   final String slug;
   final String name;
   final String? nameSanskrit;
+  final String? titleHindi;
   final String? imageUrl;
   final String? description;
+  final String? mythology;
+  final Map<String, dynamic> iconography;
+  final Map<String, dynamic> family;
+  final List<String> mantras;
+  final int? sacredNumber;
+  final String? sacredDay;
+  final List<dynamic> festivals;
+  final String? howToWorship;
+  final List<dynamic> temples;
+  final List<dynamic> timeline;
+  final String color;
   final int orderIndex;
   final bool isActive;
 
@@ -16,8 +28,20 @@ class DeityModel {
     required this.slug,
     required this.name,
     this.nameSanskrit,
+    this.titleHindi,
     this.imageUrl,
     this.description,
+    this.mythology,
+    this.iconography = const {},
+    this.family = const {},
+    this.mantras = const [],
+    this.sacredNumber,
+    this.sacredDay,
+    this.festivals = const [],
+    this.howToWorship,
+    this.temples = const [],
+    this.timeline = const [],
+    this.color = '#C5A059',
     this.orderIndex = 0,
     this.isActive = true,
   });
@@ -28,10 +52,185 @@ class DeityModel {
       slug: json['slug'] as String,
       name: json['name'] as String,
       nameSanskrit: json['name_sanskrit'] as String?,
+      titleHindi: json['title_hindi'] as String?,
       imageUrl: json['image_url'] as String?,
       description: json['description'] as String?,
+      mythology: json['mythology'] as String?,
+      iconography: json['iconography'] as Map<String, dynamic>? ?? {},
+      family: json['family'] as Map<String, dynamic>? ?? {},
+      mantras: (json['mantras'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      sacredNumber: json['sacred_number'] as int?,
+      sacredDay: json['sacred_day'] as String?,
+      festivals: json['festivals'] as List<dynamic>? ?? [],
+      howToWorship: json['how_to_worship'] as String?,
+      temples: json['temples'] as List<dynamic>? ?? [],
+      timeline: json['timeline'] as List<dynamic>? ?? [],
+      color: json['color'] as String? ?? '#C5A059',
       orderIndex: json['order_index'] as int? ?? 0,
       isActive: json['is_active'] as bool? ?? true,
+    );
+  }
+}
+
+/// Sacred text: Chalisa, Stotra, Mantra, Aarti, etc.
+class SacredTextModel {
+  final String id;
+  final String slug;
+  final String title;
+  final String? titleHindi;
+  final String type;
+  final String? deitySlug;
+  final String? textHindi;
+  final String? textEnglish;
+  final String? transliteration;
+  final String? audioUrl;
+  final int? durationSeconds;
+  final String? benefits;
+  final String? whenToRecite;
+  final int? verseCount;
+  final String category;
+  final String difficulty;
+  final bool isFeatured;
+  final int orderIndex;
+
+  SacredTextModel({
+    required this.id,
+    required this.slug,
+    required this.title,
+    this.titleHindi,
+    required this.type,
+    this.deitySlug,
+    this.textHindi,
+    this.textEnglish,
+    this.transliteration,
+    this.audioUrl,
+    this.durationSeconds,
+    this.benefits,
+    this.whenToRecite,
+    this.verseCount,
+    this.category = 'daily_prayer',
+    this.difficulty = 'beginner',
+    this.isFeatured = false,
+    this.orderIndex = 0,
+  });
+
+  factory SacredTextModel.fromJson(Map<String, dynamic> json) {
+    return SacredTextModel(
+      id: json['id'] as String,
+      slug: json['slug'] as String,
+      title: json['title'] as String,
+      titleHindi: json['title_hindi'] as String?,
+      type: json['type'] as String? ?? 'stotra',
+      deitySlug: json['deity_slug'] as String?,
+      textHindi: json['text_hindi'] as String?,
+      textEnglish: json['text_english'] as String?,
+      transliteration: json['transliteration'] as String?,
+      audioUrl: json['audio_url'] as String?,
+      durationSeconds: json['duration_seconds'] as int?,
+      benefits: json['benefits'] as String?,
+      whenToRecite: json['when_to_recite'] as String?,
+      verseCount: json['verse_count'] as int?,
+      category: json['category'] as String? ?? 'daily_prayer',
+      difficulty: json['difficulty'] as String? ?? 'beginner',
+      isFeatured: json['is_featured'] as bool? ?? false,
+      orderIndex: json['order_index'] as int? ?? 0,
+    );
+  }
+
+  String get typeLabel {
+    switch (type) {
+      case 'chalisa': return 'Chalisa';
+      case 'stotra': return 'Stotra';
+      case 'mantra': return 'Mantra';
+      case 'aarti': return 'Aarti';
+      case 'stuti': return 'Stuti';
+      case 'suktam': return 'Suktam';
+      case 'kavach': return 'Kavach';
+      case 'sahasranama': return 'Sahasranama';
+      default: return type;
+    }
+  }
+}
+
+/// Sacred story for Granthalaya (separate from daily_stories)
+class SacredStoryModel {
+  final String id;
+  final String slug;
+  final String title;
+  final String? titleHindi;
+  final String? deitySlug;
+  final String? source;
+  final String category;
+  final List<SacredStoryPage> pages;
+  final String? coverImageUrl;
+  final String? keyTeaching;
+  final String? reflectionPrompt;
+  final int estimatedMinutes;
+  final bool isFeatured;
+  final int orderIndex;
+
+  SacredStoryModel({
+    required this.id,
+    required this.slug,
+    required this.title,
+    this.titleHindi,
+    this.deitySlug,
+    this.source,
+    this.category = 'mythology',
+    this.pages = const [],
+    this.coverImageUrl,
+    this.keyTeaching,
+    this.reflectionPrompt,
+    this.estimatedMinutes = 3,
+    this.isFeatured = false,
+    this.orderIndex = 0,
+  });
+
+  factory SacredStoryModel.fromJson(Map<String, dynamic> json) {
+    final pagesJson = json['pages'] as List<dynamic>? ?? [];
+    return SacredStoryModel(
+      id: json['id'] as String,
+      slug: json['slug'] as String,
+      title: json['title'] as String,
+      titleHindi: json['title_hindi'] as String?,
+      deitySlug: json['deity_slug'] as String?,
+      source: json['source'] as String?,
+      category: json['category'] as String? ?? 'mythology',
+      pages: pagesJson
+          .map((p) => SacredStoryPage.fromJson(p as Map<String, dynamic>))
+          .toList(),
+      coverImageUrl: json['cover_image_url'] as String?,
+      keyTeaching: json['key_teaching'] as String?,
+      reflectionPrompt: json['reflection_prompt'] as String?,
+      estimatedMinutes: json['estimated_minutes'] as int? ?? 3,
+      isFeatured: json['is_featured'] as bool? ?? false,
+      orderIndex: json['order_index'] as int? ?? 0,
+    );
+  }
+}
+
+class SacredStoryPage {
+  final String textEnglish;
+  final String textHindi;
+  final String? illustrationUrl;
+  final bool isFinal;
+
+  SacredStoryPage({
+    required this.textEnglish,
+    required this.textHindi,
+    this.illustrationUrl,
+    this.isFinal = false,
+  });
+
+  factory SacredStoryPage.fromJson(Map<String, dynamic> json) {
+    return SacredStoryPage(
+      textEnglish: json['text_english'] as String? ?? '',
+      textHindi: json['text_hindi'] as String? ?? '',
+      illustrationUrl: json['illustration_url'] as String?,
+      isFinal: json['is_final'] as bool? ?? false,
     );
   }
 }

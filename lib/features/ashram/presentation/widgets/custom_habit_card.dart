@@ -9,6 +9,7 @@ class CustomHabitCard extends StatelessWidget {
   final bool isCompleted;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onNavigate;
   
   /// Key for animation source position
   final GlobalKey? animationKey;
@@ -19,13 +20,14 @@ class CustomHabitCard extends StatelessWidget {
     required this.isCompleted,
     required this.onTap,
     this.onLongPress,
+    this.onNavigate,
     this.animationKey,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: onNavigate ?? onTap,
       onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -54,9 +56,15 @@ class CustomHabitCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Checkbox
-            _buildCheckbox(),
-            const SizedBox(width: 12),
+            // Checkbox — always triggers completion toggle
+            GestureDetector(
+              onTap: onTap,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildCheckbox(),
+              ),
+            ),
             
             // Habit icon
             Container(
@@ -123,6 +131,14 @@ class CustomHabitCard extends StatelessWidget {
                   ? _buildStreakProgress()
                   : _buildFrequencyBadge(),
             ),
+            if (onNavigate != null) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withOpacity(0.25),
+                size: 18,
+              ),
+            ],
           ],
         ),
       ),

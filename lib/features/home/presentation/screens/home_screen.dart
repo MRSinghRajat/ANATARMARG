@@ -4,10 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../shared/widgets/coin_display.dart';
 import '../../../../shared/widgets/room_with_character.dart';
-import '../../../../shared/widgets/draggable_verse_card.dart';
 import '../../../../shared/services/coin_service.dart';
-import '../../../content/data/repositories/verse_of_day_repository.dart';
-import '../../../content/data/models/verse_model.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   /// When true, shown as Yatra tab - character will walk
@@ -20,43 +17,10 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final VerseOfDayRepository _verseRepository = VerseOfDayRepository();
-  VerseContent? _verseOfDay;
-  bool _isLoadingVerse = true;
-
   @override
   void initState() {
     super.initState();
     CoinService().initialize();
-    _loadVerseOfDay();
-  }
-
-  Future<void> _loadVerseOfDay() async {
-    try {
-      final verse = await _verseRepository.getVerseOfTheDay();
-      setState(() {
-        _verseOfDay = verse;
-        _isLoadingVerse = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoadingVerse = false;
-      });
-    }
-  }
-
-  void _openVerseFullScreen() {
-    if (_verseOfDay != null) {
-      Navigator.pushNamed(
-        context,
-        AppRouter.verseFullScreen,
-        arguments: {
-          'verse': _verseOfDay!,
-          'likeCount': 1058, // Mock data - replace with actual
-          'shareCount': 526, // Mock data - replace with actual
-        },
-      );
-    }
   }
 
   @override
@@ -120,41 +84,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      child: _isLoadingVerse
-          ? _buildScrollablePlaceholder(
-              scrollController,
-              const Center(child: CircularProgressIndicator()),
-            )
-          : _verseOfDay == null
-              ? _buildScrollablePlaceholder(
-                  scrollController,
-                  Center(
-                    child: Text(
-                      'Unable to load verse',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                )
-              : DraggableVerseCard(
-                  verse: _verseOfDay!,
-                  scrollController: scrollController,
-                  onTapFullScreen: _openVerseFullScreen,
-                  likeCount: 1058,
-                  shareCount: 526,
-                  onLike: () {},
-                  onShare: () {},
-                ),
-    );
-  }
-
-  Widget _buildScrollablePlaceholder(
-      ScrollController scrollController, Widget child) {
-    return SingleChildScrollView(
-      controller: scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: 400,
-        child: child,
+      child: SingleChildScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderColor.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Icon(Icons.menu_book, size: 48, color: AppColors.warmOrange.withOpacity(0.8)),
+            const SizedBox(height: 16),
+            Text(
+              'Verse of the Day',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your daily verse awaits in Ashram. Swipe to the Ashram tab to read today\'s sacred verse.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.tertiaryText,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 60),
+          ],
+        ),
       ),
     );
   }

@@ -1,9 +1,9 @@
-import 'dart:ui';
-
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/guide_animation_service.dart';
 import '../../../../shared/services/avatar_growth_service.dart';
@@ -64,7 +64,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   final VerseNotesService _notesService = VerseNotesService();
   final ReaderPreferencesService _prefsService = ReaderPreferencesService();
   final BookProgressRepository _progressRepository = BookProgressRepository();
-  late final PageController _pageController;
+  late final ScrollController _scrollController;
   final Map<String, GlobalKey> _verseKeys = {};
   ChapterContent? _chapterContent;
   List<VerseWithTranslations> _verses = [];
@@ -72,15 +72,14 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   Set<String> _readVerseIds = {};
   List<VerseNoteModel> _chapterNotes = [];
 
-  String _selectedLanguage = 'en';
   int _currentVerseIndex = 0;
-  int _selectedContentTab = 0; // 0: Chapter, 1: Notes
-  double _pageScrollOffset = 0; // For zoom/opacity animation during scroll
   
   // Reader Settings State
   double _fontSize = 18.0;
   ReaderTheme _readerTheme = ReaderTheme.paper;
   ReaderFont _readerFont = ReaderFont.serif;
+  ReaderLayout _readerLayout = ReaderLayout.scroll;
+  Set<String> _bookmarkedVerseIds = {};
   bool _isLoading = true;
   bool _isLoadingVerses = false;
   bool _isCompleted = false;
@@ -95,18 +94,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       widget.chapter?.chapterNumber ?? widget.chapterNumber ?? 1;
   String get _chapterDisplayName =>
       widget.chapter?.title ?? 'Chapter $_chapterNum';
-  String get _translationLabel {
-    switch (_selectedLanguage) {
-      case 'en':
-        return 'EN';
-      case 'hi':
-        return 'HI';
-      case 'sa':
-        return 'SA';
-      default:
-        return 'EN';
-    }
-  }
+  // Both translations are always shown - no language toggle needed
 
   String _getBookShortName() {
     switch (widget.book.id) {
@@ -149,8 +137,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 0, viewportFraction: 0.52);
-    _pageController.addListener(_onPageScroll);
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -164,24 +152,39 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     _loadBookmarksAndNotes();
   }
 
-  /// First verse index that is not read (in order). Max allowed verse index = this value.
-  int get _firstUnreadVerseIndex {
-    for (var i = 0; i < _verses.length; i++) {
-      if (!_readVerseIds.contains(_verses[i].verse.id)) return i;
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    // Determine which verse is currently most visible
+    _updateCurrentVerseFromScroll();
+  }
+
+  /// Determine current verse index by checking which verse GlobalKey is closest to viewport center
+  void _updateCurrentVerseFromScroll() {
+    if (_verses.isEmpty) return;
+    final viewportCenter = _scrollController.offset +
+        (_scrollController.position.viewportDimension / 2);
+
+    int closestIndex = 0;
+    double closestDistance = double.infinity;
+
+    for (int i = 0; i < _verses.length; i++) {
+      final key = _verseKeys[_verses[i].verse.id];
+      if (key?.currentContext == null) continue;
+      final box = key!.currentContext!.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final position = box.localToGlobal(Offset.zero).dy +
+          _scrollController.offset -
+          MediaQuery.of(key.currentContext!).padding.top;
+      final center = position + (box.size.height / 2);
+      final distance = (center - viewportCenter).abs();
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = i;
+      }
     }
-    return _verses.length; // all read
-  }
 
-  bool _canNavigateToVerseIndex(int index) {
-    if (_isPremium) return true;
-    return index <= _firstUnreadVerseIndex;
-  }
-
-  void _onPageScroll() {
-    if (!_pageController.hasClients) return;
-    final page = _pageController.page ?? 0;
-    if ((page - _pageScrollOffset).abs() > 0.001) {
-      setState(() => _pageScrollOffset = page);
+    if (closestIndex != _currentVerseIndex) {
+      setState(() => _currentVerseIndex = closestIndex);
     }
   }
 
@@ -189,11 +192,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     final fontSize = await _prefsService.loadFontSize();
     final theme = await _prefsService.loadTheme();
     final font = await _prefsService.loadFont();
+    final layout = await _prefsService.loadLayout();
     if (mounted) {
       setState(() {
         _fontSize = fontSize;
         _readerTheme = theme;
         _readerFont = font;
+        _readerLayout = layout;
       });
     }
   }
@@ -214,18 +219,20 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   Future<void> _loadBookmarksAndNotes() async {
     final notes = await _notesService.getNotesForChapter(_chapterId);
     final readVerses = await _progressRepository.getReadVerseIds(_chapterId);
+    final bookmarks = await _notesService.getBookmarkedVerseIds();
     if (mounted) {
       setState(() {
         _readVerseIds = readVerses;
         _chapterNotes = notes;
+        _bookmarkedVerseIds = bookmarks;
       });
     }
   }
 
   @override
   void dispose() {
-    _pageController.removeListener(_onPageScroll);
-    _pageController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _glowController.dispose();
     if (_verses.isNotEmpty &&
         _currentVerseIndex >= 0 &&
@@ -292,7 +299,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       final verses =
           await _verseRepository.getVersesWithAllTranslations(_chapterId);
       final readIds = await _progressRepository.getReadVerseIds(_chapterId);
-      final isPremium = await PremiumService.instance.isPremium;
       var idx = widget.initialVerseIndex;
       if (idx == null || idx >= verses.length) {
         final lastReadVerseId =
@@ -303,31 +309,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         }
       }
       int resolvedIdx = (idx != null && idx < verses.length) ? idx : 0;
-      if (!isPremium) {
-        int firstUnread = verses.length;
-        for (var i = 0; i < verses.length; i++) {
-          if (!readIds.contains(verses[i].verse.id)) {
-            firstUnread = i;
-            break;
-          }
-        }
-        resolvedIdx = resolvedIdx.clamp(0, firstUnread);
-      }
       setState(() {
         _verses = verses;
         _readVerseIds = readIds;
         _isLoadingVerses = false;
         _loadError = null;
         _currentVerseIndex = resolvedIdx;
-        _pageScrollOffset = resolvedIdx.toDouble();
       });
-      if (resolvedIdx > 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _pageController.hasClients) {
-            _pageController.jumpToPage(resolvedIdx);
-          }
-        });
-      }
       _loadBookmarksAndNotes();
       if (resolvedIdx > 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -339,33 +327,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         _isLoadingVerses = false;
         _loadError = e.toString().replaceFirst('Exception: ', '');
       });
-    }
-  }
-
-  void _onLanguageChanged(String lang) {
-    setState(() => _selectedLanguage = lang);
-    // No need to refetch - we already have all translations, just update display
-  }
-
-  /// Get verse text for the selected language (default: English)
-  String _getVerseTextForLanguage(VerseWithTranslations v) {
-    switch (_selectedLanguage) {
-      case 'hi':
-        return v.hindiTranslation?.text ??
-            v.englishTranslation?.text ??
-            v.primaryTranslation?.text ??
-            (v.translations.isNotEmpty ? v.translations.first.text : '');
-      case 'sa':
-        return v.primaryTranslation?.text ??
-            v.getTranslation('sa')?.text ??
-            v.hindiTranslation?.text ??
-            v.englishTranslation?.text ??
-            (v.translations.isNotEmpty ? v.translations.first.text : '');
-      case 'en':
-      default:
-        return v.englishTranslation?.text ??
-            v.primaryTranslation?.text ??
-            (v.translations.isNotEmpty ? v.translations.first.text : '');
     }
   }
 
@@ -423,66 +384,154 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     required int totalShlokas,
     required VerseWithTranslations v,
   }) {
+    final isBookmarked = _bookmarkedVerseIds.contains(verseId);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141414),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(
+            top: BorderSide(color: _goldAccent.withValues(alpha: 0.2)),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Handle bar
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             Text(
-              'Shloka $shlokaNum of $totalShlokas',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.warmOrange,
-                  ),
+              'Verse $shlokaNum of $totalShlokas',
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: _goldAccent,
+                letterSpacing: 2,
+              ),
             ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.note_add, color: AppColors.warmOrange),
-              title: const Text('Notes'),
-              subtitle: const Text('Add note to this shlok'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showAddNoteDialog(context, verseId, verseText, shlokaNum, v);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy, color: AppColors.warmOrange),
-              title: const Text('Copy'),
-              subtitle: const Text('Copy shlok to clipboard'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Clipboard.setData(ClipboardData(text: verseText));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied to clipboard')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat, color: AppColors.warmOrange),
-              title: const Text('Chat'),
-              subtitle: const Text('Ask about this verse'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BookChatScreen(
-                      book: widget.book,
-                      verseContext: verseText,
-                    ),
-                  ),
-                );
-              },
+            const SizedBox(height: 16),
+            // Action grid
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildContextAction(
+                  icon: Icons.note_add_rounded,
+                  label: 'Note',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showAddNoteDialog(context, verseId, verseText, shlokaNum, v);
+                  },
+                ),
+                _buildContextAction(
+                  icon: isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  label: isBookmarked ? 'Saved' : 'Save',
+                  isActive: isBookmarked,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _notesService.toggleBookmark(verseId);
+                    await _loadBookmarksAndNotes();
+                  },
+                ),
+                _buildContextAction(
+                  icon: Icons.share_rounded,
+                  label: 'Share',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    final shareText = '${widget.book.name} - $_chapterDisplayName, Verse $shlokaNum\n\n$verseText\n\n— via AntarMarg';
+                    Share.share(shareText);
+                  },
+                ),
+                _buildContextAction(
+                  icon: Icons.copy_rounded,
+                  label: 'Copy',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Clipboard.setData(ClipboardData(text: verseText));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Copied to clipboard'),
+                        backgroundColor: const Color(0xFF1A1A1A),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  },
+                ),
+                _buildContextAction(
+                  icon: Icons.chat_rounded,
+                  label: 'Explain',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => BookChatScreen(
+                          book: widget.book,
+                          verseContext: verseText,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildContextAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isActive = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isActive
+                  ? _goldAccent.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isActive
+                    ? _goldAccent.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 22,
+              color: isActive ? _goldAccent : Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              color: isActive ? _goldAccent : Colors.white.withValues(alpha: 0.5),
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -511,9 +560,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           ));
           if (mounted) {
             await _loadBookmarksAndNotes();
-            setState(() => _selectedContentTab = 1);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Note saved')),
+              SnackBar(
+                content: const Text('Note saved'),
+                backgroundColor: const Color(0xFF1A1A1A),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             );
           }
         },
@@ -557,19 +610,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   void _goToNextChapter() async {
     final next = _getNextChapter();
     if (next == null) return;
-    if (!_isPremium && !_isCompleted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Complete this chapter to unlock the next, or upgrade to Premium for full access.',
-            ),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      return;
-    }
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -583,13 +623,16 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   }
 
   void _scrollToVerse(int index) {
-    if (_verses.isEmpty) return;
-    if (!_pageController.hasClients) return;
-    _pageController.animateToPage(
-      index.clamp(0, _verses.length - 1),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-    );
+    if (_verses.isEmpty || index < 0 || index >= _verses.length) return;
+    final key = _verseKeys[_verses[index].verse.id];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOutCubic,
+        alignment: 0.1,
+      );
+    }
   }
 
   Future<void> _completeChapter() async {
@@ -644,8 +687,14 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           ],
         ),
       ),
+      floatingActionButton: _verses.isNotEmpty && !_isLoading
+          ? _buildFab(context)
+          : null,
     );
   }
+
+  bool get _isGitaBook =>
+      widget.book.id == 'bhagavad_gita' || widget.book.id == 'geeta';
 
   void _showBooksChaptersModal() {
     showModalBottomSheet(
@@ -656,6 +705,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         currentBook: widget.book,
         currentChapter: widget.chapter,
         isPremium: _isPremium,
+        restrictToCurrentBook: _isGitaBook,
         onChapterSelected: (book, chapter) {
           Navigator.pop(modalContext); // Close modal
           Navigator.pushReplacement(
@@ -730,32 +780,26 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             ),
           ),
           const SizedBox(width: 12),
-          // Language selector (EN/HI/SA)
-          Semantics(
-            button: true,
-            label: 'Select Language',
-            child: GestureDetector(
-              onTap: () => _showLanguageSelector(context),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: _ShlokReaderColors.zinc800,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _translationLabel,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: _ShlokReaderColors.primary,
+          // Verse grid picker (when verses loaded)
+          if (_verses.isNotEmpty)
+            Semantics(
+              button: true,
+              label: 'Select verse',
+              child: GestureDetector(
+                onTap: () => _showVerseGridPicker(context),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _ShlokReaderColors.zinc800,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                   ),
+                  child: Icon(Icons.grid_view, color: Colors.grey.shade300, size: 22),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
+          if (_verses.isNotEmpty) const SizedBox(width: 8),
           // Settings
           Semantics(
             button: true,
@@ -775,6 +819,113 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showVerseGridPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.6,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: _ShlokReaderColors.surfaceDark,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Select Verse',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: Icon(Icons.close, color: Colors.grey.shade300),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$_chapterDisplayName • ${_verses.length} verses',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.only(bottom: 24),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 6,
+                  childAspectRatio: 1.2,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: _verses.length,
+                itemBuilder: (context, index) {
+                  final verseNum = index + 1;
+                  final isCurrent = index == _currentVerseIndex;
+                  final isRead = _readVerseIds.contains(_verses[index].verse.id);
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _scrollToVerse(index);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isCurrent
+                            ? _ShlokReaderColors.primary.withValues(alpha: 0.2)
+                            : Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isCurrent
+                              ? _ShlokReaderColors.primary
+                              : Colors.white.withValues(alpha: 0.1),
+                          width: isCurrent ? 2 : 1,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$verseNum',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isCurrent
+                                  ? _ShlokReaderColors.primary
+                                  : Colors.white,
+                            ),
+                          ),
+                          if (isRead)
+                            Icon(
+                              Icons.check_circle,
+                              size: 12,
+                              color: AppColors.successColor.withValues(alpha: 0.8),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -823,6 +974,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         currentFontSize: _fontSize,
         currentTheme: _readerTheme,
         currentFont: _readerFont,
+        currentLayout: _readerLayout,
         onFontSizeChanged: (val) {
           setState(() => _fontSize = val);
           _prefsService.saveFontSize(val);
@@ -835,139 +987,22 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           setState(() => _readerFont = val);
           _prefsService.saveFont(val);
         },
+        onLayoutChanged: (val) {
+          setState(() => _readerLayout = val);
+          _prefsService.saveLayout(val);
+        },
       ),
-    );
-  }
-
-  void _showLanguageSelector(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Select Translation',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 16),
-            _buildLanguageOption(context, 'en', 'English'),
-            _buildLanguageOption(context, 'hi', 'Hindi'),
-            _buildLanguageOption(context, 'sa', 'Sanskrit'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLanguageOption(BuildContext context, String code, String label) {
-    final isSelected = _selectedLanguage == code;
-    return ListTile(
-      leading: Icon(
-        Icons.translate,
-        color: isSelected ? AppColors.warmOrange : AppColors.tertiaryText,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? AppColors.warmOrange : AppColors.primaryText,
-        ),
-      ),
-      onTap: () {
-        _onLanguageChanged(code);
-        Navigator.pop(context);
-      },
     );
   }
 
   Widget _buildMainContent(BuildContext context) {
-    return Container(
-      color: _ShlokReaderColors.backgroundDark,
-      child: Column(
-        children: [
-          _buildContentTabs(context),
-          Expanded(
-            child: _selectedContentTab == 0
-                ? _buildChapterTab(context)
-                : _buildNotesTab(context),
-          ),
-        ],
-      ),
-    );
+    return _buildChapterTab(context);
   }
 
-  Widget _buildContentTabs(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: _ShlokReaderColors.zinc900,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Row(
-        children: [
-          _buildContentTab(0, 'Chapter', Icons.auto_stories),
-          _buildContentTab(1, 'Notes', Icons.description),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContentTab(int index, String label, IconData icon) {
-    final isSelected = _selectedContentTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () async {
-          if (index == 1) await _loadBookmarksAndNotes();
-          setState(() => _selectedContentTab = index);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? _ShlokReaderColors.primary.withValues(alpha: 0.1)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isSelected
-                    ? _ShlokReaderColors.primary
-                    : Colors.grey.shade400,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected
-                      ? _ShlokReaderColors.primary
-                      : Colors.grey.shade400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // Ancient scroll design colors
+  static const _goldAccent = Color(0xFFC5A059);
+  static const _verseTextColor = Color(0xFFE8E0D4);
+  static const _translationColor = Color(0xFF9E9689);
 
   Widget _buildChapterTab(BuildContext context) {
     if (_isLoadingVerses) {
@@ -987,15 +1022,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                 _loadError!,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.red.shade700,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Query: verses WHERE chapter_id=\'$_chapterId\' then verse_translations',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.tertiaryText,
-                      fontFamily: 'monospace',
                     ),
                 textAlign: TextAlign.center,
               ),
@@ -1023,14 +1049,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                     color: AppColors.tertiaryText,
                   ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Run SUPABASE_BOOKS_SCHEMA.sql, SUPABASE_GITA_DATA.sql and SUPABASE_GITA_TRANSLATIONS.sql in your Supabase SQL Editor.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.tertiaryText,
-                  ),
-              textAlign: TextAlign.center,
-            ),
           ],
         ),
       );
@@ -1040,440 +1058,516 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       children: [
         _buildVerseProgressBar(context),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final viewportHeight = constraints.maxHeight;
-              return Stack(
-                children: [
-                  // Gradient line connecting verse numbers (fixed, full height)
-                  Positioned(
-                    left: 21,
-                    top: 0,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: Container(
-                        width: 3,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              _ShlokReaderColors.primary,
-                              _ShlokReaderColors.primary.withValues(alpha: 0.6),
-                              _ShlokReaderColors.primary.withValues(alpha: 0.2),
-                              _ShlokReaderColors.primary.withValues(alpha: 0.05),
-                            ],
-                            stops: const [0.0, 0.2, 0.6, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  PageView.builder(
-                    controller: _pageController,
-                    scrollDirection: Axis.vertical,
-                    physics: const PageScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    itemCount: _verses.length,
-          onPageChanged: (index) {
-            if (!_canNavigateToVerseIndex(index)) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Complete the current verse to unlock the next. Premium unlocks all.',
-                    ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && _pageController.hasClients) {
-                  final allowed = _firstUnreadVerseIndex.clamp(0, _verses.length - 1);
-                  _pageController.animateToPage(
-                    allowed,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                  setState(() => _currentVerseIndex = allowed);
-                }
-              });
-              return;
-            }
-            setState(() {
-              _currentVerseIndex = index;
-            });
-          },
-          itemBuilder: (context, index) {
-            final page = _pageController.hasClients
-                ? (_pageController.page ?? index.toDouble())
-                : index.toDouble();
-            final distance = (index - page).abs();
-            final scale = (1.0 - (distance * 0.06)).clamp(0.9, 1.0);
-            final opacity = (1.0 - (distance * 0.35)).clamp(0.45, 1.0);
-            final isActive = distance < 0.5;
-
-            return SizedBox(
-              height: viewportHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Verse count on far left (aligned with gradient line)
-                  SizedBox(
-                    width: 48,
-                    child: Center(
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isActive
-                              ? _ShlokReaderColors.primary
-                              : _ShlokReaderColors.primary.withValues(alpha: 0.4),
-                          border: Border.all(
-                            color: _ShlokReaderColors.backgroundDark,
-                            width: 2,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${index + 1}',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: isActive
-                                ? Colors.black
-                                : Colors.grey.shade300,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: Transform.scale(
-                        scale: scale,
-                        child: Opacity(
-                          opacity: opacity,
-                          child: isActive
-                              ? _buildVersePageCard(context, index)
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(32),
-                                  child: ImageFiltered(
-                                    imageFilter: ImageFilter.blur(
-                                      sigmaX: 2,
-                                      sigmaY: 2,
-                                    ),
-                                    child: _buildVersePageCard(context, index),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-                ],
-              );
-            },
-          ),
+          child: _readerLayout == ReaderLayout.card
+              ? _buildCardLayout()
+              : _buildScrollLayout(),
         ),
       ],
     );
   }
 
-  Widget _buildVersePageCard(BuildContext context, int index) {
+  Widget _buildScrollLayout() {
+    return ListView.builder(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      itemCount: _verses.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) return _buildChapterHeader();
+        return _buildVerseSection(context, index - 1);
+      },
+    );
+  }
+
+  Widget _buildCardLayout() {
+    return ListView.builder(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      itemCount: _verses.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) return _buildChapterHeader();
+        return _buildVerseCard(context, index - 1);
+      },
+    );
+  }
+
+  /// Decorative chapter header at the top of the scroll
+  Widget _buildChapterHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 32),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          // Book title
+          Text(
+            widget.book.name,
+            style: GoogleFonts.cormorantGaramond(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: _goldAccent.withValues(alpha: 0.6),
+              letterSpacing: 3,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          // Chapter title
+          Text(
+            _chapterDisplayName.toUpperCase(),
+            style: GoogleFonts.cormorantGaramond(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: _verseTextColor,
+              letterSpacing: 4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          // Ornamental divider
+          _buildOrnamentalDivider(),
+          const SizedBox(height: 12),
+          // Chapter summary if available
+          if (_chapterContent != null &&
+              _chapterContent!.summary.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '"${_stripChapterIntro(_chapterContent!.summary)}"',
+                style: GoogleFonts.cormorantGaramond(
+                  fontSize: 15,
+                  fontStyle: FontStyle.italic,
+                  color: _translationColor.withValues(alpha: 0.8),
+                  height: 1.6,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Ornamental gold divider with center diamond
+  Widget _buildOrnamentalDivider({bool compact = false}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: compact ? 8 : 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    _goldAccent.withValues(alpha: 0.3),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Transform.rotate(
+              angle: 0.785398, // 45 degrees
+              child: Container(
+                width: compact ? 5 : 7,
+                height: compact ? 5 : 7,
+                decoration: BoxDecoration(
+                  color: _goldAccent.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _goldAccent.withValues(alpha: 0.3),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Get Hindi text for the verse (primary display)
+  String _getHindiText(VerseWithTranslations v) {
+    return v.hindiTranslation?.text ??
+        v.primaryTranslation?.text ??
+        '';
+  }
+
+  /// Get English translation/meaning text
+  String _getEnglishText(VerseWithTranslations v) {
+    return v.englishTranslation?.text ??
+        v.primaryTranslation?.text ??
+        '';
+  }
+
+  /// Build a single verse section with ancient scroll styling (Scroll layout)
+  Widget _buildVerseSection(BuildContext context, int index) {
     final v = _verses[index];
     final shlokaNum = index + 1;
     final totalShlokas = _verses.length;
     final verseId = v.verse.id;
-    final displayText = _getVerseTextForLanguage(v);
     _verseKeys[verseId] ??= GlobalKey();
     final isRead = _readVerseIds.contains(verseId);
-    final page = _pageController.hasClients ? (_pageController.page ?? index.toDouble()) : index.toDouble();
-    final isActive = (index - page).abs() < 0.5; // Centered card during scroll
     final verseNotes =
         _chapterNotes.where((n) => n.verseId == verseId).toList();
-    final snippet = displayText.length > 100
-        ? '${displayText.substring(0, 100)}...'
-        : displayText;
 
-    return Padding(
+    final hindiText = _getHindiText(v);
+    final englishText = _getEnglishText(v);
+
+    return GestureDetector(
       key: _verseKeys[verseId],
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onLongPress: () => _showVerseContextMenu(
-            context,
-            verseId: verseId,
-            verseText: displayText,
-            shlokaNum: shlokaNum,
-            totalShlokas: totalShlokas,
-            v: v,
-          ),
-          borderRadius: BorderRadius.circular(32),
-          splashColor: _ShlokReaderColors.primary.withValues(alpha: 0.1),
-          highlightColor: _ShlokReaderColors.primary.withValues(alpha: 0.05),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(32),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: AnimatedBuilder(
-              animation: _glowController,
-              builder: (context, child) {
-                final glowValue = 0.15 + (_glowController.value * 0.15);
-                return Container(
-                  constraints: const BoxConstraints(maxWidth: 540, minHeight: 180),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isRead
-                          ? [
-                              AppColors.successColor.withValues(alpha: 0.25),
-                              AppColors.successColor.withValues(alpha: 0.12),
-                            ]
-                          : [
-                              Colors.white.withValues(alpha: 0.06),
-                              Colors.white.withValues(alpha: 0.02),
-                            ],
-                    ),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: isActive
-                          ? _ShlokReaderColors.primary
-                              .withValues(alpha: 0.2 + glowValue)
-                          : Colors.white.withValues(alpha: 0.06),
-                      width: isActive ? 2 : 1,
-                    ),
-                    boxShadow: isActive
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
-                            ),
-                            BoxShadow(
-                              color: _ShlokReaderColors.primary
-                                  .withValues(alpha: glowValue),
-                              blurRadius: 20,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: child,
-                );
-              },
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (isActive) _buildFloatingParticles(),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.28,
-                      ),
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Text(
-                          isActive ? displayText : snippet,
-                          style: GoogleFonts.cinzel(
-                            fontSize: isActive ? _fontSize : 16,
-                            height: 1.8,
-                            fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
-                            color: isActive ? Colors.grey.shade100 : Colors.grey.shade500,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: isActive ? null : 4,
-                          overflow: isActive ? null : TextOverflow.ellipsis,
-                        ),
-                      ),
-                          ),
-                          if (verseNotes.isNotEmpty && isActive) ...[
-                            const SizedBox(height: 12),
-                            Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                              Icons.note,
-                              size: 18,
-                              color: _ShlokReaderColors.primary,
-                            ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      verseNotes.first.note,
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade400,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+      onLongPress: () => _showVerseContextMenu(
+        context,
+        verseId: verseId,
+        verseText: '$hindiText\n\n$englishText',
+        shlokaNum: shlokaNum,
+        totalShlokas: totalShlokas,
+        v: v,
       ),
-    );
-  }
-
-  Widget _buildFloatingParticles() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: AnimatedBuilder(
-          animation: _glowController,
-          builder: (context, _) {
-            return CustomPaint(
-              painter: _ParticlePainter(progress: _glowController.value),
-              size: Size.infinite,
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotesTab(BuildContext context) {
-    if (_chapterNotes.isEmpty) {
-      return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(Icons.note_add, size: 64, color: Colors.grey.shade600),
-            const SizedBox(height: 16),
-            Text(
-              'No notes yet',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Long-press a shlok and tap Notes to add a note',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: Colors.grey.shade400,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _chapterNotes.length,
-      itemBuilder: (context, index) {
-        final note = _chapterNotes[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _ShlokReaderColors.surfaceDark,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Verse number label
+            Center(
+              child: Column(
                 children: [
                   Text(
-                    'Shloka ${note.shlokaNumber}',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.bold,
-                      color: _ShlokReaderColors.primary,
+                    'VERSE $shlokaNum',
+                    style: GoogleFonts.cormorantGaramond(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _goldAccent.withValues(alpha: 0.5),
+                      letterSpacing: 4,
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.grey.shade500),
-                    onPressed: () async {
-                      await _notesService.removeNote(note.verseId, note.note);
-                      if (mounted) await _loadBookmarksAndNotes();
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                note.verseText,
-                style: GoogleFonts.inter(
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade300,
-                ),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _ShlokReaderColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.comment, size: 18, color: _ShlokReaderColors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        note.note,
-                        style: GoogleFonts.inter(color: Colors.grey.shade300),
+                  if (v.verse.verseNumberDisplay.isNotEmpty &&
+                      v.verse.verseNumberDisplay != '$shlokaNum')
+                    Text(
+                      v.verse.verseNumberDisplay,
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 11,
+                        color: _goldAccent.withValues(alpha: 0.3),
+                        letterSpacing: 2,
                       ),
                     ),
-                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Hindi verse text (primary) with drop cap
+            if (hindiText.isNotEmpty)
+              _buildVerseBodyWithDropCap(hindiText),
+
+            // Thin separator
+            if (englishText.isNotEmpty) ...[
+              _buildOrnamentalDivider(compact: true),
+              // English translation / meaning
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  englishText,
+                  style: GoogleFonts.crimsonPro(
+                    fontSize: _fontSize - 3,
+                    height: 1.7,
+                    color: _translationColor,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
+
+            // Read indicator
+            if (isRead)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle,
+                        size: 14,
+                        color: AppColors.successColor.withValues(alpha: 0.6)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Read',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: AppColors.successColor.withValues(alpha: 0.5),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Notes preview
+            if (verseNotes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _goldAccent.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _goldAccent.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.format_quote,
+                          size: 14,
+                          color: _goldAccent.withValues(alpha: 0.4)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          verseNotes.first.note,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Ornamental divider between verses (with larger gap)
+            if (index < _verses.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _buildOrnamentalDivider(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build a single verse as a card with gradient animated border (Card layout)
+  Widget _buildVerseCard(BuildContext context, int index) {
+    final v = _verses[index];
+    final shlokaNum = index + 1;
+    final totalShlokas = _verses.length;
+    final verseId = v.verse.id;
+    _verseKeys[verseId] ??= GlobalKey();
+    final isRead = _readVerseIds.contains(verseId);
+
+    final hindiText = _getHindiText(v);
+    final englishText = _getEnglishText(v);
+
+    return Padding(
+      key: _verseKeys[verseId],
+      padding: const EdgeInsets.only(bottom: 24),
+      child: GestureDetector(
+        onLongPress: () => _showVerseContextMenu(
+          context,
+          verseId: verseId,
+          verseText: '$hindiText\n\n$englishText',
+          shlokaNum: shlokaNum,
+          totalShlokas: totalShlokas,
+          v: v,
+        ),
+        child: AnimatedBuilder(
+          animation: _glowController,
+          builder: (context, child) {
+            final angle = _glowController.value * 2 * math.pi;
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: SweepGradient(
+                  center: Alignment.center,
+                  startAngle: angle,
+                  endAngle: angle + math.pi * 2,
+                  colors: [
+                    _goldAccent.withValues(alpha: 0.4),
+                    Colors.transparent,
+                    _goldAccent.withValues(alpha: 0.15),
+                    Colors.transparent,
+                    _goldAccent.withValues(alpha: 0.4),
+                  ],
+                  stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                ),
+              ),
+              padding: const EdgeInsets.all(1.5),
+              child: child,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111111),
+              borderRadius: BorderRadius.circular(19),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Verse number + read badge
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'VERSE $shlokaNum',
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _goldAccent.withValues(alpha: 0.6),
+                        letterSpacing: 4,
+                      ),
+                    ),
+                    if (isRead) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.check_circle,
+                          size: 14,
+                          color: AppColors.successColor.withValues(alpha: 0.7)),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Hindi text
+                if (hindiText.isNotEmpty)
+                  _buildVerseBodyWithDropCap(hindiText),
+
+                if (englishText.isNotEmpty) ...[
+                  _buildOrnamentalDivider(compact: true),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      englishText,
+                      style: GoogleFonts.crimsonPro(
+                        fontSize: _fontSize - 3,
+                        height: 1.7,
+                        color: _translationColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  /// Verse body text with decorative drop cap for first character
+  Widget _buildVerseBodyWithDropCap(String text) {
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final firstChar = text.substring(0, 1);
+    final restText = text.substring(1);
+    final dropCapSize = _fontSize + 18;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: firstChar,
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: dropCapSize,
+                fontWeight: FontWeight.bold,
+                color: _goldAccent.withValues(alpha: 0.8),
+                height: 1.0,
+              ),
+            ),
+            TextSpan(
+              text: restText,
+              style: GoogleFonts.crimsonPro(
+                fontSize: _fontSize + 2,
+                height: 1.85,
+                color: _verseTextColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// FAB to open bookmarks & notes sheet
+  Widget _buildFab(BuildContext context) {
+    final hasContent = _chapterNotes.isNotEmpty || _bookmarkedVerseIds.isNotEmpty;
+    return FloatingActionButton(
+      mini: true,
+      backgroundColor: hasContent
+          ? _goldAccent.withValues(alpha: 0.9)
+          : Colors.white.withValues(alpha: 0.12),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onPressed: () => _showBookmarksNotesSheet(context),
+      child: Icon(
+        Icons.collections_bookmark_rounded,
+        size: 20,
+        color: hasContent ? Colors.black : Colors.white.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  /// Full-screen bottom sheet with Bookmarks + Notes tabs
+  void _showBookmarksNotesSheet(BuildContext context) async {
+    await _loadBookmarksAndNotes();
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (_, scrollController) => _BookmarksNotesSheet(
+          chapterNotes: _chapterNotes,
+          bookmarkedVerseIds: _bookmarkedVerseIds,
+          verses: _verses,
+          bookName: widget.book.name,
+          chapterName: _chapterDisplayName,
+          notesService: _notesService,
+          onNoteDeleted: (verseId, note) async {
+            await _notesService.removeNote(verseId, note);
+            if (mounted) await _loadBookmarksAndNotes();
+          },
+          onBookmarkRemoved: (verseId) async {
+            await _notesService.toggleBookmark(verseId);
+            if (mounted) await _loadBookmarksAndNotes();
+          },
+          onVerseSelected: (verseId) {
+            Navigator.pop(ctx);
+            final idx = _verses.indexWhere((v) => v.verse.id == verseId);
+            if (idx >= 0) _scrollToVerse(idx);
+          },
+          scrollController: scrollController,
+        ),
+      ),
     );
   }
 
@@ -1547,7 +1641,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             icon: Icons.chevron_right,
             onTap: _goToNextChapter,
             label: 'Next Chapter',
-            enabled: _isPremium || _isCompleted,
+            enabled: true,
           ),
         ],
       ),
@@ -1588,41 +1682,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   }
 }
 
-/// Painter for floating particle effect (incense smoke style)
-class _ParticlePainter extends CustomPainter {
-  final double progress;
-
-  _ParticlePainter({required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const particles = [
-      Offset(0.2, 0.8),
-      Offset(0.5, 0.7),
-      Offset(0.8, 0.75),
-      Offset(0.35, 0.9),
-      Offset(0.65, 0.85),
-    ];
-    for (var i = 0; i < particles.length; i++) {
-      final p = particles[i];
-      final yOffset = (progress * 2 + i * 0.2) % 1.0;
-      final x = p.dx * size.width + (i.isOdd ? 10 : -10) * progress;
-      final y = size.height - (p.dy * size.height * 0.6) - (yOffset * size.height * 0.4);
-      final radius = 2.0 + (i % 3);
-      final opacity = (0.03 + (1 - yOffset) * 0.04).clamp(0.0, 0.08);
-      final paint = Paint()
-        ..color = _ShlokReaderColors.primary.withValues(alpha: opacity)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(x, y), radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ParticlePainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-/// Dialog for adding a note - manages TextEditingController lifecycle properly
+/// Dialog for adding a note - dark theme
 class _AddNoteDialog extends StatefulWidget {
   final int shlokaNum;
   final String verseText;
@@ -1656,7 +1716,16 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Add Note - Shloka ${widget.shlokaNum}'),
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
+        'Note - Verse ${widget.shlokaNum}',
+        style: GoogleFonts.cormorantGaramond(
+          color: const Color(0xFFC5A059),
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1665,14 +1734,18 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Text(
                 widget.verseText,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontStyle: FontStyle.italic,
-                    ),
+                style: GoogleFonts.crimsonPro(
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade400,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1680,9 +1753,24 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
-              decoration: const InputDecoration(
-                hintText: 'Add your note or comment...',
-                border: OutlineInputBorder(),
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Write your thoughts...',
+                hintStyle: GoogleFonts.inter(color: Colors.grey.shade600),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFC5A059)),
+                ),
               ),
               maxLines: 4,
             ),
@@ -1692,18 +1780,365 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey.shade500)),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFC5A059),
+            foregroundColor: Colors.black,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
           onPressed: () {
             final note = _controller.text.trim();
             if (note.isEmpty) return;
-            Navigator.pop(context); // Close dialog first, then save
+            Navigator.pop(context);
             widget.onSave(note);
           },
-          child: const Text('Save'),
+          child: Text('Save', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
         ),
       ],
+    );
+  }
+}
+
+/// Bookmarks + Notes bottom sheet
+class _BookmarksNotesSheet extends StatefulWidget {
+  final List<VerseNoteModel> chapterNotes;
+  final Set<String> bookmarkedVerseIds;
+  final List<VerseWithTranslations> verses;
+  final String bookName;
+  final String chapterName;
+  final VerseNotesService notesService;
+  final void Function(String verseId, String note) onNoteDeleted;
+  final void Function(String verseId) onBookmarkRemoved;
+  final void Function(String verseId) onVerseSelected;
+  final ScrollController scrollController;
+
+  const _BookmarksNotesSheet({
+    required this.chapterNotes,
+    required this.bookmarkedVerseIds,
+    required this.verses,
+    required this.bookName,
+    required this.chapterName,
+    required this.notesService,
+    required this.onNoteDeleted,
+    required this.onBookmarkRemoved,
+    required this.onVerseSelected,
+    required this.scrollController,
+  });
+
+  @override
+  State<_BookmarksNotesSheet> createState() => _BookmarksNotesSheetState();
+}
+
+class _BookmarksNotesSheetState extends State<_BookmarksNotesSheet>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  static const _goldAccent = Color(0xFFC5A059);
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Text(
+              'My Collection',
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: _goldAccent,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          // Tabs
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: _goldAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: _goldAccent,
+              unselectedLabelColor: Colors.grey.shade500,
+              labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: GoogleFonts.inter(fontSize: 13),
+              dividerColor: Colors.transparent,
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bookmark_rounded, size: 16),
+                      const SizedBox(width: 6),
+                      Text('Bookmarks (${widget.bookmarkedVerseIds.length})'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.description_rounded, size: 16),
+                      const SizedBox(width: 6),
+                      Text('Notes (${widget.chapterNotes.length})'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Tab content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildBookmarksTab(),
+                _buildNotesListTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookmarksTab() {
+    // Filter bookmarks that are in this chapter's verses
+    final chapterBookmarks = widget.verses
+        .where((v) => widget.bookmarkedVerseIds.contains(v.verse.id))
+        .toList();
+
+    if (chapterBookmarks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.bookmark_border_rounded,
+                size: 48, color: Colors.grey.shade700),
+            const SizedBox(height: 12),
+            Text(
+              'No bookmarks yet',
+              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Long-press a verse to bookmark it',
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: widget.scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      itemCount: chapterBookmarks.length,
+      itemBuilder: (context, index) {
+        final v = chapterBookmarks[index];
+        final verseIdx = widget.verses.indexOf(v);
+        final hindiText = v.hindiTranslation?.text ?? v.primaryTranslation?.text ?? '';
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => widget.onVerseSelected(v.verse.id),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _goldAccent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${verseIdx + 1}',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: _goldAccent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        hindiText,
+                        style: GoogleFonts.crimsonPro(
+                          fontSize: 14,
+                          color: const Color(0xFFE8E0D4),
+                          height: 1.5,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => widget.onBookmarkRemoved(v.verse.id),
+                      child: Icon(Icons.bookmark,
+                          size: 20, color: _goldAccent.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotesListTab() {
+    if (widget.chapterNotes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.note_add_rounded,
+                size: 48, color: Colors.grey.shade700),
+            const SizedBox(height: 12),
+            Text(
+              'No notes yet',
+              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Long-press a verse and tap Note to add one',
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: widget.scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      itemCount: widget.chapterNotes.length,
+      itemBuilder: (context, index) {
+        final note = widget.chapterNotes[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => widget.onVerseSelected(note.verseId),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Verse ${note.shlokaNumber}',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            color: _goldAccent,
+                            fontSize: 13,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => widget.onNoteDeleted(note.verseId, note.note),
+                          child: Icon(Icons.delete_outline,
+                              size: 18, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      note.verseText,
+                      style: GoogleFonts.crimsonPro(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey.shade400,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _goldAccent.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.comment_rounded,
+                              size: 14, color: _goldAccent.withValues(alpha: 0.5)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              note.note,
+                              style: GoogleFonts.inter(
+                                color: Colors.grey.shade300,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

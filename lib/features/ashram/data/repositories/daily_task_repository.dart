@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../models/daily_task_model.dart';
 
 /// Repository for managing daily tasks
@@ -77,7 +78,7 @@ class DailyTaskRepository {
 
   /// Get today's tasks
   Future<List<UserDailyTask>> getTodaysTasks() async {
-    return getUserTasksForDate(DateTime.now());
+    return getUserTasksForDate(AppClock.now());
   }
 
   /// Generate daily tasks for user
@@ -88,7 +89,7 @@ class DailyTaskRepository {
     if (_userId == null) return [];
 
     try {
-      final today = DateTime.now();
+      final today = AppClock.now();
       final dateStr = today.toIso8601String().split('T')[0];
       final weekday = today.weekday % 7; // 0 = Sunday
 
@@ -129,49 +130,64 @@ class DailyTaskRepository {
     }
   }
 
-  /// Select tasks for today from available templates
+  /// Deterministic meditation slug for each weekday (1=Mon .. 7=Sun)
+  static const _meditationByWeekday = {
+    1: 'daily_meditation',    // Mon: Breath Awareness
+    2: 'morning_meditation',  // Tue: 5-min
+    3: 'pranayama',           // Wed: Pranayama
+    4: 'daily_meditation',    // Thu: Breath Awareness
+    5: 'morning_meditation',  // Fri: 5-min
+    6: 'pranayama',           // Sat: Pranayama
+    7: 'listen_chant',        // Sun: Sacred Chant
+  };
+
+  /// Deterministic extra-slot slug for each weekday
+  static const _extraByWeekday = {
+    1: 'help_someone',
+    2: 'light_diya',
+    3: 'japa_108',
+    4: 'help_someone',
+    5: 'evening_aarti',
+    6: 'share_wisdom',
+    7: 'help_someone',
+  };
+
+  /// Select tasks for today from available templates (deterministic by weekday)
   List<DailyTaskTemplate> _selectDailyTasks(
     List<DailyTaskTemplate> templates,
     int currentStreak,
   ) {
+    final selectedSlugs = <String>{};
     final selectedTasks = <DailyTaskTemplate>[];
-    final categories = <String>{};
 
-    // Always include daily verse task
-    final dailyVerse = templates.where((t) => t.slug == 'daily_verse').firstOrNull;
-    if (dailyVerse != null) {
-      selectedTasks.add(dailyVerse);
-      categories.add(dailyVerse.category);
+    DailyTaskTemplate? _findBySlug(String slug) {
+      return templates.where((t) => t.slug == slug).firstOrNull;
     }
 
-    // Always include a meditation task
-    final meditationTasks = templates
-        .where((t) => t.category == 'meditation' && t.slug != 'silent_hour')
-        .toList();
-    if (meditationTasks.isNotEmpty) {
-      meditationTasks.shuffle();
-      selectedTasks.add(meditationTasks.first);
-      categories.add('meditation');
-    }
-
-    // Add tasks from other categories (diversify)
-    final remainingTemplates = templates
-        .where((t) => !selectedTasks.contains(t))
-        .toList();
-    remainingTemplates.shuffle();
-
-    // Add 2-4 more tasks based on streak
-    final additionalCount = currentStreak >= 21 ? 4 : (currentStreak >= 7 ? 3 : 2);
-    
-    for (final template in remainingTemplates) {
-      if (selectedTasks.length >= additionalCount + 2) break;
-      
-      // Prefer tasks from categories not yet added
-      if (!categories.contains(template.category) || selectedTasks.length < 4) {
-        selectedTasks.add(template);
-        categories.add(template.category);
+    void _addIfAvailable(String slug) {
+      if (selectedSlugs.contains(slug)) return;
+      final t = _findBySlug(slug);
+      if (t != null) {
+        selectedTasks.add(t);
+        selectedSlugs.add(slug);
       }
     }
+
+    // ── Core tasks (always present) ──
+    _addIfAvailable('daily_verse');
+    _addIfAvailable('daily_story');
+    _addIfAvailable('donate');
+    _addIfAvailable('gratitude_practice');
+    _addIfAvailable('japa_108');
+
+    // ── Meditation slot (weekday-based) ──
+    final weekday = AppClock.now().weekday; // 1=Mon .. 7=Sun
+    final meditationSlug = _meditationByWeekday[weekday] ?? 'daily_meditation';
+    _addIfAvailable(meditationSlug);
+
+    // ── Extra slot (weekday-based) ──
+    final extraSlug = _extraByWeekday[weekday] ?? 'help_someone';
+    _addIfAvailable(extraSlug);
 
     return selectedTasks;
   }
@@ -198,7 +214,7 @@ class DailyTaskRepository {
           .from('user_daily_tasks')
           .update({
             'status': 'completed',
-            'completed_at': DateTime.now().toIso8601String(),
+            'completed_at': AppClock.now().toIso8601String(),
             'coins_earned': coinReward,
             'karma_earned': karmaReward,
           })
@@ -258,7 +274,7 @@ class DailyTaskRepository {
     if (_userId == null) return 0;
 
     try {
-      final dateStr = DateTime.now().toIso8601String().split('T')[0];
+      final dateStr = AppClock.todayString();
       
       final response = await _supabase
           .from('user_daily_tasks')
@@ -279,7 +295,7 @@ class DailyTaskRepository {
     if (_userId == null) return {};
 
     try {
-      final endDate = DateTime.now();
+      final endDate = AppClock.now();
       final startDate = endDate.subtract(Duration(days: days));
       
       final response = await _supabase

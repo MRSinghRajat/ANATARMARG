@@ -124,6 +124,7 @@ class UserDailyTask {
   bool get isCompleted => status == TaskStatus.completed;
   bool get isPending => status == TaskStatus.pending;
 
+  String get slug => template?.slug ?? dynamicContent['slug'] as String? ?? '';
   String get title => template?.title ?? dynamicContent['title'] as String? ?? 'Task';
   String? get titleHindi => template?.titleHindi ?? dynamicContent['title_hindi'] as String?;
   String? get description => template?.description ?? dynamicContent['description'] as String?;

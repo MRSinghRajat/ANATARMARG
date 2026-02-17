@@ -202,7 +202,7 @@ class _SubscriptionDevSettingsState extends State<SubscriptionDevSettings> {
               style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
             ),
             value: _devModeEnabled,
-            activeColor: AppColors.primaryOrange,
+            activeThumbColor: AppColors.primaryOrange,
             onChanged: (value) async {
               if (value) {
                 await _premium.enableDevMode();
@@ -227,7 +227,7 @@ class _SubscriptionDevSettingsState extends State<SubscriptionDevSettings> {
                 style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
               ),
               value: _isPremiumOverride,
-              activeColor: Colors.green,
+              activeThumbColor: Colors.green,
               onChanged: (value) async {
                 await _premium.setPremiumOverride(value);
                 setState(() => _isPremiumOverride = value);

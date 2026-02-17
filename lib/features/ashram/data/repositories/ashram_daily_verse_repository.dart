@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/utils/app_clock.dart';
 import '../../../books/data/datasources/supabase_verse_datasource.dart'
     show VerseWithTranslations;
 import '../../../books/data/repositories/chapter_repository.dart';
@@ -70,7 +71,7 @@ class AshramDailyVerseRepository {
 
     // Last resort: show a static verse so user always has something
     return AshramDailyVerseModel(
-      id: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'fallback_${AppClock.now().millisecondsSinceEpoch}',
       bookName: 'Bhagavad Gita',
       chapterName: 'Chapter 2',
       verseNumber: '47',
@@ -90,13 +91,14 @@ class AshramDailyVerseRepository {
   }
 
   String _todayString() {
-    final n = DateTime.now();
+    final n = AppClock.now();
     return '${n.year}_${n.month}_${n.day}';
   }
 
   Future<AshramDailyVerseModel?> _getVerseFromSupabase() async {
     final random = Random();
-    for (var i = 0; i < 5; i++) {
+    // Reduced from 5 to 2 retries for faster loading
+    for (var i = 0; i < 2; i++) {
       final bookId = _sourceBooks[random.nextInt(_sourceBooks.length)];
       final chapters = await _chapterRepository.getChaptersForBook(bookId);
       if (chapters.isEmpty) continue;
@@ -106,10 +108,13 @@ class AshramDailyVerseRepository {
       if (verses.isEmpty) continue;
 
       final v = verses[random.nextInt(verses.length)];
-      final dailyLife = await _getDailyLifeImpact(v);
       final bookName = _bookDisplayName(bookId);
 
-      return AshramDailyVerseModel(
+      // Use a fast local reflection first; GPT reflection loads lazily
+      // when user opens the verse detail screen
+      final quickReflection = _getQuickReflection(v, bookName);
+
+      final verse = AshramDailyVerseModel(
         id: v.verse.id,
         bookName: bookName,
         chapterName: chapter.title,
@@ -119,11 +124,55 @@ class AshramDailyVerseRepository {
           return s.isNotEmpty ? s : v.verse.verseNumberDisplay;
         }(),
         hindiOrEnglishText: _getHindiOrEnglish(v),
-        dailyLifeImpact: dailyLife,
+        dailyLifeImpact: quickReflection,
         source: 'supabase',
       );
+
+      // Fire-and-forget: fetch GPT reflection in background and update cache
+      _fetchAndCacheGptReflection(v, bookName, verse);
+
+      return verse;
     }
     return null;
+  }
+
+  /// Fast local reflection without GPT call
+  String _getQuickReflection(VerseWithTranslations v, String bookName) {
+    return 'Reflect on this verse from $bookName and consider how '
+        'its wisdom can guide your actions today. Meditate on its meaning '
+        'and apply it with compassion in your daily life.';
+  }
+
+  /// Background: fetch GPT reflection and update the cache
+  void _fetchAndCacheGptReflection(
+    VerseWithTranslations v,
+    String bookName,
+    AshramDailyVerseModel verse,
+  ) async {
+    try {
+      final text = _getHindiOrEnglish(v);
+      final reflection = await _gptService.getVerseReflection(
+        book: bookName,
+        chapterId: v.verse.chapterId,
+        verseNumber: v.verse.verseNumberDisplay,
+        verseText: text,
+      );
+      // Update cache with the richer GPT reflection
+      final prefs = await SharedPreferences.getInstance();
+      final updated = AshramDailyVerseModel(
+        id: verse.id,
+        bookName: verse.bookName,
+        chapterName: verse.chapterName,
+        verseNumber: verse.verseNumber,
+        sanskritText: verse.sanskritText,
+        hindiOrEnglishText: verse.hindiOrEnglishText,
+        dailyLifeImpact: reflection,
+        source: verse.source,
+      );
+      await _cacheVerse(prefs, _todayString(), updated);
+    } catch (e) {
+      debugPrint('AshramDailyVerse: Background GPT reflection failed: $e');
+    }
   }
 
   Future<AshramDailyVerseModel> _getVerseFromGpt() async {
@@ -163,21 +212,6 @@ class AshramDailyVerseRepository {
     final hi = v.hindiTranslation;
     if (hi != null && hi.text.isNotEmpty) return hi.text;
     return v.primaryTranslation?.text ?? '';
-  }
-
-  Future<String> _getDailyLifeImpact(VerseWithTranslations v) async {
-    final text = _getHindiOrEnglish(v);
-    try {
-      final reflection = await _gptService.getVerseReflection(
-        book: _bookDisplayName(v.verse.bookId),
-        chapterId: v.verse.chapterId,
-        verseNumber: v.verse.verseNumberDisplay,
-        verseText: text,
-      );
-      return reflection;
-    } catch (e) {
-      return 'Reflect on this wisdom and how it can guide your actions today. Apply it with compassion in your daily interactions.';
-    }
   }
 
   String _bookDisplayName(String bookId) {

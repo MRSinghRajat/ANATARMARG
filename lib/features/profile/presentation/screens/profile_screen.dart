@@ -268,7 +268,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [
                       AppColors.primaryOrange,
                       AppColors.deepPurple,
@@ -357,7 +357,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
+                          gradient: const LinearGradient(
                             colors: [Colors.amber, Colors.orange],
                           ),
                           borderRadius: BorderRadius.circular(8),
@@ -531,7 +531,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ],
                     ),
                   ),
-                  Icon(
+                  const Icon(
                     Icons.chevron_right,
                     color: Colors.white38,
                     size: 20,
@@ -682,7 +682,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   value: _isSoundEnabled,
                   onChanged: (_) => _toggleSound(),
                   activeTrackColor: AppColors.primaryOrange.withOpacity(0.5),
-                  activeColor: AppColors.primaryOrange,
+                  activeThumbColor: AppColors.primaryOrange,
                 ),
               ),
               

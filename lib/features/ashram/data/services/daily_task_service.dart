@@ -48,11 +48,10 @@ class DailyTaskService {
   }
 
   /// Initialize and load today's data
+  /// Progress must load first — task generation depends on it.
   Future<void> initialize() async {
-    await Future.wait([
-      _loadProgress(),
-      _loadTodaysTasks(),
-    ]);
+    await _loadProgress();
+    await _loadTodaysTasks();
   }
 
   /// Load user's spiritual progress
@@ -81,83 +80,121 @@ class DailyTaskService {
     await initialize();
   }
 
-  /// Complete a task
+  /// Complete a task with optimistic UI update.
+  /// Updates the local list immediately, then persists to server in background.
   Future<TaskCompletionResult> completeTask(UserDailyTask task) async {
+    // ── Optimistic update: flip status locally and notify listeners NOW ──
+    final optimistic = task.copyWith(
+      status: TaskStatus.completed,
+      completedAt: DateTime.now(),
+      coinsEarned: task.coinReward,
+      karmaEarned: task.karmaReward,
+    );
+    _replaceTask(task.id, optimistic);
+    _tasksController.add(_currentTasks);
+
+    // ── Background: persist to server (fire-and-forget) ──
+    _persistCompletion(task);
+
+    return TaskCompletionResult(
+      success: true,
+      coinsEarned: task.coinReward,
+      karmaEarned: task.karmaReward,
+      experienceEarned: _calculateExperience(task),
+      newStreak: _currentProgress?.currentStreak ?? 0,
+      message: 'Task completed! +${task.coinReward} coins',
+    );
+  }
+
+  /// Heavy server work runs asynchronously after optimistic update.
+  Future<void> _persistCompletion(UserDailyTask task) async {
     try {
-      // Mark task as completed
       final success = await _taskRepository.completeTask(task.id);
       if (!success) {
-        return TaskCompletionResult(
-          success: false,
-          message: 'Failed to complete task',
-        );
+        // Revert optimistic update on failure
+        final reverted = task.copyWith(status: TaskStatus.pending);
+        _replaceTask(task.id, reverted);
+        _tasksController.add(_currentTasks);
+        return;
       }
 
-      // Add coins and karma
-      await _coinService.addCoins(task.coinReward);
-
-      // Update progress
-      final updatedProgress = await _progressRepository.recordTaskCompletion(
-        taskCategory: task.category,
-        meditationMinutes: task.estimatedMinutes,
-        experienceGained: _calculateExperience(task),
-      );
-
-      if (updatedProgress != null) {
-        _currentProgress = updatedProgress;
-        _progressController.add(_currentProgress);
-
-        // Check for newly unlocked achievements
-        final newAchievements = await _achievementRepository.checkAndUnlockAchievements(
-          updatedProgress,
-        );
-
-        // Award achievements
-        for (final achievement in newAchievements) {
-          await _coinService.addCoins(achievement.coinReward);
-          _achievementController.add(achievement);
-        }
-
-        // Check for first task ever achievement
-        if (updatedProgress.totalTasksCompleted == 1) {
-          final firstDawn = await _achievementRepository.unlockSpecialAchievement('first_dawn');
-          if (firstDawn != null) {
-            await _coinService.addCoins(firstDawn.coinReward);
-            _achievementController.add(firstDawn);
+      // Run coin + progress + achievement calls in parallel where possible
+      await Future.wait([
+        _coinService.addCoins(task.coinReward),
+        _progressRepository.recordTaskCompletion(
+          taskCategory: task.category,
+          meditationMinutes: task.estimatedMinutes,
+          experienceGained: _calculateExperience(task),
+        ).then((updatedProgress) async {
+          if (updatedProgress != null) {
+            _currentProgress = updatedProgress;
+            _progressController.add(_currentProgress);
+            // Check achievements in background
+            _checkAchievements(updatedProgress);
           }
-        }
-      }
-
-      // Reload tasks to get updated state
-      await _loadTodaysTasks();
-
-      return TaskCompletionResult(
-        success: true,
-        coinsEarned: task.coinReward,
-        karmaEarned: task.karmaReward,
-        experienceEarned: _calculateExperience(task),
-        newStreak: _currentProgress?.currentStreak ?? 0,
-        message: 'Task completed! +${task.coinReward} coins',
-      );
+        }),
+      ]);
     } catch (e) {
-      print('Error completing task: $e');
-      return TaskCompletionResult(
-        success: false,
-        message: 'Error completing task',
-      );
+      print('Error persisting task completion: $e');
     }
   }
 
-  /// Uncomplete a task (for toggle functionality)
+  /// Check and award achievements (background, non-blocking).
+  Future<void> _checkAchievements(UserSpiritualProgress progress) async {
+    try {
+      final newAchievements =
+          await _achievementRepository.checkAndUnlockAchievements(progress);
+      for (final achievement in newAchievements) {
+        await _coinService.addCoins(achievement.coinReward);
+        _achievementController.add(achievement);
+      }
+      if (progress.totalTasksCompleted == 1) {
+        final firstDawn =
+            await _achievementRepository.unlockSpecialAchievement('first_dawn');
+        if (firstDawn != null) {
+          await _coinService.addCoins(firstDawn.coinReward);
+          _achievementController.add(firstDawn);
+        }
+      }
+    } catch (e) {
+      print('Error checking achievements: $e');
+    }
+  }
+
+  /// Replace a task in the local list by ID.
+  void _replaceTask(String taskId, UserDailyTask replacement) {
+    final idx = _currentTasks.indexWhere((t) => t.id == taskId);
+    if (idx != -1) {
+      _currentTasks = List<UserDailyTask>.from(_currentTasks)
+        ..[idx] = replacement;
+    }
+  }
+
+  /// Uncomplete a task with optimistic UI update.
   Future<bool> uncompleteTask(UserDailyTask task) async {
+    // ── Optimistic update ──
+    final optimistic = task.copyWith(
+      status: TaskStatus.pending,
+      completedAt: null,
+      coinsEarned: 0,
+      karmaEarned: 0,
+    );
+    _replaceTask(task.id, optimistic);
+    _tasksController.add(_currentTasks);
+
+    // ── Background persist ──
     try {
       final success = await _taskRepository.uncompleteTask(task.id);
-      if (success) {
-        await _loadTodaysTasks();
+      if (!success) {
+        // Revert
+        _replaceTask(task.id, task);
+        _tasksController.add(_currentTasks);
       }
       return success;
     } catch (e) {
       print('Error uncompleting task: $e');
+      _replaceTask(task.id, task);
+      _tasksController.add(_currentTasks);
       return false;
     }
   }

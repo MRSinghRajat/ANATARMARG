@@ -478,7 +478,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                           color: AppColors.ashramSaffron.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.back_hand_outlined,
                           color: AppColors.ashramSaffron,
                           size: 40,

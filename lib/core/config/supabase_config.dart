@@ -46,4 +46,7 @@ class SupabaseConfig {
       'granthalaya_audio_in_progress';
   static const String granthalayaChantsTable = 'granthalaya_chants';
   static const String userAudioProgressTable = 'user_audio_progress';
+
+  // Daily Stories
+  static const String dailyStoriesTable = 'daily_stories';
 }

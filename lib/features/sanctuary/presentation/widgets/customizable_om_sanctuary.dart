@@ -2198,7 +2198,11 @@ class _FramePainter extends CustomPainter {
           final wave = math.sin(i * 6 * math.pi / 180) * radius * 0.05;
           final r = radius + wave;
           final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
-          if (i == 0) vinePath.moveTo(p.dx, p.dy); else vinePath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            vinePath.moveTo(p.dx, p.dy);
+          } else {
+            vinePath.lineTo(p.dx, p.dy);
+          }
         }
         vinePath.close();
         canvas.drawPath(vinePath, paint..style = PaintingStyle.stroke);
@@ -2211,7 +2215,11 @@ class _FramePainter extends CustomPainter {
           final angle = i * 2 * math.pi / 24;
           final r = (i % 2 == 0) ? radius : radius * 0.88;
           final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
-          if (i == 0) dragonPath.moveTo(p.dx, p.dy); else dragonPath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            dragonPath.moveTo(p.dx, p.dy);
+          } else {
+            dragonPath.lineTo(p.dx, p.dy);
+          }
         }
         dragonPath.close();
         canvas.drawPath(dragonPath, paint);
@@ -2289,7 +2297,11 @@ class _FramePainter extends CustomPainter {
           final angle = t * 4 * math.pi;
           final r = radius * 0.3 + radius * 0.7 * t;
           final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
-          if (i == 0) conchPath.moveTo(p.dx, p.dy); else conchPath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            conchPath.moveTo(p.dx, p.dy);
+          } else {
+            conchPath.lineTo(p.dx, p.dy);
+          }
         }
         canvas.drawPath(conchPath, paint..color = color.withOpacity(0.4));
         break;
@@ -2315,7 +2327,11 @@ class _FramePainter extends CustomPainter {
           final angle = i * 2 * math.pi / 16;
           final tipR = (i % 2 == 0) ? radius * 1.1 : radius * 0.9;
           final p = Offset(center.dx + tipR * math.cos(angle), center.dy + tipR * math.sin(angle));
-          if (i == 0) flamePath.moveTo(p.dx, p.dy); else flamePath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            flamePath.moveTo(p.dx, p.dy);
+          } else {
+            flamePath.lineTo(p.dx, p.dy);
+          }
         }
         flamePath.close();
         canvas.drawPath(flamePath, paint);
@@ -2333,7 +2349,11 @@ class _FramePainter extends CustomPainter {
           final angle = i * math.pi / 5 - math.pi / 2;
           final r = (i % 2 == 0) ? radius : radius * 0.5;
           final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
-          if (i == 0) starPath.moveTo(p.dx, p.dy); else starPath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            starPath.moveTo(p.dx, p.dy);
+          } else {
+            starPath.lineTo(p.dx, p.dy);
+          }
         }
         starPath.close();
         canvas.drawPath(starPath, paint);
@@ -2358,7 +2378,11 @@ class _FramePainter extends CustomPainter {
           final angle = t * 6 * math.pi;
           final r = radius * 0.2 + radius * 0.8 * t;
           final p = Offset(center.dx + r * math.cos(angle), center.dy + r * math.sin(angle));
-          if (i == 0) spiralPath.moveTo(p.dx, p.dy); else spiralPath.lineTo(p.dx, p.dy);
+          if (i == 0) {
+            spiralPath.moveTo(p.dx, p.dy);
+          } else {
+            spiralPath.lineTo(p.dx, p.dy);
+          }
         }
         canvas.drawPath(spiralPath, paint..color = color.withOpacity(0.3));
         break;
@@ -2692,7 +2716,7 @@ class _SpecialEffectPainter extends CustomPainter {
 
   void _drawLightningBolts(Canvas canvas, Offset center, double radius) {
     final random = math.Random(42);
-    final boltCount = 4;
+    const boltCount = 4;
     
     for (var b = 0; b < boltCount; b++) {
       if ((progress * 10 + b) % 1.0 < 0.7) continue; // Intermittent flash

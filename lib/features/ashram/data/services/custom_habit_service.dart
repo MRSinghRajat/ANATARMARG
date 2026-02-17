@@ -18,7 +18,7 @@ class CustomHabitService {
 
   // Cached data
   List<CustomHabit> _habits = [];
-  Set<String> _completedTodayIds = {};
+  final Set<String> _completedTodayIds = {};
 
   List<CustomHabit> get habits => _habits;
   List<CustomHabit> get todaysHabits => 

@@ -8,6 +8,7 @@ class DailyTaskCard extends StatelessWidget {
   final UserDailyTask task;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onNavigate;
   final bool showCategory;
   
   /// Key for the rewards section - used for flying coin animation
@@ -18,6 +19,7 @@ class DailyTaskCard extends StatelessWidget {
     required this.task,
     required this.onTap,
     this.onLongPress,
+    this.onNavigate,
     this.showCategory = true,
     this.rewardsKey,
   });
@@ -25,7 +27,7 @@ class DailyTaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: onNavigate ?? onTap,
       onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -54,11 +56,17 @@ class DailyTaskCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Checkbox
-            _buildCheckbox(),
-            const SizedBox(width: 12),
+            // Checkbox - tapping this toggles completion
+            GestureDetector(
+              onTap: onTap,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildCheckbox(),
+              ),
+            ),
             
-            // Task info
+            // Task info - tapping this navigates
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,6 +108,16 @@ class DailyTaskCard extends StatelessWidget {
                 ],
               ),
             ),
+            
+            // Navigate arrow for tasks with screens
+            if (onNavigate != null) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white.withOpacity(0.4),
+                size: 20,
+              ),
+            ],
             
             // Rewards
             KeyedSubtree(
