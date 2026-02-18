@@ -1,0 +1,41 @@
+﻿Total sacred texts: 2
+
+--- 1. Hanuman Chalisa ---
+  slug: hanuman-chalisa, type: chalisa, deity: Hanuman, featured: True
+python : Traceback (most 
+recent call last):
+At line:1 char:1
++ python scripts/check_sacre
+d_texts.py 2>&1 | Out-File 
+-FilePath c:\ant ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Trace  
+  back (most recent call    
+ last)::String) [], Remo    
+teException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+  File "C:\antarMargAntigrav
+ity\scripts\check_sacred_tex
+ts.py", line 11, in <module>
+    print(f"  title_hindi: 
+{t.get('title_hindi')}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\enc
+odings\cp1252.py", line 19, 
+in encode
+    return codecs.charmap_en
+code(input,self.errors,encod
+ing_table)[0]
+           ~~~~~~~~~~~~~~~~~
+~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^
+UnicodeEncodeError: 
+'charmap' codec can't 
+encode characters in 
+position 15-20: character 
+maps to <undefined>

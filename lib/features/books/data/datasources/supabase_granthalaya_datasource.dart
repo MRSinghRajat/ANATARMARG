@@ -298,9 +298,15 @@ class SupabaseGranthalayaDataSource {
       }
       final response = await query.order('order_index', ascending: true);
       final list = _toList(response);
-      return list
-          .map((j) => SacredStoryModel.fromJson(j as Map<String, dynamic>))
-          .toList();
+      final results = <SacredStoryModel>[];
+      for (int i = 0; i < list.length; i++) {
+        try {
+          results.add(SacredStoryModel.fromJson(list[i] as Map<String, dynamic>));
+        } catch (e) {
+          print('[SacredStories] Parse error at row $i: $e');
+        }
+      }
+      return results;
     } catch (e) {
       print('Error fetching sacred stories: $e');
       return [];

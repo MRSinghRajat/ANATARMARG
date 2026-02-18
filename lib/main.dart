@@ -2,6 +2,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/app_router.dart';
@@ -53,6 +54,10 @@ void main() async {
 
   // Initialize sound manager and start playing bird singing sound
   await SoundManager().initialize();
+
+  // Disable Google Fonts runtime fetching to prevent ImageDecoder errors.
+  // Fonts are bundled locally in assets/fonts/ instead.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // Check if onboarding has been completed
   _onboardingComplete = await SpiritualOnboardingScreen.isOnboardingComplete();

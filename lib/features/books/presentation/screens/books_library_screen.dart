@@ -15,6 +15,8 @@ import 'full_audio_player_screen.dart';
 import 'deity_detail_screen.dart';
 import 'sacred_text_reader_screen.dart';
 import 'sacred_story_reader_screen.dart';
+import 'all_sacred_stories_screen.dart';
+import 'all_sacred_texts_screen.dart';
 
 /// Granthalaya - Academic Dashboard. Sacred Texts on top, Foundation & Concepts, Study Resources.
 class BooksLibraryScreen extends ConsumerStatefulWidget {
@@ -157,11 +159,11 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
           SliverToBoxAdapter(child: _buildModeToggle()),
           SliverToBoxAdapter(child: _buildInProgressSection()),
+          SliverToBoxAdapter(child: _buildSacredTextsSection()),
           SliverToBoxAdapter(child: _buildSacredLibrarySection()),
           SliverToBoxAdapter(child: _buildSacredStoriesSection()),
           SliverToBoxAdapter(child: _buildChantsSection()),
           SliverToBoxAdapter(child: _buildExploreDeitiesSection()),
-          SliverToBoxAdapter(child: _buildSacredTextsSection()),
           SliverToBoxAdapter(child: _buildResourceLibrarySection()),
           SliverToBoxAdapter(child: _buildDeepDiveSection()),
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -838,6 +840,23 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
+  // ── Deity gradient colors for book title covers ──
+  static const _deityGradients = <String, List<Color>>{
+    'shiva': [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+    'krishna': [Color(0xFF0E7490), Color(0xFF0891B2)],
+    'hanuman': [Color(0xFFEA580C), Color(0xFFF59E0B)],
+    'ganesha': [Color(0xFFE11D48), Color(0xFFF43F5E)],
+  };
+
+  List<Color> _getDeityGradient(String? slug) {
+    if (slug == null) return const [Color(0xFFC5A059), Color(0xFFA88B3D)];
+    return _deityGradients[slug.toLowerCase()] ??
+        const [Color(0xFFC5A059), Color(0xFFA88B3D)];
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
   // ── Story category icon mapping ──
   static const _storyCategoryIcons = <String, IconData>{
     'wisdom': Icons.psychology,
@@ -873,15 +892,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   Widget _buildSacredStoriesSection() {
     return Consumer(
       builder: (context, ref, _) {
-        final selectedCategory = ref.watch(selectedSacredStoryCategoryProvider);
         final storiesAsync = ref.watch(sacredStoriesCollectionProvider(null));
-        final categoriesAsync = ref.watch(sacredStoryCategoriesProvider);
-
-        final categories = categoriesAsync.valueOrNull ?? [];
         final allStories = storiesAsync.valueOrNull ?? [];
-        final stories = selectedCategory == null
-            ? allStories
-            : allStories.where((s) => s.category == selectedCategory).toList();
+        // Show only top 5 featured/ordered stories
+        final stories = allStories.take(5).toList();
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 48),
@@ -892,62 +906,69 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      'Sacred Stories',
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.matteGold.withOpacity(0.9),
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sacred Stories',
+                          style: GoogleFonts.crimsonPro(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.matteGold.withOpacity(0.9),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${allStories.length} stories',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: AppColors.zinc500,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '${stories.length} Stories',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.matteGold.withOpacity(0.4),
-                        letterSpacing: 2,
+                    if (allStories.length > 5)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AllSacredStoriesScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppColors.matteGold.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'View All',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.matteGold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_forward,
+                                  size: 14, color: AppColors.matteGold),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              if (categories.isNotEmpty)
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    scrollDirection: Axis.horizontal,
-                    physics: const ClampingScrollPhysics(),
-                    itemCount: categories.length + 1,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (_, i) {
-                      if (i == 0) {
-                        final isActive = selectedCategory == null;
-                        return _buildStoryCategoryChip(
-                          label: 'All',
-                          isActive: isActive,
-                          onTap: () => ref
-                              .read(selectedSacredStoryCategoryProvider.notifier)
-                              .state = null,
-                        );
-                      }
-                      final cat = categories[i - 1];
-                      final isActive = selectedCategory == cat;
-                      return _buildStoryCategoryChip(
-                        label: '${cat[0].toUpperCase()}${cat.substring(1)}',
-                        isActive: isActive,
-                        onTap: () => ref
-                            .read(selectedSacredStoryCategoryProvider.notifier)
-                            .state = cat,
-                      );
-                    },
-                  ),
-                ),
               const SizedBox(height: 20),
               if (storiesAsync.isLoading)
                 const SizedBox(
@@ -967,7 +988,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        'No stories found in this category.',
+                        'No stories available yet.',
                         style: GoogleFonts.inter(
                           color: AppColors.zinc500,
                           fontSize: 14,
@@ -989,21 +1010,8 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
                     ),
-                    itemCount: stories.length > 20 ? 20 : stories.length,
+                    itemCount: stories.length,
                     itemBuilder: (_, i) => _buildSacredStoryCard(stories[i]),
-                  ),
-                ),
-              if (stories.length > 20)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Center(
-                    child: Text(
-                      'Showing 20 of ${stories.length}',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: AppColors.zinc500,
-                      ),
-                    ),
                   ),
                 ),
             ],
@@ -1054,9 +1062,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   Widget _buildSacredStoryCard(SacredStoryModel story) {
     final gradientColors = _getStoryGradient(story.category);
+    final deityColors = _getDeityGradient(story.deitySlug);
+    final deityName = _capitalize(story.deitySlug ?? '');
     final coverUrl = story.coverImageUrl;
     final hasImage = coverUrl != null && coverUrl.isNotEmpty;
-    final icon = _storyCategoryIcons[story.category.toLowerCase()] ?? Icons.auto_stories;
     final pageCount = story.pages.length;
 
     return Material(
@@ -1088,14 +1097,17 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
+                // Background: cover image or deity name book-cover
                 if (hasImage)
                   CachedNetworkImage(
                     imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _buildStoryGradientBg(gradientColors, icon),
+                    errorWidget: (_, __, ___) =>
+                        _buildDeityNameCover(deityName, deityColors),
                   )
                 else
-                  _buildStoryGradientBg(gradientColors, icon),
+                  _buildDeityNameCover(deityName, deityColors),
+                // Bottom gradient overlay for readability
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -1103,13 +1115,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.3),
-                        Colors.black.withOpacity(0.85),
+                        Colors.black.withOpacity(0.2),
+                        Colors.black.withOpacity(0.88),
                       ],
-                      stops: const [0.0, 0.5, 1.0],
+                      stops: const [0.0, 0.45, 1.0],
                     ),
                   ),
                 ),
+                // Bottom content
                 Positioned(
                   left: 12,
                   right: 12,
@@ -1126,7 +1139,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          '${story.category[0].toUpperCase()}${story.category.substring(1)}',
+                          _capitalize(story.category),
                           style: GoogleFonts.inter(
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -1186,25 +1199,78 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _buildStoryGradientBg(List<Color> colors, IconData icon) {
+  /// Book-cover style card with deity name in gradient
+  Widget _buildDeityNameCover(String deityName, List<Color> colors) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            colors[0].withOpacity(0.3),
-            colors[1].withOpacity(0.15),
+            colors[0].withOpacity(0.25),
+            colors[1].withOpacity(0.12),
             AppColors.charcoalDark,
           ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
-      child: Center(
-        child: Icon(
-          icon,
-          size: 48,
-          color: colors[0].withOpacity(0.25),
-        ),
+      child: Stack(
+        children: [
+          // Decorative book-style border
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colors[0].withOpacity(0.15),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          // Om symbol watermark
+          Positioned(
+            right: 10,
+            top: 12,
+            child: Text(
+              'ॐ',
+              style: TextStyle(
+                fontSize: 28,
+                color: colors[0].withOpacity(0.12),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          // Deity name centered
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 40),
+              child: ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colors[0],
+                    colors[1],
+                    Colors.white.withOpacity(0.8),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  deityName,
+                  style: GoogleFonts.crimsonPro(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                    height: 1,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1612,64 +1678,134 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
+  // Deity gradient map for sacred text tiles
+  static const _textDeityGradients = <String, List<Color>>{
+    'shiva': [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+    'krishna': [Color(0xFF0E7490), Color(0xFF0891B2)],
+    'hanuman': [Color(0xFFEA580C), Color(0xFFF59E0B)],
+    'ganesha': [Color(0xFFE11D48), Color(0xFFF43F5E)],
+  };
+
+
+  List<Color> _getTextDeityGradient(String? slug) {
+    if (slug == null) return const [Color(0xFFC5A059), Color(0xFFA88B3D)];
+    return _textDeityGradients[slug.toLowerCase()] ??
+        const [Color(0xFFC5A059), Color(0xFFA88B3D)];
+  }
+
   Widget _buildSacredTextsSection() {
     return Consumer(
       builder: (context, ref, _) {
-        final textsAsync = ref.watch(featuredSacredTextsProvider);
-        return textsAsync.when(
-          data: (texts) {
-            if (texts.isEmpty) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Sacred Texts',
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.matteGold.withOpacity(0.9),
+        final textsAsync = ref.watch(sacredTextsProvider(null));
+        final allTexts = textsAsync.valueOrNull ?? [];
+        // Show only top 5
+        final texts = allTexts.take(5).toList();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 48),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sacred Texts',
+                          style: GoogleFonts.crimsonPro(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.matteGold.withOpacity(0.9),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${allTexts.length} texts · Chalisas, Stotras & Mantras',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: AppColors.zinc500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (allTexts.length > 5)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AllSacredTextsScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppColors.matteGold.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'View All',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.matteGold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_forward,
+                                  size: 14, color: AppColors.matteGold),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Chalisas, Stotras & Mantras',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.matteGold.withOpacity(0.5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 150,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      physics: const ClampingScrollPhysics(),
-                      itemCount: texts.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (_, i) => _buildSacredTextTile(texts[i]),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            );
-          },
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+              const SizedBox(height: 16),
+              if (textsAsync.isLoading)
+                const SizedBox(
+                  height: 180,
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppColors.matteGold),
+                  ),
+                )
+              else if (texts.isEmpty)
+                const SizedBox.shrink()
+              else
+                SizedBox(
+                  height: 200,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    physics: const ClampingScrollPhysics(),
+                    itemCount: texts.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 14),
+                    itemBuilder: (_, i) => _buildSacredTextTile(texts[i]),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
   }
 
   Widget _buildSacredTextTile(SacredTextModel text) {
+    final deityColors = _getTextDeityGradient(text.deitySlug);
+    final deityName = _capitalize(text.deitySlug ?? '');
+
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -1678,84 +1814,183 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         ),
       ),
       child: Container(
-        width: 210,
-        padding: const EdgeInsets.all(16),
+        width: 160,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.matteGold.withOpacity(0.12),
-              AppColors.matteGold.withOpacity(0.04),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.matteGold.withOpacity(0.12)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.matteGold.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                text.typeLabel,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.matteGold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              text.title,
-              style: GoogleFonts.crimsonPro(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (text.titleHindi != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                text.titleHindi!,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: Colors.white54,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const Spacer(),
-            Row(
-              children: [
-                if (text.verseCount != null) ...[
-                  Icon(Icons.format_list_numbered,
-                      size: 12,
-                      color: AppColors.matteGold.withOpacity(0.5)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${text.verseCount} verses',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: Colors.white38,
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                Icon(Icons.arrow_forward_ios,
-                    size: 12,
-                    color: AppColors.matteGold.withOpacity(0.4)),
-              ],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: deityColors[0].withOpacity(0.15)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Deity gradient background
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      deityColors[0].withOpacity(0.28),
+                      deityColors[1].withOpacity(0.14),
+                      AppColors.charcoalDark,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    // Book-style border
+                    Positioned.fill(
+                      child: Container(
+                        margin: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: deityColors[0].withOpacity(0.12),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Om watermark
+                    Positioned(
+                      right: 12,
+                      top: 14,
+                      child: Text(
+                        'ॐ',
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: deityColors[0].withOpacity(0.12),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    // Deity name
+                    if (deityName.isNotEmpty)
+                      Positioned(
+                        left: 16,
+                        top: 18,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              deityColors[0],
+                              deityColors[1],
+                              Colors.white.withOpacity(0.7),
+                            ],
+                          ).createShader(bounds),
+                          child: Text(
+                            deityName,
+                            style: GoogleFonts.crimsonPro(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Bottom gradient
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.15),
+                      Colors.black.withOpacity(0.92),
+                    ],
+                    stops: const [0.0, 0.4, 1.0],
+                  ),
+                ),
+              ),
+              // Bottom content
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Type badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: deityColors[0].withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        text.typeLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white.withOpacity(0.9),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      text.title,
+                      style: GoogleFonts.crimsonPro(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (text.titleHindi != null) ...[                   
+                      const SizedBox(height: 2),
+                      Text(
+                        text.titleHindi!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.matteGold.withOpacity(0.6),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (text.verseCount != null) ...[                       
+                          Icon(Icons.format_list_numbered,
+                              size: 11,
+                              color: AppColors.matteGold.withOpacity(0.5)),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${text.verseCount} verses',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppColors.matteGold.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

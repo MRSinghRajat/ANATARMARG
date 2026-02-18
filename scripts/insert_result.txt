@@ -1,0 +1,29 @@
+Updated Hanuman Chalisa English: 204
+Updated Shiv Tandav English: 204
+Existing slugs: {'hanuman-chalisa', 'shiv-tandav-stotram'}
+  OK: Shiva Aarti
+  OK: Maha Mrityunjaya Mantra
+  OK: Krishna Aarti
+  OK: Hare Krishna Maha Mantra
+  OK: Ganesh Aarti
+  OK: Ganesh Beej Mantra
+  OK: Hanuman Aarti
+  OK: Bajrang Baan
+  OK: Shiva Panchakshar Stotra
+  OK: Vishnu Sahasranama (Key Verses)
+  OK: Ganesh Atharvasheersha
+
+Final count: 13
+  [Hanuman] Hanuman Chalisa (chalisa) featured=True
+  [shiva] Shiv Tandav Stotram (stotra) featured=True
+  [shiva] Shiva Aarti (aarti) featured=True
+  [shiva] Maha Mrityunjaya Mantra (mantra) featured=True
+  [Krishna] Krishna Aarti (aarti) featured=True
+  [Krishna] Hare Krishna Maha Mantra (mantra) featured=True
+  [ganesha] Ganesh Aarti (aarti) featured=True
+  [ganesha] Ganesh Beej Mantra (mantra) featured=True
+  [Hanuman] Hanuman Aarti (aarti) featured=True
+  [Hanuman] Bajrang Baan (stotra) featured=True
+  [shiva] Shiva Panchakshar Stotra (stotra) featured=True
+  [Krishna] Vishnu Sahasranama (Key Verses) (sahasranama) featured=False
+  [ganesha] Ganesh Atharvasheersha (stotra) featured=False

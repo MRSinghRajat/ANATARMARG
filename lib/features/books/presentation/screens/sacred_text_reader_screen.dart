@@ -256,9 +256,10 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
   }
 
   Widget _buildMainText(SacredTextModel t) {
-    // EN = transliteration (Hindi in English alphabets), HI = original Hindi
-    final text =
-        _showHindi ? (t.textHindi ?? t.transliteration ?? '') : (t.transliteration ?? t.textHindi ?? '');
+    // HI = original Hindi, EN = English transliteration (Hindi pronunciation in English alphabets)
+    final text = _showHindi
+        ? (t.textHindi ?? t.textEnglish ?? t.transliteration ?? '')
+        : (t.textEnglish ?? t.transliteration ?? t.textHindi ?? '');
 
     if (text.isEmpty) {
       return Container(

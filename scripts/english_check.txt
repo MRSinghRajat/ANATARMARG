@@ -1,0 +1,24 @@
+Title: Hanuman Chalisa
+
+=== text_english (first 300 chars) ===
+॥ Doha ॥
+After cleansing the mirror of my mind with the dust of my Guru's lotus feet,
+I describe the pure glory of Sri Rama, which bestows the four fruits of life.
+Knowing myself to be ignorant, I remember Hanuman, Son of the Wind.
+Grant me strength, wisdom, and knowledge, and remove all afflictions
+
+=== text_hindi (first 300 chars) ===
+॥ दोहा ॥
+श्रीगुरु चरन सरोज रज, निज मनु मुकुरु सुधारि।
+बरनउँ रघुबर बिमल जसु, जो दायकु फल चारि॥
+बुद्धिहीन तनु जानिके, सुमिरौं पवन-कुमार।
+बल बुद्धि बिद्या देहु मोहिं, हरहु कलेस बिकार॥
+
+॥ चौपाई ॥
+जय हनुमान ज्ञान गुन सागर। जय कपीस तिहुँ लोक उजागर॥
+राम दूत अतुलित बल धामा। अंजनि-पुत्र पवनसुत नामा॥
+महाबीर ब
+
+=== UPDATE test ===
+Status: 204
+Body: 

@@ -1,0 +1,28 @@
+Columns: ['id', 'slug', 'title', 'title_hindi', 'type', 'deity_slug', 'text_hindi', 'text_english', 'transliteration', 'audio_url', 'duration_seconds', 'benefits', 'when_to_recite', 'verse_count', 'category', 'difficulty', 'is_featured', 'order_index', 'is_active', 'created_at', 'updated_at']
+
+  id: c7bcbf4c-d061-4ac1-b224-2d57bc02b1ad
+  slug: hanuman-chalisa
+  title: Hanuman Chalisa
+  title_hindi: हनुमान चालीसा
+  type: chalisa
+  deity_slug: Hanuman
+  text_hindi: ॥ दोहा ॥
+श्रीगुरु चरन सरोज रज, निज मनु मुकुरु सुधारि।
+बरनउँ रघुबर बिमल जसु, जो दायकु फल चारि॥
+बुद्धिहीन तनु जानिके, सुमि
+  text_english: ॥ Doha ॥
+After cleansing the mirror of my mind with the dust of my Guru's lotus feet,
+I describe the pure glory of Sri R
+  transliteration: None
+  audio_url: None
+  duration_seconds: None
+  benefits: Reciting Hanuman Chalisa removes fear, protects from evil spirits, grants courage and strength, fulfills desires, and in
+  when_to_recite: Daily — especially on Tuesdays and Saturdays. Also during times of fear, danger, or before important tasks.
+  verse_count: 40
+  category: daily_prayer
+  difficulty: beginner
+  is_featured: True
+  order_index: 1
+  is_active: True
+  created_at: 2026-02-16T15:49:43.765446+00:00
+  updated_at: 2026-02-16T15:49:43.765446+00:00

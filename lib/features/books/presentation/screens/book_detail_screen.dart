@@ -112,6 +112,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   }
 
   int get _currentChapterIndex {
+    if (_chapters.isEmpty) return 0;
     for (var i = 0; i < _chapters.length; i++) {
       final ch = _chapters[i];
       final total = _verseCountByChapter[ch.id] ?? 0;
