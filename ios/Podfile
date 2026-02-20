@@ -1,0 +1,188 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '13.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+  # AppCheckCore 11.2 pod tarball omits GACAppCheckSettings.m and GACAppCheck.m. Add both from official source so build and link succeed.
+  # https://github.com/google/app-check
+  core_dir = File.join(installer.sandbox.root, 'AppCheckCore', 'AppCheckCore', 'Sources', 'Core')
+  FileUtils.mkdir_p(core_dir)
+
+  # 1) GACAppCheckSettings.m
+  gac_settings_path = File.join(core_dir, 'GACAppCheckSettings.m')
+  unless File.exist?(gac_settings_path)
+  File.write(gac_settings_path, <<~'OBJC')
+    /*
+     * Copyright 2023 Google LLC
+     */
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckSettings.h"
+    NS_ASSUME_NONNULL_BEGIN
+    @implementation GACAppCheckSettings
+    @synthesize isTokenAutoRefreshEnabled = _isTokenAutoRefreshEnabled;
+    @end
+    NS_ASSUME_NONNULL_END
+  OBJC
+  end
+
+  # 2) GACAppCheck.m (pod also omits this; add file and register in Xcode project)
+  gac_main_path = File.join(core_dir, 'GACAppCheck.m')
+  gac_main_content = <<~'OBJC'
+    /*
+     * Copyright 2020 Google LLC
+     */
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheck.h"
+    #import <FBLPromises/FBLPromises.h>
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckErrors.h"
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckProvider.h"
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckSettings.h"
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckToken.h"
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckTokenDelegate.h"
+    #import "AppCheckCore/Sources/Public/AppCheckCore/GACAppCheckTokenResult.h"
+    #import "AppCheckCore/Sources/Core/Errors/GACAppCheckErrorUtil.h"
+    #import "AppCheckCore/Sources/Core/GACAppCheckLogger+Internal.h"
+    #import "AppCheckCore/Sources/Core/Storage/GACAppCheckStorage.h"
+    #import "AppCheckCore/Sources/Core/TokenRefresh/GACAppCheckTokenRefreshResult.h"
+    #import "AppCheckCore/Sources/Core/TokenRefresh/GACAppCheckTokenRefresher.h"
+    NS_ASSUME_NONNULL_BEGIN
+    static const NSTimeInterval kTokenExpirationThreshold = 5 * 60;
+    typedef void (^GACAppCheckTokenHandler)(GACAppCheckTokenResult *result);
+    @interface GACAppCheck ()
+    @property(nonatomic, readonly) NSString *serviceName;
+    @property(nonatomic, readonly) id appCheckProvider;
+    @property(nonatomic, readonly) id storage;
+    @property(nonatomic, readonly) id settings;
+    @property(nonatomic, readonly, nullable, weak) id tokenDelegate;
+    @property(nonatomic, readonly, nullable) id tokenRefresher;
+    @property(nonatomic, nullable) FBLPromise *ongoingRetrieveOrRefreshTokenPromise;
+    @end
+    @implementation GACAppCheck
+    - (instancetype)initWithServiceName:(NSString *)serviceName appCheckProvider:(id)appCheckProvider storage:(id)storage tokenRefresher:(id)tokenRefresher settings:(id)settings tokenDelegate:(nullable id)tokenDelegate {
+      self = [super init];
+      if (self) {
+        _serviceName = serviceName; _appCheckProvider = appCheckProvider; _storage = storage; _tokenRefresher = tokenRefresher; _settings = settings; _tokenDelegate = tokenDelegate;
+        __auto_type __weak weakSelf = self;
+        tokenRefresher.tokenRefreshHandler = ^(GACAppCheckTokenRefreshCompletion completion) { id strongSelf = weakSelf; [strongSelf periodicTokenRefreshWithCompletion:completion]; };
+      }
+      return self;
+    }
+    - (instancetype)initWithServiceName:(NSString *)serviceName resourceName:(NSString *)resourceName appCheckProvider:(id)appCheckProvider settings:(id)settings tokenDelegate:(nullable id)tokenDelegate keychainAccessGroup:(nullable NSString *)accessGroup {
+      GACAppCheckTokenRefreshResult *refreshResult = [[GACAppCheckTokenRefreshResult alloc] initWithStatusNever];
+      GACAppCheckTokenRefresher *tokenRefresher = [[GACAppCheckTokenRefresher alloc] initWithRefreshResult:refreshResult settings:settings];
+      NSString *tokenKey = [NSString stringWithFormat:@"app_check_token.%@.%@", serviceName, resourceName];
+      GACAppCheckStorage *storage = [[GACAppCheckStorage alloc] initWithTokenKey:tokenKey accessGroup:accessGroup];
+      return [self initWithServiceName:serviceName appCheckProvider:appCheckProvider storage:storage tokenRefresher:tokenRefresher settings:settings tokenDelegate:tokenDelegate];
+    }
+    - (void)tokenForcingRefresh:(BOOL)forcingRefresh completion:(GACAppCheckTokenHandler)handler {
+      [self retrieveOrRefreshTokenForcingRefresh:forcingRefresh].then(^id(GACAppCheckToken *token) { handler([[GACAppCheckTokenResult alloc] initWithToken:token]); return token; }).catch(^(NSError *error) { handler([[GACAppCheckTokenResult alloc] initWithError:error]); });
+    }
+    - (void)limitedUseTokenWithCompletion:(GACAppCheckTokenHandler)handler {
+      [self limitedUseToken].then(^id(GACAppCheckToken *token) { handler([[GACAppCheckTokenResult alloc] initWithToken:token]); return token; }).catch(^(NSError *error) { handler([[GACAppCheckTokenResult alloc] initWithError:error]); });
+    }
+    - (FBLPromise *)retrieveOrRefreshTokenForcingRefresh:(BOOL)forcingRefresh {
+      return [FBLPromise do:^id {
+        if (self.ongoingRetrieveOrRefreshTokenPromise == nil) {
+          self.ongoingRetrieveOrRefreshTokenPromise = [self createRetrieveOrRefreshTokenPromiseForcingRefresh:forcingRefresh].then(^GACAppCheckToken *(GACAppCheckToken *token) { self.ongoingRetrieveOrRefreshTokenPromise = nil; return token; }).recover(^NSError *(NSError *error) { self.ongoingRetrieveOrRefreshTokenPromise = nil; return error; });
+        }
+        return self.ongoingRetrieveOrRefreshTokenPromise;
+      }];
+    }
+    - (FBLPromise *)createRetrieveOrRefreshTokenPromiseForcingRefresh:(BOOL)forcingRefresh {
+      return [self getCachedValidTokenForcingRefresh:forcingRefresh].recover(^id(NSError *error) { return [self refreshToken]; });
+    }
+    - (FBLPromise *)getCachedValidTokenForcingRefresh:(BOOL)forcingRefresh {
+      if (forcingRefresh) { FBLPromise *p = [FBLPromise pendingPromise]; [p reject:[GACAppCheckErrorUtil cachedTokenNotFound]]; return p; }
+      return [self.storage getToken].then(^id(GACAppCheckToken *token) {
+        if (!token) return [GACAppCheckErrorUtil cachedTokenNotFound];
+        if ([token.expirationDate timeIntervalSinceNow] < kTokenExpirationThreshold) return [GACAppCheckErrorUtil cachedTokenExpired];
+        return token;
+      });
+    }
+    - (FBLPromise *)refreshToken {
+      return [FBLPromise wrapObjectOrErrorCompletion:^(FBLPromiseObjectOrErrorCompletion handler) { [self.appCheckProvider getTokenWithCompletion:handler]; }].then(^id(GACAppCheckToken *token) { return [self.storage setToken:token]; }).then(^id(GACAppCheckToken *token) {
+        GACAppCheckTokenRefreshResult *r = [[GACAppCheckTokenRefreshResult alloc] initWithStatusSuccessAndExpirationDate:token.expirationDate receivedAtDate:token.receivedAtDate];
+        [self.tokenRefresher updateWithRefreshResult:r];
+        if (self.tokenDelegate) [self.tokenDelegate tokenDidUpdate:token serviceName:self.serviceName];
+        return token;
+      });
+    }
+    - (FBLPromise *)limitedUseToken {
+      return [FBLPromise wrapObjectOrErrorCompletion:^(FBLPromiseObjectOrErrorCompletion handler) { [self.appCheckProvider getLimitedUseTokenWithCompletion:handler]; }].then(^id(GACAppCheckToken *token) { return token; });
+    }
+    - (void)periodicTokenRefreshWithCompletion:(GACAppCheckTokenRefreshCompletion)completion {
+      [self retrieveOrRefreshTokenForcingRefresh:NO].then(^id(GACAppCheckToken *token) { completion([[GACAppCheckTokenRefreshResult alloc] initWithStatusSuccessAndExpirationDate:token.expirationDate receivedAtDate:token.receivedAtDate]); return nil; }).catch(^(NSError *error) { completion([[GACAppCheckTokenRefreshResult alloc] initWithStatusFailure]); });
+    }
+    @end
+    NS_ASSUME_NONNULL_END
+  OBJC
+  File.write(gac_main_path, gac_main_content) unless File.exist?(gac_main_path)
+
+  # 3) Add GACAppCheck.m to Pods project (file is not in podspec)
+  pbx = File.join(installer.sandbox.root, 'Pods.xcodeproj', 'project.pbxproj')
+  ref_id = 'A1B2C3D4E5F6071829345670'
+  bld_id = 'B2C3D4E5F607182934567801'
+  lines = File.readlines(pbx)
+  unless lines.any? { |l| l.include?(ref_id) }
+  lines.each_with_index do |line, i|
+    if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources')
+      lines.insert(i + 1, "\t\t#{bld_id} /* GACAppCheck.m in Sources */ = {isa = PBXBuildFile; fileRef = #{ref_id} /* GACAppCheck.m */; };\n")
+      break
+    end
+  end
+  lines.each_with_index do |line, i|
+    if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */ = {isa = PBXFileReference')
+      lines.insert(i + 1, "\t\t#{ref_id} /* GACAppCheck.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = GACAppCheck.m; path = AppCheckCore/Sources/Core/GACAppCheck.m; sourceTree = \"<group>\"; };\n")
+      break
+    end
+  end
+  lines.each_with_index do |line, i|
+    if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */,')
+      lines.insert(i + 1, "\t\t\t\t#{ref_id} /* GACAppCheck.m */,\n")
+      break
+    end
+  end
+  lines.each_with_index do |line, i|
+    if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources */,')
+      lines.insert(i + 1, "\t\t\t\t\t#{bld_id} /* GACAppCheck.m in Sources */,\n")
+      break
+    end
+  end
+  File.write(pbx, lines.join)
+  end
+end

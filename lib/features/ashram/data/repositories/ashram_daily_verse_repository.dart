@@ -6,12 +6,10 @@ import '../../../books/data/datasources/supabase_verse_datasource.dart'
     show VerseWithTranslations;
 import '../../../books/data/repositories/chapter_repository.dart';
 import '../../../books/data/repositories/verse_repository.dart';
-import '../../../content/data/datasources/gpt_api_service.dart';
-import '../../../content/data/repositories/verse_of_day_repository.dart';
 import '../models/ashram_daily_verse_model.dart';
 
-/// Provides daily verse for Ashram - from Supabase (Gita/Mahabharata) or GPT fallback.
-/// Tracks whether user has viewed it today (hide after view).
+/// Provides daily verse for Ashram from existing Gita/Mahabharata verse tables.
+/// No API calls — purely local Supabase data with static fallback.
 class AshramDailyVerseRepository {
   static final AshramDailyVerseRepository _instance =
       AshramDailyVerseRepository._internal();
@@ -20,8 +18,6 @@ class AshramDailyVerseRepository {
 
   final VerseRepository _verseRepository = VerseRepository();
   final ChapterRepository _chapterRepository = ChapterRepository();
-  final VerseOfDayRepository _verseOfDayRepo = VerseOfDayRepository();
-  final GPTApiService _gptService = GPTApiService();
 
   static const String _viewedKey = 'ashram_verse_viewed_date';
   static const String _cacheKey = 'ashram_verse_cache';
@@ -60,16 +56,7 @@ class AshramDailyVerseRepository {
       debugPrint('AshramDailyVerse: Supabase failed: $e');
     }
 
-    // Fallback to GPT
-    try {
-      final verse = await _getVerseFromGpt();
-      await _cacheVerse(prefs, today, verse);
-      return verse;
-    } catch (e) {
-      debugPrint('AshramDailyVerse: GPT fallback failed: $e');
-    }
-
-    // Last resort: show a static verse so user always has something
+    // Static fallback so user always has something
     return AshramDailyVerseModel(
       id: 'fallback_${AppClock.now().millisecondsSinceEpoch}',
       bookName: 'Bhagavad Gita',
@@ -110,11 +97,9 @@ class AshramDailyVerseRepository {
       final v = verses[random.nextInt(verses.length)];
       final bookName = _bookDisplayName(bookId);
 
-      // Use a fast local reflection first; GPT reflection loads lazily
-      // when user opens the verse detail screen
       final quickReflection = _getQuickReflection(v, bookName);
 
-      final verse = AshramDailyVerseModel(
+      return AshramDailyVerseModel(
         id: v.verse.id,
         bookName: bookName,
         chapterName: chapter.title,
@@ -127,11 +112,6 @@ class AshramDailyVerseRepository {
         dailyLifeImpact: quickReflection,
         source: 'supabase',
       );
-
-      // Fire-and-forget: fetch GPT reflection in background and update cache
-      _fetchAndCacheGptReflection(v, bookName, verse);
-
-      return verse;
     }
     return null;
   }
@@ -141,59 +121,6 @@ class AshramDailyVerseRepository {
     return 'Reflect on this verse from $bookName and consider how '
         'its wisdom can guide your actions today. Meditate on its meaning '
         'and apply it with compassion in your daily life.';
-  }
-
-  /// Background: fetch GPT reflection and update the cache
-  void _fetchAndCacheGptReflection(
-    VerseWithTranslations v,
-    String bookName,
-    AshramDailyVerseModel verse,
-  ) async {
-    try {
-      final text = _getHindiOrEnglish(v);
-      final reflection = await _gptService.getVerseReflection(
-        book: bookName,
-        chapterId: v.verse.chapterId,
-        verseNumber: v.verse.verseNumberDisplay,
-        verseText: text,
-      );
-      // Update cache with the richer GPT reflection
-      final prefs = await SharedPreferences.getInstance();
-      final updated = AshramDailyVerseModel(
-        id: verse.id,
-        bookName: verse.bookName,
-        chapterName: verse.chapterName,
-        verseNumber: verse.verseNumber,
-        sanskritText: verse.sanskritText,
-        hindiOrEnglishText: verse.hindiOrEnglishText,
-        dailyLifeImpact: reflection,
-        source: verse.source,
-      );
-      await _cacheVerse(prefs, _todayString(), updated);
-    } catch (e) {
-      debugPrint('AshramDailyVerse: Background GPT reflection failed: $e');
-    }
-  }
-
-  Future<AshramDailyVerseModel> _getVerseFromGpt() async {
-    final content = await _verseOfDayRepo.getVerseOfTheDay();
-    final dailyLife = await _gptService.getVerseReflection(
-      book: content.book,
-      chapterId: content.chapter ?? '',
-      verseNumber: content.verseNumber ?? '',
-      verseText: content.content,
-    );
-
-    return AshramDailyVerseModel(
-      id: content.id,
-      bookName: content.book,
-      chapterName: content.chapter,
-      verseNumber: content.verseNumber,
-      sanskritText: content.title,
-      hindiOrEnglishText: content.content,
-      dailyLifeImpact: dailyLife,
-      source: 'gpt',
-    );
   }
 
   String _getSanskrit(VerseWithTranslations v) {

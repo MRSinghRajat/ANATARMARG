@@ -1,0 +1,4 @@
+#!/bin/bash
+# Wrapper around /usr/bin/codesign that adds --strip-disallowed-xattrs
+# to fix macOS Sequoia com.apple.provenance codesign failures.
+exec /usr/bin/codesign --strip-disallowed-xattrs "$@"

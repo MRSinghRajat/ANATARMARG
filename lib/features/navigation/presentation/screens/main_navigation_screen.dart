@@ -22,43 +22,69 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   NavItem _currentItem = NavItem.home;
   int _currentIndex = 0;
   DateTime? _lastBackPress;
-  final SanctuaryCustomizationService _customizationService = SanctuaryCustomizationService();
+  final SanctuaryCustomizationService _customizationService =
+      SanctuaryCustomizationService();
+
+  /// Tracks which tabs have been visited so we build them lazily.
+  final Set<int> _initializedTabs = {0};
 
   @override
   void initState() {
     super.initState();
-    // Initialize customization service early
     _customizationService.initialize();
   }
 
   void _navigateTo(NavItem item) {
     final newIndex = _getIndexForNavItem(item);
-    
-    // If navigating TO Ashram, refresh customization from Supabase
+    if (newIndex == _currentIndex) return;
+
     if (newIndex == 2 && _currentIndex != 2) {
       _customizationService.refresh();
     }
-    
+
     setState(() {
       _currentItem = item;
       _currentIndex = newIndex;
+      _initializedTabs.add(newIndex);
     });
+  }
+
+  Widget _buildTab(int index) {
+    if (!_initializedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+    Widget child;
+    switch (index) {
+      case 0:
+        child = AanganScreen(
+          key: const ValueKey('aangan'),
+          onBeginTap: () => _navigateTo(NavItem.chat),
+        );
+        break;
+      case 1:
+        child = const SpiritualChatScreen(key: ValueKey('chat'));
+        break;
+      case 2:
+        child = const AshramScreen(key: ValueKey('ashram'));
+        break;
+      case 3:
+        child = const BooksLibraryScreen(key: ValueKey('books'));
+        break;
+      case 4:
+        child = const ProfileScreen(key: ValueKey('profile'));
+        break;
+      default:
+        child = const SizedBox.shrink();
+    }
+    // Pause all animation tickers on background tabs
+    return TickerMode(
+      enabled: _currentIndex == index,
+      child: child,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Use IndexedStack for ALL screens to preserve state
-    final screens = [
-      AanganScreen(
-        key: const ValueKey('aangan'),
-        onBeginTap: () => _navigateTo(NavItem.chat),
-      ),
-      const SpiritualChatScreen(key: ValueKey('chat')),
-      const AshramScreen(key: ValueKey('ashram')),
-      const BooksLibraryScreen(key: ValueKey('books')),
-      const ProfileScreen(key: ValueKey('profile')),
-    ];
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -86,7 +112,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
             : AppColors.primaryBackground,
         body: IndexedStack(
           index: _currentIndex,
-          children: screens,
+          children: List.generate(5, _buildTab),
         ),
         bottomNavigationBar: BottomNavBar(
           currentItem: _currentItem,
@@ -103,7 +129,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       case NavItem.chat:
         return 1;
       case NavItem.ashram:
-        return 2; // Ashram
+        return 2;
       case NavItem.books:
         return 3;
       case NavItem.profile:

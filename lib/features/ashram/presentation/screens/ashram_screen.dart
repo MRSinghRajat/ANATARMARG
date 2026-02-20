@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/utils/app_clock.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/widgets/flying_coins_animation.dart';
@@ -24,7 +26,8 @@ import '../widgets/daily_task_card.dart';
 import '../widgets/custom_habit_card.dart';
 import '../widgets/add_habit_sheet.dart';
 import '../widgets/achievement_unlock_dialog.dart';
-import '../../../books/data/repositories/daily_story_repository.dart';
+import '../../../books/data/datasources/supabase_granthalaya_datasource.dart';
+import '../../../books/data/models/daily_story_model.dart';
 import '../../../books/presentation/screens/story_reader_screen.dart';
 import 'ashram_verse_detail_screen.dart';
 import 'meditation_guide_screen.dart';
@@ -217,7 +220,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
         final verse = await _verseRepository.getTodaysVerse();
         if (verse == null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No verse available today')),
+            SnackBar(content: Text(AppStrings.get('no_verse_available', ref.read(languageProvider)))),
           );
           return;
         }
@@ -225,18 +228,38 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
         break;
 
       case 'daily_story':
-        // Fetch today's story (single row, not all 365)
         try {
-          final repo = DailyStoryRepository();
-          final story = await repo.getStoryForToday();
-          if (story == null) {
+          final ds = SupabaseGranthalayaDataSource();
+          final stories = await ds.getSacredStories();
+          if (stories.isEmpty) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('No stories available')),
+                SnackBar(content: Text(AppStrings.get('no_stories_available', ref.read(languageProvider)))),
               );
             }
             return;
           }
+          final dayOfYear = AppClock.now().difference(DateTime(AppClock.now().year)).inDays + 1;
+          final sacred = stories[dayOfYear % stories.length];
+          final story = DailyStoryModel(
+            id: sacred.id,
+            dayOfYear: dayOfYear,
+            storyTitle: sacred.title,
+            source: sacred.source,
+            category: sacred.category,
+            estimatedMinutes: sacred.estimatedMinutes,
+            totalPages: sacred.pages.length,
+            pages: sacred.pages.asMap().entries.map((e) => StoryPage(
+              pageNumber: e.key,
+              textEnglish: e.value.textEnglish,
+              textHindi: e.value.textHindi,
+              illustrationUrl: e.value.illustrationUrl,
+              isFinal: e.value.isFinal,
+            )).toList(),
+            keyTeaching: sacred.keyTeaching,
+            reflectionPrompt: sacred.reflectionPrompt,
+            coverImageUrl: sacred.coverImageUrl,
+          );
           screen = StoryReaderScreen(story: story);
         } catch (e) {
           if (mounted) {
@@ -391,28 +414,28 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 16),
-                        // Header with stats
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _buildPremiumHeader(context),
-                        ),
-                        const SizedBox(height: 20),
-                        // OM Sanctuary
-                        Expanded(
-                          child: Center(
-                            child: _customizationLoaded &&
-                                    _currentCustomization != null
-                                ? CustomizableOmSanctuary(
-                                    size: 280,
-                                    customization: _currentCustomization!,
-                                  )
-                                : const SizedBox.shrink(),
+                    child: ClipRect(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildPremiumHeader(context),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: Center(
+                              child: _customizationLoaded &&
+                                      _currentCustomization != null
+                                  ? CustomizableOmSanctuary(
+                                      size: 260,
+                                      customization: _currentCustomization!,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -505,12 +528,15 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: _buildSectionHeader(
-                title: "Today's Tasks",
-                subtitle:
-                    '${_completedTasks.length}/${_tasks.length} completed',
-                icon: Icons.check_circle_outline,
-              ),
+              child: Builder(builder: (context) {
+                final lang = ref.watch(languageProvider);
+                return _buildSectionHeader(
+                  title: AppStrings.get('todays_tasks', lang),
+                  subtitle:
+                      '${_completedTasks.length}/${_tasks.length} ${AppStrings.get('completed', lang)}',
+                  icon: Icons.check_circle_outline,
+                );
+              }),
             ),
           ),
 
@@ -567,22 +593,30 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'All Tasks Complete!',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Great work! Come back tomorrow for new tasks.',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
+                            Builder(builder: (context) {
+                              final lang = ref.watch(languageProvider);
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    AppStrings.get('all_tasks_complete', lang),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    AppStrings.get('all_tasks_complete_sub', lang),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }),
                           ],
                         ),
                       ),
@@ -597,23 +631,26 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: _buildSectionHeader(
-                  title: 'My Habits',
-                  subtitle:
-                      '${_completedHabits.length}/${_todaysHabits.length} today',
-                  icon: Icons.repeat,
-                  action: TextButton(
-                    onPressed: _showAddHabitSheet,
-                    child: Text(
-                      '+ Add',
-                      style: GoogleFonts.poppins(
-                        color: AppColors.primaryOrange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                child: Builder(builder: (context) {
+                  final lang = ref.watch(languageProvider);
+                  return _buildSectionHeader(
+                    title: AppStrings.get('my_habits', lang),
+                    subtitle:
+                        '${_completedHabits.length}/${_todaysHabits.length} ${AppStrings.get('today', lang)}',
+                    icon: Icons.repeat,
+                    action: TextButton(
+                      onPressed: _showAddHabitSheet,
+                      child: Text(
+                        AppStrings.get('add', lang),
+                        style: GoogleFonts.poppins(
+                          color: AppColors.primaryOrange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ),
             ),
 
@@ -647,12 +684,15 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: _buildSectionHeader(
-                  title: 'Completed Today',
-                  subtitle:
-                      '${_completedTasks.length + _completedHabits.length} items',
-                  icon: Icons.done_all,
-                ),
+                child: Builder(builder: (context) {
+                  final lang = ref.watch(languageProvider);
+                  return _buildSectionHeader(
+                    title: AppStrings.get('completed_today', lang),
+                    subtitle:
+                        '${_completedTasks.length + _completedHabits.length} ${AppStrings.get('items', lang)}',
+                    icon: Icons.done_all,
+                  );
+                }),
               ),
             ),
 

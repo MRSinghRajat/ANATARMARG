@@ -21,7 +21,8 @@ dependencies:
   
   # Authentication
   google_sign_in: ^6.1.0
-  # sign_in_with_apple: ^5.0.0  # iOS only - temporarily disabled for Android testing
+  sign_in_with_apple: ^6.1.0
+  crypto: ^3.0.3
   
   # Networking
   http: ^1.1.0

@@ -358,6 +358,25 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     }
   }
 
+  void _previousStep() {
+    if (_currentStep <= 0) return;
+    HapticFeedback.lightImpact();
+    _fadeController.reset();
+    _rippleController.reset();
+    _resultController.reset();
+    _progressionTimer?.cancel();
+    setState(() {
+      _currentStep--;
+      _selectedOption = null;
+      _showResult = false;
+      _resultAnimating = false;
+      _optionsHiding = false;
+      _progressionDone = false;
+      _progressionStage = 0;
+    });
+    _fadeController.forward();
+  }
+
   void _startProgressionAnim() {
     _progressionStage = 0;
     _progressionDone = false;
@@ -434,6 +453,26 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               child: _buildCurrentStep(),
             ),
           ),
+          // Back button (visible after step 0)
+          if (_currentStep > 0)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: _previousStep,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.arrow_back_ios_new_rounded,
+                      color: _lightGold.withValues(alpha: 0.7), size: 18),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -822,21 +861,20 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
         final t = _resultAnim.value;
         return Column(
           children: [
-            // Glowing lamp
-            Container(
-              width: 100, height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: _saffron.withValues(alpha: 0.3 * t),
-                    blurRadius: 40 * t, spreadRadius: 10 * t,
+            // Animated diya flame
+            SizedBox(
+              width: 120, height: 140,
+              child: AnimatedBuilder(
+                animation: _waveController,
+                builder: (_, __) => CustomPaint(
+                  painter: _DiyaFlamePainter(
+                    time: _waveController.value,
+                    intensity: t,
                   ),
-                ],
+                ),
               ),
-              child: Center(child: Text('🪔', style: TextStyle(fontSize: 56 * t.clamp(0.5, 1.0)))),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _buildStatCard(fact, t),
           ],
         );
@@ -1336,13 +1374,14 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               child: TextField(
                 onChanged: (v) => setState(() => _userName = v.trim()),
                 textAlign: TextAlign.center,
+                cursorColor: _gold,
                 style: GoogleFonts.tenorSans(
                   fontSize: 18, color: _lightGold, fontWeight: FontWeight.w500,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Enter your name',
                   hintStyle: GoogleFonts.tenorSans(
-                    fontSize: 16, color: Colors.white.withValues(alpha: 0.2),
+                    fontSize: 16, color: Colors.white.withValues(alpha: 0.5),
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -1744,4 +1783,88 @@ class _SparklePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SparklePainter o) =>
       o.progress != progress || o.intensity != intensity;
+}
+
+class _DiyaFlamePainter extends CustomPainter {
+  final double time;
+  final double intensity;
+  _DiyaFlamePainter({required this.time, required this.intensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final baseY = size.height * 0.75;
+    final t = time * math.pi * 2;
+
+    // Diya bowl
+    final bowlPath = Path()
+      ..moveTo(cx - 28, baseY)
+      ..quadraticBezierTo(cx - 32, baseY + 20, cx - 18, baseY + 28)
+      ..lineTo(cx + 18, baseY + 28)
+      ..quadraticBezierTo(cx + 32, baseY + 20, cx + 28, baseY)
+      ..close();
+    canvas.drawPath(bowlPath, Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Color(0xFFCD853F), Color(0xFF8B4513)],
+      ).createShader(Rect.fromLTWH(cx - 32, baseY, 64, 30)));
+
+    // Wick
+    canvas.drawLine(Offset(cx, baseY), Offset(cx, baseY - 8),
+      Paint()..color = const Color(0xFF4A3728)..strokeWidth = 2.5..strokeCap = StrokeCap.round);
+
+    // Flame layers - outer glow
+    final glowR = 35.0 + 5 * math.sin(t * 3) * intensity;
+    canvas.drawCircle(Offset(cx, baseY - 30), glowR * intensity,
+      Paint()..shader = RadialGradient(colors: [
+        const Color(0xFFF59E0B).withValues(alpha: 0.15 * intensity),
+        const Color(0xFFF59E0B).withValues(alpha: 0.0),
+      ]).createShader(Rect.fromCircle(center: Offset(cx, baseY - 30), radius: glowR)));
+
+    // Outer flame (red-orange)
+    _drawFlameLayer(canvas, cx, baseY - 6, t, intensity,
+      height: 52, width: 16, color1: const Color(0xFFFF6B00), color2: const Color(0xFFFF4500),
+      wobbleAmt: 3.0, wobbleFreq: 4.0);
+
+    // Middle flame (orange-yellow)
+    _drawFlameLayer(canvas, cx, baseY - 6, t, intensity,
+      height: 42, width: 11, color1: const Color(0xFFFFA500), color2: const Color(0xFFFFD700),
+      wobbleAmt: 2.0, wobbleFreq: 5.5);
+
+    // Inner flame (white-yellow core)
+    _drawFlameLayer(canvas, cx, baseY - 6, t, intensity,
+      height: 28, width: 6, color1: const Color(0xFFFFE4B5), color2: const Color(0xFFFFFFE0),
+      wobbleAmt: 1.0, wobbleFreq: 7.0);
+  }
+
+  void _drawFlameLayer(Canvas canvas, double cx, double baseY, double t, double intensity, {
+    required double height, required double width,
+    required Color color1, required Color color2,
+    required double wobbleAmt, required double wobbleFreq,
+  }) {
+    final h = height * intensity;
+    final w = width * intensity;
+    final wobbleX = wobbleAmt * math.sin(t * wobbleFreq) * intensity;
+    final wobbleH = h * (0.9 + 0.1 * math.sin(t * wobbleFreq * 1.3));
+
+    final path = Path()
+      ..moveTo(cx - w * 0.4, baseY)
+      ..quadraticBezierTo(
+        cx - w * 0.8 + wobbleX * 0.5, baseY - wobbleH * 0.4,
+        cx + wobbleX, baseY - wobbleH)
+      ..quadraticBezierTo(
+        cx + w * 0.8 + wobbleX * 0.5, baseY - wobbleH * 0.4,
+        cx + w * 0.4, baseY)
+      ..close();
+
+    canvas.drawPath(path, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter, end: Alignment.topCenter,
+        colors: [color1.withValues(alpha: 0.9 * intensity), color2.withValues(alpha: 0.4 * intensity)],
+      ).createShader(Rect.fromLTWH(cx - w, baseY - h, w * 2, h)));
+  }
+
+  @override
+  bool shouldRepaint(covariant _DiyaFlamePainter o) =>
+      o.time != time || o.intensity != intensity;
 }

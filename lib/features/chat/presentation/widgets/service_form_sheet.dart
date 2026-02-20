@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -78,14 +79,12 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
 
   Future<void> _pickImage(ServiceFormField field, ImageSource source) async {
     try {
-      // Use ImagePicker with explicit settings
-      final ImagePicker picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(
+      final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         maxWidth: 1024,
         maxHeight: 1024,
         imageQuality: 85,
-        requestFullMetadata: false, // Reduces permissions needed
+        requestFullMetadata: false,
       );
       
       if (pickedFile != null) {
@@ -98,26 +97,32 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         });
       }
     } catch (e) {
-      print('Error picking image: $e');
-      if (mounted) {
-        String errorMsg = 'Failed to pick image. Please try again.';
-        
-        // Check for specific platform errors
-        if (e.toString().contains('channel-error') || e.toString().contains('PlatformException')) {
-          errorMsg = 'Please restart the app and try again. If the issue persists, check camera/storage permissions in Settings.';
+      debugPrint('Error picking image: $e');
+      if (!mounted) return;
+
+      final errStr = e.toString();
+      String errorMsg;
+      
+      if (errStr.contains('photo_access_denied') || errStr.contains('camera_access_denied')) {
+        errorMsg = 'Permission denied. Please enable camera access in Settings > Privacy > Camera.';
+      } else if (errStr.contains('channel-error') || errStr.contains('PlatformException')) {
+        if (source == ImageSource.camera) {
+          errorMsg = 'Camera not available. Try uploading from gallery instead.';
+          _pickImage(field, ImageSource.gallery);
+          return;
         }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMsg),
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'OK',
-              onPressed: () {},
-            ),
-          ),
-        );
+        errorMsg = 'Could not access photos. Check permissions in Settings.';
+      } else {
+        errorMsg = 'Failed to pick image. Please try again.';
       }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(label: 'OK', onPressed: () {}),
+        ),
+      );
     }
   }
 

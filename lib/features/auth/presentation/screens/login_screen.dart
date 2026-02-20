@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/utils/app_router.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +16,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -88,7 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         }
                       },
                       icon: const Icon(Icons.g_mobiledata, size: 24),
-                      label: const Text('Continue with Google'),
+                      label: Text(AppStrings.get('continue_with_google', lang)),
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
                       ),
@@ -116,7 +119,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         }
                       },
                       icon: const Icon(Icons.email_outlined, size: 22),
-                      label: const Text('Sign up with Email'),
+                      label: Text(AppStrings.get('continue_with_email', lang)),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
                         foregroundColor: Colors.white,
@@ -131,22 +134,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         Navigator.pushReplacementNamed(
                             context, AppRouter.home);
                       },
-                      child: const Text('Continue without signing in'),
+                      child: Text(AppStrings.get('skip_for_now', lang)),
                     ),
                     const SizedBox(height: 16),
 
-                    // Apple Sign In (iOS only - will be implemented later)
                     if (Theme.of(context).platform == TargetPlatform.iOS)
                       ElevatedButton.icon(
-                        onPressed: () {
-                          // TODO: Implement Apple Sign In
-                          Navigator.pushReplacementNamed(
-                              context, AppRouter.home);
+                        onPressed: () async {
+                          if (!SupabaseService().isInitialized) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Supabase is not configured.'),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
+                            }
+                            return;
+                          }
+                          try {
+                            await SupabaseService().signInWithApple();
+                            if (context.mounted) {
+                              Navigator.pushReplacementNamed(
+                                  context, AppRouter.home);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              if (e.toString().contains('AuthorizationErrorCode.canceled')) {
+                                return;
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Apple Sign In failed: $e'),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          }
                         },
                         icon: const Icon(Icons.apple, size: 24),
-                        label: const Text('Continue with Apple'),
+                        label: Text(AppStrings.get('continue_with_apple', lang)),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 50),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
                         ),
                       ),
 

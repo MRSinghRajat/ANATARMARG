@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
@@ -17,6 +18,7 @@ import '../../../ashram/data/models/achievement_model.dart';
 import '../../../ashram/presentation/widgets/streak_stats_card.dart';
 import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../../subscription/presentation/screens/customer_center_screen.dart';
+import '../providers/language_provider.dart';
 import '../widgets/bookmarked_section.dart';
 import 'language_settings_screen.dart';
 
@@ -208,7 +210,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     
                     const SliverToBoxAdapter(
-                      child: SizedBox(height: 100),
+                      child: SizedBox(height: 24),
                     ),
                   ],
                 ),
@@ -223,7 +225,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Row(
         children: [
           Text(
-            'Profile',
+            AppStrings.get('profile', ref.watch(languageProvider)),
             style: GoogleFonts.cormorantGaramond(
               color: Colors.white,
               fontSize: 28,
@@ -656,7 +658,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Settings',
+          AppStrings.get('settings', ref.watch(languageProvider)),
           style: GoogleFonts.poppins(
             color: Colors.white70,
             fontSize: 12,
@@ -716,7 +718,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               
               _buildSettingsTile(
                 icon: Icons.notifications_outlined,
-                title: 'Notifications',
+                title: AppStrings.get('notifications', ref.watch(languageProvider)),
                 onTap: () => Navigator.pushNamed(context, AppRouter.notificationsSettings),
               ),
               
@@ -724,7 +726,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               
               _buildSettingsTile(
                 icon: Icons.language,
-                title: 'Language',
+                title: AppStrings.get('language', ref.watch(languageProvider)),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
@@ -834,7 +836,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         }
       },
       child: Text(
-        'Sign Out',
+        AppStrings.get('sign_out', ref.watch(languageProvider)),
         style: GoogleFonts.poppins(
           color: Colors.red.withOpacity(0.8),
           fontSize: 14,

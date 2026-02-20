@@ -107,11 +107,12 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         children: [
           // Hidden scrollable — gives DraggableScrollableSheet the
           // scroll position it needs to manage the sheet extent.
-          // NeverScrollableScrollPhysics prevents user interaction.
-          ListView(
-            controller: widget.scrollController,
-            physics: const NeverScrollableScrollPhysics(),
-            children: const [SizedBox(height: 10000)],
+          IgnorePointer(
+            child: ListView(
+              controller: widget.scrollController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: const [SizedBox(height: 10000)],
+            ),
           ),
 
           // Actual visible UI
@@ -926,54 +927,61 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
   void _triggerPreview(ShopItem item, CustomizationCategory category) {
     final current = _customizationService.currentCustomization;
-    SanctuaryCustomization preview = current;
+    SanctuaryCustomization preview;
 
-    switch (item.categoryKey) {
-      case 'omStyle':
-        preview = current.copyWith(
-            omStyle: OmStyle.values.firstWhere((e) => e.name == item.id),
-            clearDeityImage: true); // Show Om, not deity, when previewing Om style
-        break;
-      case 'ringStyle':
-        preview = current.copyWith(
-            ringStyle: RingStyle.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'ringColor':
-        preview = current.copyWith(
-            ringColor: RingColor.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'animationStyle':
-        preview = current.copyWith(
-            animationStyle: SanctuaryAnimationStyle.values
-                .firstWhere((e) => e.name == item.id));
-        break;
-      case 'backgroundStyle':
-        preview = current.copyWith(
-            backgroundStyle:
-                BackgroundStyle.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'glowColor':
-        preview = current.copyWith(
-            glowColor: GlowColor.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'deityImage':
-        preview = current.copyWith(
-            deityImage: DeityImage.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'frameStyle':
-        preview = current.copyWith(
-            frameStyle: FrameStyle.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'specialEffect':
-        preview = current.copyWith(
-            specialEffect:
-                SpecialEffect.values.firstWhere((e) => e.name == item.id));
-        break;
-      case 'particleStyle':
-        preview = current.copyWith(
-            particleStyle:
-                ParticleStyle.values.firstWhere((e) => e.name == item.id));
-        break;
+    try {
+      switch (item.categoryKey) {
+        case 'omStyle':
+          preview = current.copyWith(
+              omStyle: OmStyle.values.firstWhere((e) => e.name == item.id),
+              clearDeityImage: true);
+          break;
+        case 'ringStyle':
+          preview = current.copyWith(
+              ringStyle: RingStyle.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'ringColor':
+          preview = current.copyWith(
+              ringColor: RingColor.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'animationStyle':
+          preview = current.copyWith(
+              animationStyle: SanctuaryAnimationStyle.values
+                  .firstWhere((e) => e.name == item.id));
+          break;
+        case 'backgroundStyle':
+          preview = current.copyWith(
+              backgroundStyle:
+                  BackgroundStyle.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'glowColor':
+          preview = current.copyWith(
+              glowColor: GlowColor.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'deityImage':
+          preview = current.copyWith(
+              deityImage: DeityImage.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'frameStyle':
+          preview = current.copyWith(
+              frameStyle: FrameStyle.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'specialEffect':
+          preview = current.copyWith(
+              specialEffect:
+                  SpecialEffect.values.firstWhere((e) => e.name == item.id));
+          break;
+        case 'particleStyle':
+          preview = current.copyWith(
+              particleStyle:
+                  ParticleStyle.values.firstWhere((e) => e.name == item.id));
+          break;
+        default:
+          return;
+      }
+    } catch (e) {
+      debugPrint('Preview error for ${item.categoryKey}/${item.id}: $e');
+      return;
     }
 
     widget.onPreviewChange?.call(preview);

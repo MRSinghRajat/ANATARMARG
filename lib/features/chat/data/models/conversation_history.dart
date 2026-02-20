@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'spiritual_service.dart';
 import 'chat_message.dart';
 
@@ -20,6 +21,43 @@ class ConversationHistory {
     this.messages = const [],
     this.userProfile,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'service': service.name,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'lastMessage': lastMessage,
+    'messages': messages.map((m) => m.toJson()).toList(),
+    'userProfile': userProfile,
+  };
+
+  factory ConversationHistory.fromJson(Map<String, dynamic> json) {
+    return ConversationHistory(
+      id: json['id'] as String,
+      service: SpiritualServiceType.values.firstWhere(
+        (s) => s.name == json['service'],
+        orElse: () => SpiritualServiceType.values.first,
+      ),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      lastMessage: json['lastMessage'] as String?,
+      messages: (json['messages'] as List<dynamic>?)
+          ?.map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+          .toList() ?? [],
+      userProfile: json['userProfile'] as Map<String, dynamic>?,
+    );
+  }
+
+  static String encodeList(List<ConversationHistory> list) =>
+      jsonEncode(list.map((c) => c.toJson()).toList());
+
+  static List<ConversationHistory> decodeList(String encoded) {
+    final list = jsonDecode(encoded) as List<dynamic>;
+    return list
+        .map((j) => ConversationHistory.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
 
   /// Creates a copy with updated fields.
   ConversationHistory copyWith({

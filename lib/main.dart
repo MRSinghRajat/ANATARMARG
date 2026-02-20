@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -52,9 +54,6 @@ void main() async {
     print('RevenueCat initialization failed: $e. Subscriptions may not work.');
   }
 
-  // Initialize sound manager and start playing bird singing sound
-  await SoundManager().initialize();
-
   // Disable Google Fonts runtime fetching to prevent ImageDecoder errors.
   // Fonts are bundled locally in assets/fonts/ instead.
   GoogleFonts.config.allowRuntimeFetching = false;
@@ -86,42 +85,63 @@ class _AntarMargAppState extends State<AntarMargApp> {
     super.initState();
     _listenToAuthLinks();
     _handleInitialAuthLink();
+    // Defer sound init so it doesn't block the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SoundManager().initialize();
+    });
   }
 
   Future<void> _handleInitialAuthLink() async {
     try {
       final uri = await _appLinks.getInitialLink();
       if (uri == null) return;
-      if (uri.scheme == 'antarmarg' && uri.host == 'auth-callback') {
-        final recovered = await SupabaseService().recoverSessionFromUri(uri);
-        if (recovered && mounted && _navigatorKey.currentContext != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_navigatorKey.currentContext != null) {
-              Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
-                AppRouter.home,
-                (route) => false,
-              );
-            }
-          });
-        }
-      }
+      _handleAuthUri(uri);
     } catch (_) {}
   }
 
   void _listenToAuthLinks() {
     _appLinks.uriLinkStream.listen((Uri? uri) {
       if (uri == null) return;
-      if (uri.scheme == 'antarmarg' && uri.host == 'auth-callback') {
-        SupabaseService().recoverSessionFromUri(uri).then((recovered) {
-          if (recovered && _navigatorKey.currentContext != null) {
-            Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
-              AppRouter.home,
-              (route) => false,
-            );
-          }
-        });
-      }
+      _handleAuthUri(uri);
     });
+  }
+
+  /// Handles auth callback deep links for both implicit flow (refresh_token)
+  /// and PKCE flow (code). For PKCE, supabase_flutter exchanges the code
+  /// automatically — we just listen for the resulting auth state change.
+  void _handleAuthUri(Uri uri) {
+    if (uri.scheme != 'antarmarg' || uri.host != 'auth-callback') return;
+
+    final params = uri.fragment.isNotEmpty
+        ? Uri.splitQueryString(uri.fragment)
+        : uri.queryParameters;
+
+    if (params.containsKey('refresh_token')) {
+      SupabaseService().recoverSessionFromUri(uri).then((recovered) {
+        if (recovered) _navigateHome();
+      });
+    } else if (params.containsKey('code')) {
+      // PKCE flow: supabase_flutter handles the code exchange automatically.
+      // Wait for the signedIn event then navigate.
+      final client = SupabaseService().client;
+      if (client == null) return;
+      late final StreamSubscription sub;
+      sub = client.auth.onAuthStateChange.listen((data) {
+        if (data.event == AuthChangeEvent.signedIn) {
+          sub.cancel();
+          _navigateHome();
+        }
+      });
+    }
+  }
+
+  void _navigateHome() {
+    if (_navigatorKey.currentContext != null) {
+      Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
+        AppRouter.home,
+        (route) => false,
+      );
+    }
   }
 
   @override

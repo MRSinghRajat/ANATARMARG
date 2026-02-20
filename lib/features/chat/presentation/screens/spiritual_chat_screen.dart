@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../shared/widgets/typing_indicator.dart';
 import '../../data/models/spiritual_service.dart';
 import '../../data/models/chat_message.dart';
@@ -41,14 +45,50 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   Map<String, dynamic>? _userProfile;
   String? _currentConversationId;
 
-  // Conversation history (in-memory for now, could be persisted to Supabase)
   final List<ConversationHistory> _conversationHistory = [];
 
   @override
+  void initState() {
+    super.initState();
+    _loadConversations();
+  }
+
+  @override
   void dispose() {
+    _persistConversations();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  String get _storageKey {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
+    return 'ai_chat_history_$userId';
+  }
+
+  Future<void> _loadConversations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getString(_storageKey);
+      if (encoded != null && encoded.isNotEmpty) {
+        final loaded = ConversationHistory.decodeList(encoded);
+        if (mounted) {
+          setState(() => _conversationHistory.addAll(loaded));
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load AI conversations: $e');
+    }
+  }
+
+  Future<void> _persistConversations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = ConversationHistory.encodeList(_conversationHistory);
+      await prefs.setString(_storageKey, encoded);
+    } catch (e) {
+      debugPrint('Failed to persist AI conversations: $e');
+    }
   }
 
   void _showServiceSelector() {
@@ -111,7 +151,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
           side: BorderSide(color: Colors.white.withOpacity(0.1)),
         ),
         title: Text(
-          'Delete Conversation?',
+          AppStrings.get('delete_conversation', ref.read(languageProvider)),
           style: GoogleFonts.outfit(
             color: Colors.white,
             fontWeight: FontWeight.w600,
@@ -127,7 +167,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              'Cancel',
+              AppStrings.get('cancel', ref.read(languageProvider)),
               style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.6)),
             ),
           ),
@@ -137,9 +177,10 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
               setState(() {
                 _conversationHistory.removeWhere((c) => c.id == conversation.id);
               });
+              _persistConversations();
             },
             child: Text(
-              'Delete',
+              AppStrings.get('delete', ref.read(languageProvider)),
               style: GoogleFonts.outfit(color: Colors.red),
             ),
           ),
@@ -181,6 +222,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
         userProfile: _userProfile,
       );
     }
+    _persistConversations();
   }
 
   void _addGreetingMessage(SpiritualServiceType service) {

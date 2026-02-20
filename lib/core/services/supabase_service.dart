@@ -1,5 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/supabase_config.dart';
 
 class SupabaseService {
@@ -56,51 +63,141 @@ class SupabaseService {
   /// Get current user ID (if authenticated)
   String? get currentUserId => _client?.auth.currentUser?.id;
 
-  /// Sign in with Google
+  /// Sign in with Google — iOS uses web-based OAuth (avoids nonce mismatch
+  /// between Google's native iOS SDK and Supabase Auth); Android uses native
+  /// Google Sign-In with id_token exchange.
   Future<AuthResponse> signInWithGoogle() async {
     if (_client == null) {
       throw Exception('Supabase client not initialized');
     }
 
     try {
-      // Google Sign In
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: SupabaseConfig.googleWebClientId,
-      );
-      final googleUser = await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        throw Exception('Google Sign In cancelled by user');
+      if (Platform.isIOS) {
+        return await _signInWithGoogleOAuth();
       }
-
-      final googleAuth = await googleUser.authentication;
-      final accessToken = googleAuth.accessToken;
-      final idToken = googleAuth.idToken;
-
-      if (idToken == null) {
-        throw Exception('No ID Token found from Google Sign In');
-      }
-
-      if (accessToken == null) {
-        throw Exception('No Access Token found from Google Sign In');
-      }
-
-      return _client!.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-        accessToken: accessToken,
-      );
+      return await _signInWithGoogleNative();
     } catch (e) {
       print('Error during Google Sign In: $e');
       rethrow;
     }
   }
 
+  /// iOS: Supabase OAuth flow in an external browser. The nonce is handled
+  /// server-side so there's no mismatch with the native Google SDK.
+  /// Uses PKCE flow — supabase_flutter automatically exchanges the auth code
+  /// for a session when the deep link callback arrives.
+  Future<AuthResponse> _signInWithGoogleOAuth() async {
+    final completer = Completer<AuthResponse>();
+
+    late final StreamSubscription<AuthState> sub;
+    sub = _client!.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn && !completer.isCompleted) {
+        sub.cancel();
+        final session = data.session;
+        completer.complete(
+          AuthResponse(session: session, user: session?.user),
+        );
+      }
+    });
+
+    try {
+      final res = await _client!.auth.getOAuthSignInUrl(
+        provider: OAuthProvider.google,
+        redirectTo: SupabaseConfig.authRedirectUrl,
+      );
+
+      final launched = await launchUrl(
+        Uri.parse(res.url),
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        sub.cancel();
+        throw Exception('Could not open Google Sign-In');
+      }
+    } catch (e) {
+      sub.cancel();
+      rethrow;
+    }
+
+    return completer.future;
+  }
+
+  /// Android: native Google Sign-In with id_token exchange.
+  Future<AuthResponse> _signInWithGoogleNative() async {
+    final GoogleSignIn googleSignIn = GoogleSignIn(
+      serverClientId: SupabaseConfig.googleWebClientId,
+    );
+    final googleUser = await googleSignIn.signIn();
+
+    if (googleUser == null) {
+      throw Exception('Google Sign In cancelled by user');
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final accessToken = googleAuth.accessToken;
+    final idToken = googleAuth.idToken;
+
+    if (idToken == null) {
+      throw Exception('No ID Token found from Google Sign In');
+    }
+
+    if (accessToken == null) {
+      throw Exception('No Access Token found from Google Sign In');
+    }
+
+    return _client!.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+  }
+
+  /// Sign in with Apple (native iOS). Uses the `sign_in_with_apple` package
+  /// to obtain an identity token, then exchanges it with Supabase Auth.
+  Future<AuthResponse> signInWithApple() async {
+    if (_client == null) {
+      throw Exception('Supabase client not initialized');
+    }
+
+    final rawNonce = _generateNonce();
+    final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
+
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: hashedNonce,
+    );
+
+    final idToken = credential.identityToken;
+    if (idToken == null) {
+      throw Exception('No identity token returned from Apple Sign In');
+    }
+
+    return _client!.auth.signInWithIdToken(
+      provider: OAuthProvider.apple,
+      idToken: idToken,
+      nonce: rawNonce,
+    );
+  }
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(length, (_) => charset[random.nextInt(charset.length)])
+        .join();
+  }
+
   /// Sign out
   Future<void> signOut() async {
     if (_client == null) return;
     await _client!.auth.signOut();
-    await GoogleSignIn().signOut();
+    if (!Platform.isIOS) {
+      await GoogleSignIn().signOut();
+    }
   }
 
   /// Sign in with email using OOB (magic link). Sends a link to [email];

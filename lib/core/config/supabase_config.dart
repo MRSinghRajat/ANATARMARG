@@ -8,6 +8,10 @@ class SupabaseConfig {
   static String get googleWebClientId =>
       dotenv.env['GOOGLE_WEB_CLIENT_ID'] ?? '';
 
+  // Google iOS Client ID (Required for iOS Google Sign-In)
+  static String get googleIosClientId =>
+      dotenv.env['GOOGLE_IOS_CLIENT_ID'] ?? '';
+
   /// Redirect URL for email OTP/magic link (OOB). Add this to Supabase Auth URL allow list.
   /// e.g. antarmarg://auth-callback
   static String get authRedirectUrl =>

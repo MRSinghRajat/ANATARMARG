@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/utils/app_clock.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 
-class GratitudePracticeScreen extends StatefulWidget {
+class GratitudePracticeScreen extends ConsumerStatefulWidget {
   final VoidCallback? onComplete;
 
   const GratitudePracticeScreen({super.key, this.onComplete});
 
   @override
-  State<GratitudePracticeScreen> createState() =>
+  ConsumerState<GratitudePracticeScreen> createState() =>
       _GratitudePracticeScreenState();
 }
 
-class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
+class _GratitudePracticeScreenState extends ConsumerState<GratitudePracticeScreen>
     with TickerProviderStateMixin {
   final _controllers = List.generate(3, (_) => TextEditingController());
   final _focusNodes = List.generate(3, (_) => FocusNode());
@@ -98,9 +101,12 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
   }
 
   bool get _canSubmit =>
-      _controllers.any((c) => c.text.trim().isNotEmpty) && !_saving;
+      _controllers.every((c) => c.text.trim().isNotEmpty) && !_saving;
+
+  bool _triedSubmit = false;
 
   Future<void> _save() async {
+    setState(() => _triedSubmit = true);
     if (!_canSubmit) return;
     setState(() => _saving = true);
 
@@ -159,7 +165,7 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
                   ),
                   const Spacer(),
                   Text(
-                    'Gratitude Practice',
+                    AppStrings.get('gratitude_practice', ref.watch(languageProvider)),
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 16,
@@ -246,22 +252,30 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
 
                     const SizedBox(height: 24),
 
-                    Text(
-                      'What are you grateful for today?',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Write at least one. Take a moment to truly feel it.',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
+                    Builder(builder: (context) {
+                      final lang = ref.watch(languageProvider);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            AppStrings.get('what_grateful_for', lang),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            AppStrings.get('fill_all_three', lang),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
 
                     const SizedBox(height: 20),
 
@@ -348,7 +362,7 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
                             ),
                           )
                         : Text(
-                            'Save & Complete',
+                            AppStrings.get('save_complete', ref.watch(languageProvider)),
                             style: GoogleFonts.poppins(
                               color: _canSubmit
                                   ? Colors.white
@@ -370,6 +384,8 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
   Widget _buildGratitudeField(int index) {
     final color = _colors[index];
     final isFocused = _focusNodes[index].hasFocus;
+    final isEmpty = _controllers[index].text.trim().isEmpty;
+    final showError = _triedSubmit && isEmpty;
 
     return GestureDetector(
       onTap: () => _focusNodes[index].requestFocus(),
@@ -380,10 +396,12 @@ class _GratitudePracticeScreenState extends State<GratitudePracticeScreen>
           color: const Color(0xFF1A1D23),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isFocused
-                ? color.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.08),
-            width: isFocused ? 1.5 : 1,
+            color: showError
+                ? Colors.red.withValues(alpha: 0.6)
+                : isFocused
+                    ? color.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.08),
+            width: (isFocused || showError) ? 1.5 : 1,
           ),
           boxShadow: isFocused
               ? [

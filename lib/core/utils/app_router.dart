@@ -80,6 +80,14 @@ class AppRouter {
         return MaterialPageRoute(
             builder: (_) => const SubscriptionDevSettings());
       default:
+        // Auth callback deep links (/?code=... or /?refresh_token=...) arrive
+        // here when the Navigator sees them as routes. Redirect to login and
+        // let the deep link handler process the auth.
+        if (settings.name != null &&
+            (settings.name!.contains('code=') ||
+             settings.name!.contains('refresh_token='))) {
+          return MaterialPageRoute(builder: (_) => const LoginScreen());
+        }
         return MaterialPageRoute(
           builder: (_) => Scaffold(
             body: Center(

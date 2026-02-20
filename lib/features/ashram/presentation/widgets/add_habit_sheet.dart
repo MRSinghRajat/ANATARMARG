@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/models/custom_habit_model.dart';
 import '../../data/services/custom_habit_service.dart';
 
 /// Bottom sheet for adding or editing a custom habit
-class AddHabitSheet extends StatefulWidget {
+class AddHabitSheet extends ConsumerStatefulWidget {
   final CustomHabit? editingHabit;
   final VoidCallback? onHabitAdded;
 
@@ -16,10 +19,10 @@ class AddHabitSheet extends StatefulWidget {
   });
 
   @override
-  State<AddHabitSheet> createState() => _AddHabitSheetState();
+  ConsumerState<AddHabitSheet> createState() => _AddHabitSheetState();
 }
 
-class _AddHabitSheetState extends State<AddHabitSheet> {
+class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -87,14 +90,33 @@ class _AddHabitSheetState extends State<AddHabitSheet> {
               ),
               const SizedBox(height: 16),
               
-              // Title
-              Text(
-                isEditing ? 'Edit Habit' : 'Create New Habit',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+              // Title + Close button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isEditing
+                        ? AppStrings.get('edit_habit', ref.watch(languageProvider))
+                        : AppStrings.get('create_new_habit', ref.watch(languageProvider)),
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               
@@ -175,7 +197,9 @@ class _AddHabitSheetState extends State<AddHabitSheet> {
                           ),
                         )
                       : Text(
-                          isEditing ? 'Save Changes' : 'Create Habit',
+                          isEditing
+                              ? AppStrings.get('save_changes', ref.watch(languageProvider))
+                              : AppStrings.get('create_habit', ref.watch(languageProvider)),
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 16,
