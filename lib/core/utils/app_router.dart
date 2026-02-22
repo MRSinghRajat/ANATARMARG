@@ -12,6 +12,8 @@ import '../../features/profile/presentation/screens/notifications_settings_scree
 import '../../features/subscription/presentation/screens/paywall_screen.dart';
 import '../../features/subscription/presentation/screens/customer_center_screen.dart';
 import '../../features/subscription/presentation/screens/subscription_dev_settings.dart';
+import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_setup_screen.dart';
+import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_home_screen.dart';
 
 class AppRouter {
   static const String login = '/login';
@@ -26,6 +28,8 @@ class AppRouter {
   static const String paywall = '/paywall';
   static const String customerCenter = '/customer-center';
   static const String subscriptionDevSettings = '/subscription-dev-settings';
+  static const String garbhSanskarSetup = '/garbh-sanskar-setup';
+  static const String garbhSanskarHome = '/garbh-sanskar-home';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -79,6 +83,12 @@ class AppRouter {
       case subscriptionDevSettings:
         return MaterialPageRoute(
             builder: (_) => const SubscriptionDevSettings());
+      case garbhSanskarSetup:
+        return MaterialPageRoute(
+            builder: (_) => const GarbhSanskarSetupScreen());
+      case garbhSanskarHome:
+        return MaterialPageRoute(
+            builder: (_) => const GarbhSanskarHomeScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
