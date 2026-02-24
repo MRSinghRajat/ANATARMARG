@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Enhanced flying coins animation that shows coins flying from source to target
 /// with particle effects and a merge animation at the destination.
@@ -15,6 +16,7 @@ class FlyingCoinsAnimation {
     GlobalKey? toKey,
     VoidCallback? onComplete,
   }) async {
+    HapticFeedback.mediumImpact();
     final overlay = Overlay.of(context);
     final mediaQuery = MediaQuery.of(context);
     final topPadding = mediaQuery.padding.top;
@@ -91,6 +93,7 @@ class FlyingCoinsAnimation {
 
   /// Show merge/burst effect at the coin counter
   static void _showMergeEffect(BuildContext context, Offset position, int amount) {
+    HapticFeedback.lightImpact();
     final overlay = Overlay.of(context);
     
     late OverlayEntry entry;

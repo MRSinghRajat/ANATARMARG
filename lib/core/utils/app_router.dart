@@ -34,7 +34,11 @@ class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case login:
-        return MaterialPageRoute(builder: (_) => const LoginScreen());
+        return MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
+          settings: settings,
+          fullscreenDialog: false,
+        );
       case signUp:
         return MaterialPageRoute(builder: (_) => const SignUpScreen());
       case onboarding:

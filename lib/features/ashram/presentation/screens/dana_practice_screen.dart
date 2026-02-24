@@ -1,27 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 
-class DanaPracticeScreen extends StatefulWidget {
+class DanaPracticeScreen extends ConsumerStatefulWidget {
   final VoidCallback? onComplete;
 
   const DanaPracticeScreen({super.key, this.onComplete});
 
   @override
-  State<DanaPracticeScreen> createState() => _DanaPracticeScreenState();
+  ConsumerState<DanaPracticeScreen> createState() =>
+      _DanaPracticeScreenState();
 }
 
-class _DanaPracticeScreenState extends State<DanaPracticeScreen>
+class _DanaPracticeScreenState extends ConsumerState<DanaPracticeScreen>
     with TickerProviderStateMixin {
   int? _selectedTypeIndex;
-  final _descriptionController = TextEditingController();
   bool _completed = false;
 
   late final AnimationController _staggerController;
   late final AnimationController _buttonController;
   late final AnimationController _completionController;
+  late final AnimationController _outlinePulseController;
   late final List<Animation<double>> _cardAnimations;
   late final Animation<double> _buttonScale;
   late final Animation<double> _completionScale;
+  late final Animation<double> _outlinePulse;
 
   static const _danaTypes = [
     _DanaType(
@@ -124,6 +129,25 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
       parent: _completionController,
       curve: Curves.elasticOut,
     );
+
+    _outlinePulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _outlinePulse = TweenSequence<double>(
+      <TweenSequenceItem<double>>[
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 0, end: 1)
+              .chain(CurveTween(curve: Curves.easeOut)),
+          weight: 50,
+        ),
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 1, end: 0)
+              .chain(CurveTween(curve: Curves.easeIn)),
+          weight: 50,
+        ),
+      ],
+    ).animate(_outlinePulseController);
   }
 
   @override
@@ -131,136 +155,93 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
     _staggerController.dispose();
     _buttonController.dispose();
     _completionController.dispose();
-    _descriptionController.dispose();
+    _outlinePulseController.dispose();
     super.dispose();
   }
 
-  bool get _canSubmit =>
-      _descriptionController.text.trim().isNotEmpty && !_completed;
+  bool get _canSubmit => _selectedTypeIndex != null && !_completed;
 
-  void _showDanaDetail(int index) {
+  void _showDanaInfoPopup(BuildContext context, int index) {
     final dana = _danaTypes[index];
-    showModalBottomSheet(
+    showDialog<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.55,
-        ),
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1D23),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1D23),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutBack,
-              builder: (context, value, child) => Transform.scale(
-                scale: value,
-                child: child,
-              ),
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: dana.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(dana.icon, color: dana.color, size: 28),
-              ),
-            ),
-            const SizedBox(height: 16),
             Text(
               dana.name,
               style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+                color: dana.color,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
             ),
+            const SizedBox(height: 4),
             Text(
               dana.nameHindi,
               style: GoogleFonts.notoSerifDevanagari(
-                color: dana.color,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              dana.description,
-              style: GoogleFonts.poppins(
                 color: Colors.white70,
-                fontSize: 13,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: dana.color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: dana.color.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    dana.shloka,
-                    style: GoogleFonts.notoSerifDevanagari(
-                      color: dana.color,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    dana.shlokaTranslation,
-                    style: GoogleFonts.crimsonPro(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() => _selectedTypeIndex = index);
-                },
-                child: Text(
-                  'I practiced this today',
-                  style: GoogleFonts.poppins(
-                    color: dana.color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                fontSize: 16,
               ),
             ),
           ],
         ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                dana.shloka,
+                style: GoogleFonts.notoSerifDevanagari(
+                  color: Colors.white54,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                dana.shlokaTranslation,
+                style: GoogleFonts.poppins(
+                  color: Colors.white38,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                dana.shortDesc,
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                dana.description,
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Close',
+              style: GoogleFonts.poppins(color: Colors.white70),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -269,6 +250,8 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
     if (!_canSubmit) return;
     setState(() => _completed = true);
     _completionController.forward();
+    widget.onComplete?.call();
+    if (mounted) Navigator.pop(context, true);
   }
 
   @override
@@ -310,97 +293,59 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
 
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
-
-                // Dharmic intro with fade-in
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 600),
-                  builder: (context, value, child) => Opacity(
-                    opacity: value,
-                    child: Transform.translate(
-                      offset: Offset(0, 16 * (1 - value)),
-                      child: child,
+                const SizedBox(height: 12),
+                // Short intro: Sanskrit + explanation of types (in a subtle card)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      width: 1,
                     ),
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.amber.withValues(alpha: 0.15),
-                          Colors.orange.withValues(alpha: 0.08),
-                        ],
+                  child: Column(
+                    children: [
+                      Text(
+                        'श्रद्धया देयम्',
+                        style: GoogleFonts.notoSerifDevanagari(
+                          color: Colors.amber.shade200,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: Colors.amber.withValues(alpha: 0.2)),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'दानं भोगो नाशस्तिस्रो गतयो भवन्ति वित्तस्य',
-                          style: GoogleFonts.notoSerifDevanagari(
-                            color: Colors.amber.shade200,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
+                      const SizedBox(height: 8),
+                      Text(
+                        'Give with faith and sincerity. Dana is giving with a pure heart. '
+                        'The five main types are: Vidya (knowledge), Anna (food), '
+                        'Abhaya (fearlessness), Vastra (clothing or material), and Shram (labour).',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          height: 1.45,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '"Wealth has three destinations: charity, enjoyment, or destruction.\n'
-                          'That which is not given or enjoyed is simply destroyed."',
-                          style: GoogleFonts.crimsonPro(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            height: 1.4,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Dana is not just about money. In Sanatana Dharma, giving takes many forms — '
-                          'knowledge, food, protection, material, and labor. Each type of Dana purifies '
-                          'the giver and serves the world.',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white54,
-                            fontSize: 12,
-                            height: 1.5,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
-
-                const SizedBox(height: 24),
-
+                const SizedBox(height: 20),
                 Text(
-                  '5 Types of Dana',
+                  'Choose your Dana today',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Tap a type to learn more. Select what you practiced.',
-                  style:
-                      GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Staggered grid of Dana types
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -409,10 +354,11 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
                     crossAxisCount: 2,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 1.05,
+                    childAspectRatio: 1.22,
                   ),
                   itemCount: _danaTypes.length,
                   itemBuilder: (context, index) {
+                    final isHindi = ref.watch(languageProvider) == 'hi';
                     return AnimatedBuilder(
                       animation: _cardAnimations[index],
                       builder: (context, child) {
@@ -425,64 +371,27 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
                           ),
                         );
                       },
-                      child: _buildDanaCard(index),
+                      child: _buildDanaCard(index, isHindi),
                     );
                   },
                 ),
 
                 const SizedBox(height: 24),
-
-                // Description field
-                Text(
-                  'What did you give today?',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _descriptionController,
-                  maxLines: 5,
-                  minLines: 3,
-                  onChanged: (_) => setState(() {}),
-                  style:
-                      GoogleFonts.poppins(color: Colors.white, fontSize: 14, height: 1.5),
-                  cursorColor: Colors.amber,
-                  decoration: InputDecoration(
-                    hintText: 'Describe your act of giving...',
-                    hintStyle: GoogleFonts.poppins(
-                        color: Colors.white38, fontSize: 13),
-                    filled: true,
-                    fillColor: const Color(0xFF1A1D23),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.amber.withValues(alpha: 0.5)),
-                    ),
-                    contentPadding: const EdgeInsets.all(16),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
               ],
             ),
           ),
         ),
 
-        // Animated complete button
+        // Complete dana button (highlighted when a type is selected)
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: GestureDetector(
-            onTapDown: _canSubmit ? (_) => _buttonController.forward() : null,
+            onTapDown: _canSubmit
+                ? (_) {
+                    HapticFeedback.lightImpact();
+                    _buttonController.forward();
+                  }
+                : null,
             onTapUp: _canSubmit
                 ? (_) {
                     _buttonController.reverse();
@@ -537,81 +446,134 @@ class _DanaPracticeScreenState extends State<DanaPracticeScreen>
     );
   }
 
-  Widget _buildDanaCard(int index) {
+  Widget _buildDanaCard(int index, bool isHindi) {
     final dana = _danaTypes[index];
     final selected = _selectedTypeIndex == index;
+    final displayName = isHindi ? dana.nameHindi : dana.name;
 
     return GestureDetector(
-      onTap: () => _showDanaDetail(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected
-              ? dana.color.withValues(alpha: 0.15)
-              : const Color(0xFF1A1D23),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected
-                ? dana.color.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.08),
-            width: selected ? 1.5 : 1,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: dana.color.withValues(alpha: 0.15),
-                    blurRadius: 12,
-                    spreadRadius: 0,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() {
+          _selectedTypeIndex = _selectedTypeIndex == index ? null : index;
+        });
+        if (index == _selectedTypeIndex) {
+          _outlinePulseController.forward(from: 0);
+        }
+      },
+      child: AnimatedBuilder(
+        animation: _outlinePulse,
+        builder: (context, child) {
+          final pulse = selected ? _outlinePulse.value : 0.0;
+          final borderWidth = selected ? 1.5 + (pulse * 1.0) : 1.0;
+          final borderAlpha = selected ? 0.6 + (pulse * 0.25) : 0.15;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: selected
+                    ? [
+                        dana.color.withValues(alpha: 0.35),
+                        dana.color.withValues(alpha: 0.12),
+                      ]
+                    : [
+                        dana.color.withValues(alpha: 0.12),
+                        const Color(0xFF1A1D23),
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: dana.color.withValues(alpha: borderAlpha),
+                width: borderWidth,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: dana.color
+                      .withValues(alpha: (selected ? 0.2 : 0.08) + (pulse * 0.1)),
+                  blurRadius: selected ? 12.0 + (pulse * 4) : 6,
+                  spreadRadius: pulse * 0.5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          selected ? Icons.check_circle : dana.icon,
+                          color: selected ? dana.color : Colors.white54,
+                          size: selected ? 22 : 18,
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          displayName,
+                          style: isHindi
+                              ? GoogleFonts.notoSerifDevanagari(
+                                  color: selected ? dana.color : Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                )
+                              : GoogleFonts.poppins(
+                                  color: selected ? dana.color : Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          dana.shloka,
+                          style: GoogleFonts.notoSerifDevanagari(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: selected ? 38 : 34,
-              height: selected ? 38 : 34,
-              decoration: BoxDecoration(
-                color: (selected ? dana.color : Colors.white24)
-                    .withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                selected ? Icons.check_circle : dana.icon,
-                color: selected ? dana.color : Colors.white54,
-                size: selected ? 22 : 18,
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          _showDanaInfoPopup(context, index);
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              dana.name,
-              style: GoogleFonts.poppins(
-                color: selected ? dana.color : Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              dana.shortDesc,
-              style: GoogleFonts.poppins(
-                color: Colors.white38,
-                fontSize: 9,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

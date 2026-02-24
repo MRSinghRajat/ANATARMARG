@@ -1572,24 +1572,7 @@ class _GeometricLinesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withOpacity(opacity)
-      ..strokeWidth = 1;
-
-    const spacing = 40.0;
-    // Diagonal lines
-    for (var i = -size.width; i < size.width * 2; i += spacing) {
-      canvas.drawLine(
-        Offset(i.toDouble(), 0),
-        Offset(i + size.height, size.height),
-        paint,
-      );
-      canvas.drawLine(
-        Offset(i.toDouble(), size.height),
-        Offset(i + size.height, 0),
-        paint,
-      );
-    }
+    // Diagonal lines removed — no background lines drawn
   }
 
   @override

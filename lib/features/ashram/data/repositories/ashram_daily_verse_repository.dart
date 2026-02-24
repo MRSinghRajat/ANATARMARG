@@ -71,6 +71,21 @@ class AshramDailyVerseRepository {
     );
   }
 
+  /// Get today's verse for display (e.g. when opening from task).
+  /// Returns cached verse for today if any, so the user can view the same verse again after opening.
+  Future<AshramDailyVerseModel?> getTodaysVerseForDisplay() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayString();
+    final cachedDate = prefs.getString(_cacheDateKey);
+    if (cachedDate == today) {
+      final cached = prefs.getString(_cacheKey);
+      if (cached != null) {
+        return _parseCachedVerse(cached);
+      }
+    }
+    return getTodaysVerse(forceRefresh: false);
+  }
+
   /// Mark verse as viewed for today - card will hide
   Future<void> markViewed() async {
     final prefs = await SharedPreferences.getInstance();

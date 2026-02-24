@@ -12,8 +12,10 @@ import '../../../../core/utils/sound_manager.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../ashram/data/models/user_spiritual_progress_model.dart';
+import '../../../ashram/data/models/daily_task_model.dart';
 import '../../../ashram/data/repositories/spiritual_progress_repository.dart';
 import '../../../ashram/data/repositories/achievement_repository.dart';
+import '../../../ashram/data/repositories/daily_task_repository.dart';
 import '../../../ashram/data/models/achievement_model.dart';
 import '../../../ashram/presentation/widgets/streak_stats_card.dart';
 import '../../../subscription/presentation/screens/paywall_screen.dart';
@@ -34,16 +36,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final CoinService _coinService = CoinService();
   final SpiritualProgressRepository _progressRepository = SpiritualProgressRepository();
   final AchievementRepository _achievementRepository = AchievementRepository();
-  
+  final DailyTaskRepository _dailyTaskRepository = DailyTaskRepository();
+
   bool _isSoundEnabled = true;
   double _soundVolume = 0.5;
-  
+
   UserSpiritualProgress? _progress;
   List<UserAchievement> _recentAchievements = [];
   int _totalAchievements = 0;
   int _unlockedAchievements = 0;
   bool _isPremium = false;
   bool _isLoading = true;
+  Map<DateTime, List<UserDailyTask>> _timelineHistory = {};
   
   StreamSubscription<int>? _coinSubscription;
 
@@ -76,19 +80,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _loadUserData() async {
     setState(() => _isLoading = true);
-    
+
     try {
       // Load spiritual progress
       final progress = await _progressRepository.getProgress();
-      
+
       // Load achievements
       final allAchievements = await _achievementRepository.getAllAchievements();
       final userAchievements = await _achievementRepository.getUserAchievements();
       final recentUnlocks = await _achievementRepository.getRecentUnlocks();
-      
+
+      // Load timeline (task history from journey start)
+      int timelineDays = 90;
+      if (progress != null) {
+        final now = DateTime.now();
+        final start = progress.journeyStartDate;
+        timelineDays = now.difference(DateTime(start.year, start.month, start.day)).inDays.clamp(1, 365);
+      }
+      final timeline = await _dailyTaskRepository.getTaskHistory(timelineDays);
+
       // Check premium status
       final isPremium = await PremiumService.instance.isPremium;
-      
+
       if (mounted) {
         setState(() {
           _progress = progress;
@@ -96,6 +109,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _unlockedAchievements = userAchievements.length;
           _recentAchievements = recentUnlocks.take(3).toList();
           _isPremium = isPremium;
+          _timelineHistory = timeline;
           _isLoading = false;
         });
       }
@@ -168,7 +182,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: StreakStatsCard(progress: _progress),
                       ),
                     ),
-                    
+
+                    // Timeline / Your journey
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildTimelineSection(),
+                      ),
+                    ),
+
                     // Coins and Premium Section
                     SliverToBoxAdapter(
                       child: Padding(
@@ -240,6 +262,88 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             },
             icon: const Icon(Icons.developer_mode, color: Colors.white38, size: 20),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineSection() {
+    if (_timelineHistory.isEmpty) return const SizedBox.shrink();
+
+    final dates = _timelineHistory.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+    final recentDates = dates.take(30).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timeline, color: AppColors.primaryOrange, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Your journey',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Daily streak and task history from the day you started.',
+            style: GoogleFonts.poppins(
+              color: Colors.white54,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...recentDates.map((date) {
+            final tasks = _timelineHistory[date]!
+                .where((t) => t.status == TaskStatus.completed)
+                .toList();
+            if (tasks.isEmpty) return const SizedBox.shrink();
+            final dateStr = '${date.day}/${date.month}/${date.year}';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dateStr,
+                    style: GoogleFonts.poppins(
+                      color: AppColors.primaryOrange.withValues(alpha: 0.9),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      tasks.map((t) => t.title).join(', '),
+                      style: GoogleFonts.poppins(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );

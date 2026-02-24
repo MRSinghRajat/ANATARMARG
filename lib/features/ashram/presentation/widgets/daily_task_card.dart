@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/daily_task_model.dart';
@@ -58,7 +59,10 @@ class DailyTaskCard extends StatelessWidget {
           children: [
             // Checkbox - tapping this toggles completion
             GestureDetector(
-              onTap: onTap,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onTap();
+              },
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.only(right: 12),

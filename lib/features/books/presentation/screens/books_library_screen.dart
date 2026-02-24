@@ -1805,6 +1805,8 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   Widget _buildSacredTextTile(SacredTextModel text) {
     final deityColors = _getTextDeityGradient(text.deitySlug);
     final deityName = _capitalize(text.deitySlug ?? '');
+    final coverUrl = text.coverImageUrl;
+    final hasCoverImage = coverUrl != null && coverUrl.isNotEmpty;
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -1831,77 +1833,18 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Deity gradient background
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      deityColors[0].withOpacity(0.28),
-                      deityColors[1].withOpacity(0.14),
-                      AppColors.charcoalDark,
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
+              // Cover image or deity gradient background
+              if (hasCoverImage)
+                Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _buildSacredTextGradientBg(
+                    deityColors,
+                    deityName,
                   ),
-                ),
-                child: Stack(
-                  children: [
-                    // Book-style border
-                    Positioned.fill(
-                      child: Container(
-                        margin: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: deityColors[0].withOpacity(0.12),
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Om watermark
-                    Positioned(
-                      right: 12,
-                      top: 14,
-                      child: Text(
-                        'ॐ',
-                        style: TextStyle(
-                          fontSize: 24,
-                          color: deityColors[0].withOpacity(0.12),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    // Deity name
-                    if (deityName.isNotEmpty)
-                      Positioned(
-                        left: 16,
-                        top: 18,
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              deityColors[0],
-                              deityColors[1],
-                              Colors.white.withOpacity(0.7),
-                            ],
-                          ).createShader(bounds),
-                          child: Text(
-                            deityName,
-                            style: GoogleFonts.crimsonPro(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                )
+              else
+                _buildSacredTextGradientBg(deityColors, deityName),
               // Bottom gradient
               Container(
                 decoration: BoxDecoration(
@@ -1992,6 +1935,79 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSacredTextGradientBg(List<Color> deityColors, String deityName) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            deityColors[0].withOpacity(0.28),
+            deityColors[1].withOpacity(0.14),
+            AppColors.charcoalDark,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Book-style border
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: deityColors[0].withOpacity(0.12),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          // Om watermark
+          Positioned(
+            right: 12,
+            top: 14,
+            child: Text(
+              'ॐ',
+              style: TextStyle(
+                fontSize: 24,
+                color: deityColors[0].withOpacity(0.12),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          // Deity name
+          if (deityName.isNotEmpty)
+            Positioned(
+              left: 16,
+              top: 18,
+              child: ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    deityColors[0],
+                    deityColors[1],
+                    Colors.white.withOpacity(0.7),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  deityName,
+                  style: GoogleFonts.crimsonPro(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -19,16 +19,19 @@ class SanctuaryCustomizationService {
 
   static const String _localPrefsKey = 'sanctuary_customization_v2';
   static const String _purchasedItemsKey = 'sanctuary_purchased_items_v2';
+  static const String _templeGroundKey = 'temple_ground_type';
 
   final _customizationController = StreamController<SanctuaryCustomization>.broadcast();
   SanctuaryCustomization _currentCustomization = SanctuaryCustomization.defaultConfig;
   Set<String> _purchasedItems = {};
+  TempleGroundType _templeGroundType = TempleGroundType.white;
   bool _isInitialized = false;
   bool _isLoading = false;
   Completer<void>? _initCompleter;
 
   Stream<SanctuaryCustomization> get customizationStream => _customizationController.stream;
   SanctuaryCustomization get currentCustomization => _currentCustomization;
+  TempleGroundType get templeGroundType => _templeGroundType;
   Set<String> get purchasedItems => _purchasedItems;
   bool get isInitialized => _isInitialized;
   bool get isLoading => _isLoading;
@@ -141,12 +144,22 @@ class SanctuaryCustomizationService {
         } else {
           _purchasedItems = _getDefaultPurchasedItems();
         }
-        
+
+        // Temple ground type is local-only; load from prefs
+        final prefs = await SharedPreferences.getInstance();
+        final groundName = prefs.getString(_templeGroundKey);
+        if (groundName != null) {
+          _templeGroundType = TempleGroundType.values.firstWhere(
+            (e) => e.name == groundName,
+            orElse: () => TempleGroundType.white,
+          );
+        }
+
         // Cache locally for offline support
         await _saveToLocalStorage();
         return true;
       }
-      
+
       return false;
     } catch (e) {
       print('Error loading sanctuary customization from Supabase: $e');
@@ -174,6 +187,15 @@ class SanctuaryCustomizationService {
         _purchasedItems = purchasedJson.toSet();
       } else {
         _purchasedItems = _getDefaultPurchasedItems();
+      }
+
+      // Load temple ground type
+      final groundName = prefs.getString(_templeGroundKey);
+      if (groundName != null) {
+        _templeGroundType = TempleGroundType.values.firstWhere(
+          (e) => e.name == groundName,
+          orElse: () => TempleGroundType.white,
+        );
       }
     } catch (e) {
       print('Error loading sanctuary customization from local storage: $e');
@@ -203,6 +225,7 @@ class SanctuaryCustomizationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_localPrefsKey, jsonEncode(_currentCustomization.toJson()));
       await prefs.setStringList(_purchasedItemsKey, _purchasedItems.toList());
+      await prefs.setString(_templeGroundKey, _templeGroundType.name);
     } catch (e) {
       print('Error saving sanctuary customization to local storage: $e');
     }
@@ -256,9 +279,19 @@ class SanctuaryCustomizationService {
         return _currentCustomization.specialEffect.name == itemName;
       case 'particleStyle':
         return _currentCustomization.particleStyle.name == itemName;
+      case 'templeGround':
+        return _templeGroundType.name == itemName;
       default:
         return false;
     }
+  }
+
+  /// Set temple ground type (persists locally)
+  Future<void> setTempleGroundType(TempleGroundType type) async {
+    if (_templeGroundType == type) return;
+    _templeGroundType = type;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_templeGroundKey, type.name);
   }
 
   /// Purchase an item (deducts coins via CoinService externally)

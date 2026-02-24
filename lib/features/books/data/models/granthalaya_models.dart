@@ -95,6 +95,7 @@ class SacredTextModel {
   final String difficulty;
   final bool isFeatured;
   final int orderIndex;
+  final String? coverImageUrl;
 
   SacredTextModel({
     required this.id,
@@ -115,6 +116,7 @@ class SacredTextModel {
     this.difficulty = 'beginner',
     this.isFeatured = false,
     this.orderIndex = 0,
+    this.coverImageUrl,
   });
 
   factory SacredTextModel.fromJson(Map<String, dynamic> json) {
@@ -137,6 +139,7 @@ class SacredTextModel {
       difficulty: json['difficulty'] as String? ?? 'beginner',
       isFeatured: json['is_featured'] as bool? ?? false,
       orderIndex: json['order_index'] as int? ?? 0,
+      coverImageUrl: json['cover_image_url'] as String?,
     );
   }
 

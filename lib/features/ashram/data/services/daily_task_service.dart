@@ -5,6 +5,7 @@ import '../models/achievement_model.dart';
 import '../repositories/daily_task_repository.dart';
 import '../repositories/spiritual_progress_repository.dart';
 import '../repositories/achievement_repository.dart';
+import '../../../../core/services/daily_notification_service.dart';
 import '../../../../shared/services/coin_service.dart';
 
 /// Service for managing daily tasks and related operations
@@ -63,13 +64,18 @@ class DailyTaskService {
   /// Load today's tasks
   Future<void> _loadTodaysTasks() async {
     _currentTasks = await _taskRepository.getTodaysTasks();
-    
+    final hadNoTasks = _currentTasks.isEmpty;
+
     // Generate tasks if none exist for today
     if (_currentTasks.isEmpty && _currentProgress != null) {
       _currentTasks = await _taskRepository.generateDailyTasks(
         daysSinceStart: _currentProgress!.daysSinceStart,
         currentStreak: _currentProgress!.currentStreak,
       );
+      if (hadNoTasks && _currentTasks.isNotEmpty) {
+        final pending = _currentTasks.where((t) => t.status == TaskStatus.pending).length;
+        await DailyNotificationService().notifyTasksGeneratedNow(pendingCount: pending);
+      }
     }
 
     _tasksController.add(_currentTasks);

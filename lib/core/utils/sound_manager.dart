@@ -16,10 +16,16 @@ class SoundManager {
   SoundManager._internal();
 
   final AudioPlayer _backgroundPlayer = AudioPlayer();
+  AudioPlayer? _oneShotPlayer;
   bool _isMuted = false;
   double _volume = 0.5;
   SoundType? _currentSound;
   bool _isInitialized = false;
+
+  AudioPlayer get _oneShot {
+    _oneShotPlayer ??= AudioPlayer();
+    return _oneShotPlayer!;
+  }
 
   bool get isMuted => _isMuted;
   double get volume => _volume;
@@ -107,6 +113,19 @@ class SoundManager {
     }
   }
 
+  /// Play a one-shot sound (e.g. meditation inhale/exhale, step transition).
+  /// Respects mute. Fails silently if asset is missing.
+  Future<void> playOneShot(String assetPath) async {
+    if (_isMuted) return;
+    try {
+      await _oneShot.setReleaseMode(ReleaseMode.release);
+      await _oneShot.setVolume(_volume);
+      await _oneShot.play(AssetSource(assetPath));
+    } catch (_) {
+      // Asset may not exist; ignore
+    }
+  }
+
   String _getSoundPath(SoundType type) {
     switch (type) {
       case SoundType.home:
@@ -129,5 +148,6 @@ class SoundManager {
 
   void dispose() {
     _backgroundPlayer.dispose();
+    _oneShotPlayer?.dispose();
   }
 }

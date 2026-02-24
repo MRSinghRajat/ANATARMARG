@@ -50,18 +50,9 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
     super.dispose();
   }
 
-  void _goToPage(int index) {
-    if (index < 0 || index >= widget.story.pages.length) return;
-    _fadeController.reset();
-    _decorController.reset();
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
-    );
+  void _onPageChanged(int index) {
+    if (index == _currentPage) return;
     setState(() => _currentPage = index);
-    _fadeController.forward();
-    _decorController.forward();
   }
 
   @override
@@ -90,15 +81,9 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
                             style: GoogleFonts.inter(color: Colors.white38)))
                     : PageView.builder(
                         controller: _pageController,
-                        physics: const NeverScrollableScrollPhysics(),
+                        physics: const PageScrollPhysics(),
                         itemCount: pages.length,
-                        onPageChanged: (i) {
-                          setState(() => _currentPage = i);
-                          _fadeController.reset();
-                          _decorController.reset();
-                          _fadeController.forward();
-                          _decorController.forward();
-                        },
+                        onPageChanged: _onPageChanged,
                         itemBuilder: (_, i) =>
                             _buildPage(pages[i], i),
                       ),
@@ -415,7 +400,7 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
 
   Widget _buildBottomNav(int totalPages) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -426,65 +411,13 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
           ],
         ),
       ),
-      child: Row(
-        children: [
-          _navButton(Icons.arrow_back_ios_new, 'Previous',
-              _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null),
-          Expanded(
-            child: Center(
-              child: Text(
-                '${_currentPage + 1} / $totalPages',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: _gold.withValues(alpha: 0.5),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          _navButton(
-            Icons.arrow_forward_ios,
-            _currentPage < totalPages - 1 ? 'Next' : 'Finish',
-            _currentPage < totalPages - 1
-                ? () => _goToPage(_currentPage + 1)
-                : () => Navigator.pop(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navButton(IconData icon, String label, VoidCallback? onTap) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: enabled ? 1.0 : 0.3,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: _gold.withValues(alpha: enabled ? 0.1 : 0.03),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: _gold.withValues(alpha: enabled ? 0.15 : 0.05)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (label == 'Previous') Icon(icon, size: 14, color: _gold),
-              if (label == 'Previous') const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: _gold,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (label != 'Previous') const SizedBox(width: 6),
-              if (label != 'Previous') Icon(icon, size: 14, color: _gold),
-            ],
+      child: Center(
+        child: Text(
+          '${_currentPage + 1} / $totalPages',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: _gold.withValues(alpha: 0.9),
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

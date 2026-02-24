@@ -159,6 +159,7 @@ class AppStrings {
     'nav_ashram': 'आश्रम',
     'nav_granthalya': 'ग्रंथालय',
     'nav_profile': 'प्रोफ़ाइल',
+    'nav_test_ui': 'टेस्ट UI',
 
     // Ashram
     'todays_tasks': 'आज के कार्य',

@@ -36,24 +36,41 @@ typedef PreviewCallback = void Function(SanctuaryCustomization preview);
 /// Callback when an item is applied (parent syncs applied state and clears preview)
 typedef AppliedCallback = void Function(SanctuaryCustomization applied);
 
+/// Callback when temple ground type is changed (parent updates 3D scene)
+typedef GroundTypeCallback = void Function(TempleGroundType type);
+
+/// Callback when a Mandir item is tapped (parent calls WebView JS)
+typedef MandirActionCallback = void Function(String jsCall);
+
+/// Which Aangan tab is active
+enum AanganTab { aatma, mandir }
+
 /// Draggable bottom sheet containing the sanctuary customization shop.
-/// Features:
-/// - Preview mode when selecting items
-/// - Apply button popup
-/// - Fixed drag handle (only drag via handle)
-/// - Scrollable items inside
+/// Same theme for both Aatma and Mandir; only the category tabs and items change.
 class SanctuaryShopSheet extends StatefulWidget {
   final ScrollController scrollController;
+  final bool isMinimized;
+  final AanganTab aanganTab;
+  final VoidCallback? onMinimizeTap;
+  final VoidCallback? onExpandTap;
   final PreviewCallback? onPreviewChange;
   final VoidCallback? onPreviewClear;
   final AppliedCallback? onApplied;
+  final GroundTypeCallback? onGroundTypeChange;
+  final MandirActionCallback? onMandirAction;
 
   const SanctuaryShopSheet({
     super.key,
     required this.scrollController,
+    this.isMinimized = false,
+    this.aanganTab = AanganTab.aatma,
+    this.onMinimizeTap,
+    this.onExpandTap,
     this.onPreviewChange,
     this.onPreviewClear,
     this.onApplied,
+    this.onGroundTypeChange,
+    this.onMandirAction,
   });
 
   @override
@@ -73,15 +90,29 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   CustomizationCategory? _previewCategory;
   bool _showApplyButton = false;
 
+  // Track which Mandir item is selected per category (single-select tabs only)
+  final Map<MandirCategory, String> _selectedMandirItems = {
+    MandirCategory.light: 'mood_midday',
+  };
 
+  // Decor items that are currently active (toggleable, multiple allowed)
+  final Set<String> _activeMandirDecor = {'dec_mandir', 'dec_diyas'};
+
+  // FX items that are currently active (toggleable, multiple allowed)
+  final Set<String> _activeMandirFx = {};
+
+  int get _tabCount => widget.aanganTab == AanganTab.aatma
+      ? CustomizationCategory.values.length + 1
+      : MandirCategory.values.length;
+
+  void _rebuildTabController() {
+    _tabController = TabController(length: _tabCount, vsync: this);
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: CustomizationCategory.values.length + 1, // +1 for Owned tab
-      vsync: this,
-    );
+    _rebuildTabController();
   }
 
   @override
@@ -105,8 +136,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       ),
       child: Stack(
         children: [
-          // Hidden scrollable — gives DraggableScrollableSheet the
-          // scroll position it needs to manage the sheet extent.
           IgnorePointer(
             child: ListView(
               controller: widget.scrollController,
@@ -115,29 +144,32 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
             ),
           ),
 
-          // Actual visible UI
           Positioned.fill(
             child: Column(
               children: [
                 _buildFixedHeader(),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      TabBarView(
-                        controller: _tabController,
-                        children: [
-                          ...CustomizationCategory.values.map((category) {
-                            return _buildCategoryGrid(category);
-                          }),
-                          // Last tab: Owned collection
-                          _buildMyCollectionView(),
-                        ],
-                      ),
-                      if (_showApplyButton && _previewItem != null)
-                        _buildApplyOverlay(),
-                    ],
+                if (!widget.isMinimized)
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        TabBarView(
+                          controller: _tabController,
+                          children: widget.aanganTab == AanganTab.aatma
+                              ? [
+                                  ...CustomizationCategory.values
+                                      .map(_buildCategoryGrid),
+                                  _buildMyCollectionView(),
+                                ]
+                              : [
+                                  ...MandirCategory.values
+                                      .map(_buildMandirCategoryGrid),
+                                ],
+                        ),
+                        if (_showApplyButton && _previewItem != null)
+                          _buildApplyOverlay(),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -152,49 +184,48 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         color: AppColors.ashramBackgroundDark,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle — enlarged touch target for grabbing the sheet
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: (details) {
-              final ctrl = widget.scrollController;
-              if (ctrl.hasClients) {
-                final newOffset = ctrl.offset - details.delta.dy;
-                ctrl.jumpTo(
-                  newOffset.clamp(
-                    ctrl.position.minScrollExtent,
-                    ctrl.position.maxScrollExtent,
-                  ),
-                );
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 6),
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) {
+          final ctrl = widget.scrollController;
+          if (ctrl.hasClients) {
+            final newOffset = ctrl.offset - details.delta.dy;
+            ctrl.jumpTo(
+              newOffset.clamp(
+                ctrl.position.minScrollExtent,
+                ctrl.position.maxScrollExtent,
+              ),
+            );
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: GestureDetector(
+                onTap: widget.isMinimized
+                    ? widget.onExpandTap
+                    : widget.onMinimizeTap,
+                child: Icon(
+                  widget.isMinimized
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 24,
+                  color: Colors.white.withValues(alpha: 0.6),
                 ),
               ),
             ),
-          ),
-
-          // Category tabs (directly after handle — no title/balance)
-          _buildCategoryTabs(),
-          const SizedBox(height: 4),
-
-          // Divider
-          Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.05),
-          ),
-        ],
+            if (!widget.isMinimized) ...[
+              _buildCategoryTabs(),
+              const SizedBox(height: 4),
+              Container(
+                height: 1,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -202,10 +233,9 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
 
   Widget _buildMyCollectionView() {
-    // Get all currently equipped items
     final current = _customizationService.currentCustomization;
 
-    // Group owned items by category
+    // Only categories visible in current tab
     final Map<CustomizationCategory, List<ShopItem>> ownedByCategory = {};
 
     for (final category in CustomizationCategory.values) {
@@ -242,10 +272,8 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   }
 
   Widget _buildCurrentlyEquippedSection(SanctuaryCustomization current) {
-    // Get currently equipped items as a horizontal list
     final equipped = <ShopItem>[];
 
-    // Om Style
     equipped.add(ShopItem(
       id: current.omStyle.name,
       name: current.omStyle.displayName,
@@ -255,8 +283,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       isDefault: current.omStyle.isDefault,
       categoryKey: 'omStyle',
     ));
-
-    // Ring Style
     equipped.add(ShopItem(
       id: current.ringStyle.name,
       name: current.ringStyle.displayName,
@@ -266,8 +292,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       isDefault: current.ringStyle.isDefault,
       categoryKey: 'ringStyle',
     ));
-
-    // Ring Color
     equipped.add(ShopItem(
       id: current.ringColor.name,
       name: current.ringColor.displayName,
@@ -278,8 +302,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       categoryKey: 'ringColor',
       previewColor: current.ringColor.primaryColor,
     ));
-
-    // Background
     equipped.add(ShopItem(
       id: current.backgroundStyle.name,
       name: current.backgroundStyle.displayName,
@@ -289,8 +311,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       isDefault: current.backgroundStyle.isDefault,
       categoryKey: 'backgroundStyle',
     ));
-
-    // Glow
     equipped.add(ShopItem(
       id: current.glowColor.name,
       name: current.glowColor.displayName,
@@ -300,6 +320,16 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       isDefault: current.glowColor.isDefault,
       categoryKey: 'glowColor',
       previewColor: current.glowColor.color,
+    ));
+    final ground = _customizationService.templeGroundType;
+    equipped.add(ShopItem(
+      id: ground.name,
+      name: ground.displayName,
+      emoji: ground.emoji,
+      cost: 0,
+      rarity: ItemRarity.common,
+      isDefault: ground == TempleGroundType.white,
+      categoryKey: 'templeGround',
     ));
 
     return Column(
@@ -508,6 +538,8 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         return key == 'particleStyle';
       case CustomizationCategory.deityImages:
         return key == 'deityImage';
+      case CustomizationCategory.groundTypes:
+        return key == 'templeGround';
     }
   }
 
@@ -533,33 +565,50 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         dividerColor: Colors.transparent,
         tabAlignment: TabAlignment.start,
         labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-        tabs: [
-          ...CustomizationCategory.values.map((category) {
-            return Tab(
-              height: 28,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(category.emoji, style: const TextStyle(fontSize: 11)),
-                  const SizedBox(width: 3),
-                  Text(category.displayName),
-                ],
-              ),
-            );
-          }),
-          // Owned tab at the end
-          const Tab(
-            height: 28,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('📦', style: TextStyle(fontSize: 11)),
-                SizedBox(width: 3),
-                Text('Owned'),
+        tabs: widget.aanganTab == AanganTab.aatma
+            ? [
+                ...CustomizationCategory.values.map((category) {
+                  return Tab(
+                    height: 28,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(category.emoji,
+                            style: const TextStyle(fontSize: 11)),
+                        const SizedBox(width: 3),
+                        Text(category.displayName),
+                      ],
+                    ),
+                  );
+                }),
+                const Tab(
+                  height: 28,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('📦', style: TextStyle(fontSize: 11)),
+                      SizedBox(width: 3),
+                      Text('Owned'),
+                    ],
+                  ),
+                ),
+              ]
+            : [
+                ...MandirCategory.values.map((category) {
+                  return Tab(
+                    height: 28,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(category.emoji,
+                            style: const TextStyle(fontSize: 11)),
+                        const SizedBox(width: 3),
+                        Text(category.displayName),
+                      ],
+                    ),
+                  );
+                }),
               ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -579,6 +628,141 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       itemBuilder: (context, index) {
         return _buildShopItemCard(items[index], category);
       },
+    );
+  }
+
+  Widget _buildMandirCategoryGrid(MandirCategory category) {
+    final items = MandirItems.getItemsForCategory(category);
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 80),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 0.80,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final isSelected = _isMandirItemSelected(item, category);
+        return _buildMandirItemCard(item, category, isSelected);
+      },
+    );
+  }
+
+  bool _isMandirItemSelected(MandirItem item, MandirCategory category) {
+    if (category == MandirCategory.decor) {
+      return _activeMandirDecor.contains(item.id);
+    }
+    if (category == MandirCategory.fx) {
+      return _activeMandirFx.contains(item.id);
+    }
+    return _selectedMandirItems[category] == item.id;
+  }
+
+  Widget _buildMandirItemCard(
+      MandirItem item, MandirCategory category, bool isSelected) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (category == MandirCategory.decor) {
+            if (_activeMandirDecor.contains(item.id)) {
+              _activeMandirDecor.remove(item.id);
+            } else {
+              _activeMandirDecor.add(item.id);
+            }
+          } else if (category == MandirCategory.fx) {
+            if (_activeMandirFx.contains(item.id)) {
+              _activeMandirFx.remove(item.id);
+            } else {
+              _activeMandirFx.add(item.id);
+            }
+          } else {
+            _selectedMandirItems[category] = item.id;
+          }
+        });
+        widget.onMandirAction?.call(item.jsCall);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isSelected
+                ? [
+                    AppColors.ashramAccentGold.withValues(alpha: 0.2),
+                    AppColors.ashramAccentGold.withValues(alpha: 0.05),
+                  ]
+                : [
+                    const Color(0xFF1A2837).withValues(alpha: 0.6),
+                    const Color(0xFF2A3847).withValues(alpha: 0.3),
+                  ],
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.ashramAccentGold.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.08),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: Text(item.emoji,
+                          style: const TextStyle(fontSize: 22)),
+                    ),
+                  ),
+                  Text(
+                    item.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.tenorSans(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  if (item.cost > 0)
+                    Text(
+                      '💎 ${item.cost}',
+                      style: GoogleFonts.tenorSans(
+                        fontSize: 7,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: Container(
+                  padding: const EdgeInsets.all(1.5),
+                  decoration: const BoxDecoration(
+                    color: AppColors.ashramAccentGold,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 8,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -714,6 +898,19 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                   isDefault: false,
                   categoryKey: 'deityImage',
                   description: deity.description,
+                ))
+            .toList();
+
+      case CustomizationCategory.groundTypes:
+        return TempleGroundType.values
+            .map((type) => ShopItem(
+                  id: type.name,
+                  name: type.displayName,
+                  emoji: type.emoji,
+                  cost: 0,
+                  rarity: ItemRarity.common,
+                  isDefault: type == TempleGroundType.white,
+                  categoryKey: 'templeGround',
                 ))
             .toList();
     }
@@ -913,6 +1110,18 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
     // If already selected, do nothing
     if (isSelected) return;
+
+    // Temple ground: apply immediately (no preview/apply flow)
+    if (category == CustomizationCategory.groundTypes) {
+      final type = TempleGroundType.values.firstWhere(
+        (e) => e.name == item.id,
+        orElse: () => TempleGroundType.white,
+      );
+      _customizationService.setTempleGroundType(type);
+      widget.onGroundTypeChange?.call(type);
+      setState(() {});
+      return;
+    }
 
     // Set preview
     setState(() {

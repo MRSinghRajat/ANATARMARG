@@ -36,7 +36,9 @@ import 'seva_help_screen.dart';
 import 'dana_practice_screen.dart';
 import 'chant_player_screen.dart';
 import 'japa_counter_screen.dart';
+import 'manifestation_practice_screen.dart';
 import 'habit_detail_screen.dart';
+import '../../../garbh_sanskar/presentation/widgets/garbh_sanskar_entry_card.dart';
 
 class AshramScreen extends ConsumerStatefulWidget {
   const AshramScreen({super.key});
@@ -206,6 +208,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     'donate',
     'listen_chant',
     'japa_108',
+    'manifestation',
   };
 
   bool _hasScreen(UserDailyTask task) =>
@@ -217,7 +220,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
 
     switch (slug) {
       case 'daily_verse':
-        final verse = await _verseRepository.getTodaysVerse();
+        final verse = await _verseRepository.getTodaysVerseForDisplay();
         if (verse == null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(AppStrings.get('no_verse_available', ref.read(languageProvider)))),
@@ -307,6 +310,12 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
 
       case 'japa_108':
         screen = JapaCounterScreen(
+          onComplete: () => _onTaskTap(task),
+        );
+        break;
+
+      case 'manifestation':
+        screen = ManifestationPracticeScreen(
           onComplete: () => _onTaskTap(task),
         );
         break;
@@ -524,6 +533,11 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             ),
           )
         else ...[
+          // Garbh Sanskar entry card
+          const SliverToBoxAdapter(
+            child: GarbhSanskarEntryCard(),
+          ),
+
           // Section: Today's Tasks
           SliverToBoxAdapter(
             child: Padding(

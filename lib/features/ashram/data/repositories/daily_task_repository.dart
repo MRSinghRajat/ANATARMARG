@@ -179,6 +179,7 @@ class DailyTaskRepository {
     _addIfAvailable('donate');
     _addIfAvailable('gratitude_practice');
     _addIfAvailable('japa_108');
+    _addIfAvailable('manifestation');
 
     // ── Meditation slot (weekday-based) ──
     final weekday = AppClock.now().weekday; // 1=Mon .. 7=Sun

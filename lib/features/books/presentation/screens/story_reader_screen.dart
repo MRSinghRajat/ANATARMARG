@@ -61,18 +61,9 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
     super.dispose();
   }
 
-  void _goToPage(int index) {
-    if (index < 0 || index >= widget.story.pages.length) return;
-    _fadeController.reset();
-    _decorController.reset();
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
-    );
+  void _onPageChanged(int index) {
+    if (index == _currentPage) return;
     setState(() => _currentPage = index);
-    _fadeController.forward();
-    _decorController.forward();
   }
 
   @override
@@ -99,15 +90,9 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
                     ? _buildEmptyState()
                     : PageView.builder(
                         controller: _pageController,
-                        physics: const NeverScrollableScrollPhysics(),
+                        physics: const PageScrollPhysics(),
                         itemCount: pages.length,
-                        onPageChanged: (i) {
-                          setState(() => _currentPage = i);
-                          _fadeController.reset();
-                          _decorController.reset();
-                          _fadeController.forward();
-                          _decorController.forward();
-                        },
+                        onPageChanged: _onPageChanged,
                         itemBuilder: (_, i) => _buildStoryPage(pages[i], i),
                       ),
               ),
@@ -447,101 +432,21 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
   }
 
   Widget _buildBottomNav(int totalPages) {
-    final isFirst = _currentPage == 0;
-    final isLast = _currentPage >= totalPages - 1;
-
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
-        color: _bg1.withOpacity(0.95),
+        color: _bg1.withValues(alpha: 0.95),
         border: Border(
-          top: BorderSide(color: _gold.withOpacity(0.08)),
+          top: BorderSide(color: _gold.withValues(alpha: 0.08)),
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildNavButton(
-              icon: Icons.chevron_left,
-              label: 'Previous',
-              enabled: !isFirst,
-              onTap: () => _goToPage(_currentPage - 1),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: _gold.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${_currentPage + 1} / $totalPages',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: _gold,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildNavButton(
-              icon: Icons.chevron_right,
-              label: isLast ? 'Done' : 'Next',
-              enabled: true,
-              isForward: true,
-              onTap: isLast ? () => Navigator.pop(context) : () => _goToPage(_currentPage + 1),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavButton({
-    required IconData icon,
-    required String label,
-    required bool enabled,
-    required VoidCallback onTap,
-    bool isForward = false,
-  }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: enabled ? 1 : 0.3,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isForward && enabled
-                ? _gold.withOpacity(0.12)
-                : Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isForward && enabled
-                  ? _gold.withOpacity(0.2)
-                  : Colors.white.withOpacity(0.06),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (!isForward) Icon(icon, size: 18, color: enabled ? Colors.white70 : Colors.white24),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isForward && enabled ? _gold : (enabled ? Colors.white70 : Colors.white24),
-                ),
-              ),
-              if (isForward) ...[
-                const SizedBox(width: 4),
-                Icon(icon, size: 18, color: enabled ? _gold : Colors.white24),
-              ],
-            ],
+      child: Center(
+        child: Text(
+          '${_currentPage + 1} / $totalPages',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: _gold.withValues(alpha: 0.9),
           ),
         ),
       ),

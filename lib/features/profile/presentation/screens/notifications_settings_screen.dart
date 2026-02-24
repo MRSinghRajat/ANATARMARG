@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/push_notification_service.dart';
+import '../../../../core/services/daily_notification_service.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
   const NotificationsSettingsScreen({super.key});
@@ -31,6 +33,8 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
           _newContentUpdates = prefs.getBool('notifications_updates') ?? true;
           _isLoading = false;
         });
+        final anyOn = _dailyReminders || _prayerAlerts || _newContentUpdates;
+        if (anyOn) PushNotificationService().requestPermissionAndRegister();
       }
     } catch (e) {
       if (mounted) {
@@ -45,6 +49,12 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key, value);
+      if (value) {
+        await PushNotificationService().requestPermissionAndRegister();
+      }
+      if (key == 'notifications_daily') {
+        await DailyNotificationService.updateFromDailyReminderSetting(value);
+      }
     } catch (_) {
       // Ignore - settings will use in-memory value
     }
@@ -64,13 +74,33 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
               children: [
                 _buildNotificationTile(
                   title: 'Daily Reminders',
-                  subtitle: 'Get daily inspiration and reminders',
+                  subtitle: '6:00 AM tasks ready · 6:00 PM complete reminder',
                   value: _dailyReminders,
                   onChanged: (value) {
                     setState(() => _dailyReminders = value);
                     _updateSetting('notifications_daily', value);
                   },
                 ),
+                if (_dailyReminders)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        await DailyNotificationService().showTestDailyNotification();
+                        if (mounted) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Test notification in 3 seconds'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                      label: const Text('Send test now'),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 _buildNotificationTile(
                   title: 'Prayer Alerts',

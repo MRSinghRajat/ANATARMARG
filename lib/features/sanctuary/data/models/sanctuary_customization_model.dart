@@ -1247,6 +1247,199 @@ extension ItemRarityMeta on ItemRarity {
   }
 }
 
+/// Temple ground type (for 3D temple scene in Aangan)
+enum TempleGroundType {
+  white,
+  mud,
+  water,
+  mountain,
+  sand,
+  green,
+}
+
+extension TempleGroundTypeMeta on TempleGroundType {
+  String get displayName {
+    switch (this) {
+      case TempleGroundType.white: return 'White';
+      case TempleGroundType.mud: return 'Mud';
+      case TempleGroundType.water: return 'Water';
+      case TempleGroundType.mountain: return 'Mountain';
+      case TempleGroundType.sand: return 'Sand';
+      case TempleGroundType.green: return 'Green';
+    }
+  }
+
+  String get emoji {
+    switch (this) {
+      case TempleGroundType.white: return '⬜';
+      case TempleGroundType.mud: return '🟫';
+      case TempleGroundType.water: return '💧';
+      case TempleGroundType.mountain: return '🏔️';
+      case TempleGroundType.sand: return '🟨';
+      case TempleGroundType.green: return '🟩';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIR 3D — Categories and items (mirrors aangan_3d.html tabs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum MandirCategory {
+  fx,
+  decor,
+  light,
+}
+
+extension MandirCategoryMeta on MandirCategory {
+  String get displayName {
+    switch (this) {
+      case MandirCategory.fx: return 'FX';
+      case MandirCategory.decor: return 'Decor';
+      case MandirCategory.light: return 'Light';
+    }
+  }
+
+  String get emoji {
+    switch (this) {
+      case MandirCategory.fx: return '✨';
+      case MandirCategory.decor: return '🏡';
+      case MandirCategory.light: return '🕯️';
+    }
+  }
+}
+
+class MandirItem {
+  final String id;
+  final String name;
+  final String emoji;
+  final String jsCall;
+  final int cost;
+
+  const MandirItem({
+    required this.id,
+    required this.name,
+    required this.emoji,
+    required this.jsCall,
+    this.cost = 0,
+  });
+}
+
+class MandirItems {
+  static const List<MandirItem> omSymbols = [
+    MandirItem(id: 'om_classic', name: 'Om', emoji: '\u0950', jsCall: "setOmSymbol('\u0950',null)"),
+    MandirItem(id: 'swastik', name: 'Swastik', emoji: '\u5350', jsCall: "setOmSymbol('\u5350',null)"),
+    MandirItem(id: 'trishul', name: 'Trishul', emoji: '🔱', jsCall: "setOmSymbol('\u0924\u094D\u0930',null)"),
+    MandirItem(id: 'shri', name: 'Shri', emoji: '\u0936\u094D\u0930\u0940', jsCall: "setOmSymbol('\u0936\u094D\u0930\u0940',null)"),
+    MandirItem(id: 'rangoli', name: 'Rangoli', emoji: '\u2740', jsCall: "setOmSymbol('\u2740',null)"),
+    MandirItem(id: 'dharma', name: 'Dharma', emoji: '\u2638', jsCall: "setOmSymbol('\u2638',null)"),
+    MandirItem(id: 'bindu', name: 'Bindu', emoji: '\u2727', jsCall: "setOmSymbol('\u2727',null)"),
+    MandirItem(id: 'lotus', name: 'Lotus', emoji: '🪷', jsCall: "setOmSymbol('\u2660',null)"),
+    MandirItem(id: 'diya', name: 'Diya', emoji: '🪔', jsCall: "setOmSymbol('\u2605',null)"),
+  ];
+
+  static const List<MandirItem> ringStyle = [
+    MandirItem(id: 'ring_chakra', name: 'Chakra', emoji: '☸', jsCall: "setOmRingStyle('chakra',null)"),
+    MandirItem(id: 'ring_single', name: 'Single', emoji: '⭕', jsCall: "setOmRingStyle('single',null)"),
+    MandirItem(id: 'ring_double', name: 'Double', emoji: '◎', jsCall: "setOmRingStyle('double',null)"),
+    MandirItem(id: 'ring_triple', name: 'Triple', emoji: '◉', jsCall: "setOmRingStyle('triple',null)"),
+    MandirItem(id: 'ring_mandala', name: 'Mandala', emoji: '✿', jsCall: "setOmRingStyle('mandala',null)"),
+    MandirItem(id: 'ring_lotus', name: 'Lotus', emoji: '🪷', jsCall: "setOmRingStyle('lotus',null)"),
+    MandirItem(id: 'ring_cosmic', name: 'Cosmic', emoji: '✦', jsCall: "setOmRingStyle('cosmic',null)"),
+    MandirItem(id: 'ring_galaxy', name: 'Galaxy', emoji: '🌀', jsCall: "setOmRingStyle('galaxy',null)"),
+    MandirItem(id: 'ring_fire', name: 'Fire Ring', emoji: '🔥', jsCall: "setOmRingStyle('fire',null)"),
+    MandirItem(id: 'ring_ripple', name: 'Ripple', emoji: '🌊', jsCall: "setOmRingStyle('ripple',null)"),
+    MandirItem(id: 'ring_none', name: 'None', emoji: '∅', jsCall: "setOmRingStyle('none',null)"),
+  ];
+
+  static const List<MandirItem> color = [
+    MandirItem(id: 'col_gold', name: 'Gold', emoji: '🟡', jsCall: "setRingColor(212,175,55,null)"),
+    MandirItem(id: 'col_silver', name: 'Silver', emoji: '⚪', jsCall: "setRingColor(192,192,192,null)"),
+    MandirItem(id: 'col_saffron', name: 'Saffron', emoji: '🟠', jsCall: "setRingColor(255,153,51,null)"),
+    MandirItem(id: 'col_teal', name: 'Teal', emoji: '🟢', jsCall: "setRingColor(20,184,166,null)"),
+    MandirItem(id: 'col_purple', name: 'Purple', emoji: '🟣', jsCall: "setRingColor(156,39,176,null)"),
+    MandirItem(id: 'col_rose', name: 'Rose', emoji: '🩷', jsCall: "setRingColor(233,30,99,null)"),
+    MandirItem(id: 'col_emerald', name: 'Emerald', emoji: '💚', jsCall: "setRingColor(16,185,129,null)"),
+    MandirItem(id: 'col_ruby', name: 'Ruby', emoji: '❤️', jsCall: "setRingColor(227,27,35,null)"),
+    MandirItem(id: 'col_sapphire', name: 'Sapphire', emoji: '💙', jsCall: "setRingColor(15,82,186,null)"),
+    MandirItem(id: 'col_amber', name: 'Amber', emoji: '💛', jsCall: "setRingColor(255,191,0,null)"),
+    MandirItem(id: 'col_cyan', name: 'Cyan', emoji: '🩵', jsCall: "setRingColor(0,229,255,null)"),
+    MandirItem(id: 'col_white', name: 'White', emoji: '⬜', jsCall: "setRingColor(255,255,255,null)"),
+  ];
+
+  static const List<MandirItem> glow = [
+    MandirItem(id: 'glow_golden', name: 'Golden Aura', emoji: '✨', jsCall: "setGlowColor(212,175,55,null)"),
+    MandirItem(id: 'glow_pure', name: 'Pure Light', emoji: '💡', jsCall: "setGlowColor(255,255,255,null)"),
+    MandirItem(id: 'glow_saffron', name: 'Saffron', emoji: '🔥', jsCall: "setGlowColor(255,153,51,null)"),
+    MandirItem(id: 'glow_blue', name: 'Divine Blue', emoji: '💎', jsCall: "setGlowColor(79,195,247,null)"),
+    MandirItem(id: 'glow_purple', name: 'Mystic Purple', emoji: '🔮', jsCall: "setGlowColor(186,104,200,null)"),
+    MandirItem(id: 'glow_chakra', name: 'Chakra Aura', emoji: '🌈', jsCall: "setGlowColor(0,0,0,null)"),
+  ];
+
+  static const List<MandirItem> motion = [
+    MandirItem(id: 'anim_gentle', name: 'Gentle', emoji: '🍃', jsCall: "setAnimStyle('gentle',null)"),
+    MandirItem(id: 'anim_pulse', name: 'Pulse', emoji: '💓', jsCall: "setAnimStyle('pulse',null)"),
+    MandirItem(id: 'anim_breathe', name: 'Breathe', emoji: '🌬️', jsCall: "setAnimStyle('breathe',null)"),
+    MandirItem(id: 'anim_meditative', name: 'Meditative', emoji: '🧘', jsCall: "setAnimStyle('meditative',null)"),
+    MandirItem(id: 'anim_energetic', name: 'Energetic', emoji: '⚡', jsCall: "setAnimStyle('energetic',null)"),
+    MandirItem(id: 'anim_stillness', name: 'Stillness', emoji: '🕊️', jsCall: "setAnimStyle('stillness',null)"),
+    MandirItem(id: 'anim_hypnotic', name: 'Hypnotic', emoji: '🌀', jsCall: "setAnimStyle('hypnotic',null)"),
+    MandirItem(id: 'anim_cosmic', name: 'Cosmic', emoji: '🌌', jsCall: "setAnimStyle('cosmic',null)"),
+    MandirItem(id: 'anim_zen', name: 'Zen Mode', emoji: '☯️', jsCall: "setAnimStyle('zen',null)"),
+  ];
+
+  static const List<MandirItem> fx = [
+    MandirItem(id: 'fx_aurora', name: 'Aurora BG', emoji: '🌌', jsCall: "toggleAurora(null)"),
+    MandirItem(id: 'fx_godrays', name: 'God Rays', emoji: '☀️', jsCall: "toggleGodRays(null)"),
+    MandirItem(id: 'fx_templeglow', name: 'Temple Glow', emoji: '🕯', jsCall: "cycleTempleGlow(null)"),
+    MandirItem(id: 'fx_dust', name: 'Golden Dust', emoji: '✨', jsCall: "toggleDust(null)"),
+    MandirItem(id: 'fx_fireflies', name: 'Fireflies', emoji: '✨', jsCall: "toggleEffect('fireflies',null)"),
+    MandirItem(id: 'fx_rain', name: 'Rain', emoji: '🌧️', jsCall: "toggleEffect('rain',null)"),
+    MandirItem(id: 'fx_fire_aura', name: 'Fire Aura', emoji: '🔥', jsCall: "setSpecialFX('fire_aura',null)"),
+    MandirItem(id: 'fx_water', name: 'Water Ripple', emoji: '🌊', jsCall: "setSpecialFX('water_ripples',null)"),
+    MandirItem(id: 'fx_divine', name: 'Divine Light', emoji: '💡', jsCall: "setSpecialFX('divine_light',null)"),
+    MandirItem(id: 'fx_cosmic', name: 'Cosmic Swirl', emoji: '🌀', jsCall: "setSpecialFX('cosmic_swirl',null)"),
+    MandirItem(id: 'fx_petals', name: 'Petals', emoji: '🌸', jsCall: "setSpecialFX('floating_petals',null)"),
+    MandirItem(id: 'fx_none', name: 'None', emoji: '∅', jsCall: "setSpecialFX('none',null)"),
+  ];
+
+  static const List<MandirItem> decor = [
+    MandirItem(id: 'dec_mandir', name: 'Mandir', emoji: '🛕', jsCall: "toggleObj('mandir')"),
+    MandirItem(id: 'dec_diyas', name: 'Diyas', emoji: '🪔', jsCall: "toggleObj('diyas')"),
+    MandirItem(id: 'dec_peacock', name: 'Peacock', emoji: '🦚', jsCall: "buy('peacock','🦚','Peacock',100)", cost: 100),
+    MandirItem(id: 'dec_cow', name: 'Gau Mata', emoji: '🐄', jsCall: "buy('cow','🐄','Gau Mata',180)", cost: 180),
+    MandirItem(id: 'dec_parrot', name: 'Parrot', emoji: '🦜', jsCall: "buy('parrot','🦜','Parrot',80)", cost: 80),
+    MandirItem(id: 'dec_jhula', name: 'Jhula', emoji: '🪑', jsCall: "buy('jhula','🪑','Jhula',220)", cost: 220),
+    MandirItem(id: 'dec_rangoli', name: 'Rangoli', emoji: '🎨', jsCall: "buy('rangoli','🎨','Rangoli',130)", cost: 130),
+    MandirItem(id: 'dec_agarbatti', name: 'Agarbatti', emoji: '🕯️', jsCall: "buy('agarbatti','🕯️','Agarbatti',60)", cost: 60),
+    MandirItem(id: 'dec_bell', name: 'Ghanta', emoji: '🔔', jsCall: "buy('bell','🔔','Ghanta',90)", cost: 90),
+    MandirItem(id: 'dec_sparrow', name: 'Sparrow', emoji: '🐦', jsCall: "buy('sparrow','🐦','Sparrow',70)", cost: 70),
+  ];
+
+  static const List<MandirItem> light = [
+    MandirItem(id: 'mood_dawn', name: 'Dawn Puja', emoji: '🌅', jsCall: "mood('dawn',null)"),
+    MandirItem(id: 'mood_golden', name: 'Golden', emoji: '✨', jsCall: "mood('golden',null)"),
+    MandirItem(id: 'mood_midday', name: 'Midday', emoji: '☀️', jsCall: "mood('midday',null)"),
+    MandirItem(id: 'mood_dusk', name: 'Dusk', emoji: '🌆', jsCall: "mood('dusk',null)"),
+    MandirItem(id: 'mood_night', name: 'Night', emoji: '🌙', jsCall: "mood('night',null)"),
+    MandirItem(id: 'mood_deep', name: 'Deep Night', emoji: '🌌', jsCall: "mood('deepnight',null)"),
+    MandirItem(id: 'diya_orange', name: 'Orange Flame', emoji: '🪔', jsCall: "setDiya(0xff8c00,0xffcc44,null)"),
+    MandirItem(id: 'diya_yellow', name: 'Yellow Flame', emoji: '🪔', jsCall: "setDiya(0xFFCC00,0xFFE066,null)"),
+    MandirItem(id: 'diya_red', name: 'Red Flame', emoji: '🪔', jsCall: "setDiya(0xcc2200,0xff4422,null)"),
+    MandirItem(id: 'diya_blue', name: 'Blue Flame', emoji: '🪔', jsCall: "setDiya(0x2288cc,0xaaddff,null)"),
+    MandirItem(id: 'diya_pink', name: 'Pink Flame', emoji: '🪔', jsCall: "setDiya(0xcc2288,0xffaacc,null)"),
+    MandirItem(id: 'diya_green', name: 'Green Flame', emoji: '🪔', jsCall: "setDiya(0x22aa44,0xaaffaa,null)"),
+  ];
+
+  static List<MandirItem> getItemsForCategory(MandirCategory category) {
+    switch (category) {
+      case MandirCategory.fx: return fx;
+      case MandirCategory.decor: return decor;
+      case MandirCategory.light: return light;
+    }
+  }
+}
+
 /// Customization category for shop tabs
 enum CustomizationCategory {
   omStyles,
@@ -1259,6 +1452,7 @@ enum CustomizationCategory {
   specialEffects,
   particles,
   deityImages,
+  groundTypes,
 }
 
 extension CustomizationCategoryMeta on CustomizationCategory {
@@ -1274,6 +1468,7 @@ extension CustomizationCategoryMeta on CustomizationCategory {
       case CustomizationCategory.specialEffects: return 'Effects';
       case CustomizationCategory.particles: return 'Particles';
       case CustomizationCategory.deityImages: return 'Deities';
+      case CustomizationCategory.groundTypes: return 'Ground';
     }
   }
 
@@ -1289,6 +1484,7 @@ extension CustomizationCategoryMeta on CustomizationCategory {
       case CustomizationCategory.specialEffects: return '🔥';
       case CustomizationCategory.particles: return '⭐';
       case CustomizationCategory.deityImages: return '🙏';
+      case CustomizationCategory.groundTypes: return '🏔️';
     }
   }
 }

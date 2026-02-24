@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>आँगन – ANtar Marg</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Nunito:wght@400;600;700;900&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#0B1623;font-family:'Nunito',sans-serif;touch-action:none;}
+#c{display:block;position:fixed;top:0;left:0;width:100vw!important;height:100vh!important;touch-action:none;z-index:1;}
+#aurora-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;}
+#aurora-canvas{display:block;width:100%;height:100%;}
+
+/* ── CINEMATIC INTRO ── */
+#intro{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0509;transition:opacity 1.2s ease;}
+#intro.hide{opacity:0;pointer-events:none;}
+.intro-om{font-size:4rem;color:#c8860a;animation:omPulse 2s ease-in-out infinite;text-shadow:0 0 40px rgba(200,134,10,0.6),0 0 80px rgba(200,134,10,0.3);}
+@keyframes omPulse{0%,100%{transform:scale(1);opacity:0.8}50%{transform:scale(1.1);opacity:1}}
+.intro-title{font-family:'Cormorant Garamond',serif;font-size:2.2rem;color:#f0d080;letter-spacing:6px;margin-top:14px;opacity:0;animation:fadeUp 0.8s ease 0.5s forwards;}
+.intro-sub{font-size:0.72rem;letter-spacing:5px;color:rgba(240,208,128,0.5);margin-top:6px;opacity:0;animation:fadeUp 0.8s ease 0.9s forwards;}
+.intro-bar{width:120px;height:2px;background:rgba(200,134,10,0.2);border-radius:1px;margin-top:28px;overflow:hidden;opacity:0;animation:fadeUp 0.6s ease 1.2s forwards;}
+.intro-fill{width:0%;height:100%;background:linear-gradient(90deg,#c8860a,#f0d080);animation:load 2s ease 1.4s forwards;}
+@keyframes load{to{width:100%}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── VIGNETTE OVERLAY ── */
+#vignette{position:fixed;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,0.65) 100%);}
+
+/* ── GRAIN ── */
+#grain{position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:128px;animation:grainAnim 0.4s steps(1) infinite;}
+@keyframes grainAnim{0%{background-position:0 0}25%{background-position:-50px -50px}50%{background-position:50px 50px}75%{background-position:-25px 75px}100%{background-position:75px -25px}}
+
+/* ── TOP HUD (hidden) ── */
+#hud{display:none !important;}
+.hud-logo{pointer-events:all;}
+.logo-main{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:700;color:#f0d080;letter-spacing:3px;text-shadow:0 2px 12px rgba(200,134,10,0.4);}
+.logo-sub{font-size:0.55rem;letter-spacing:5px;color:rgba(240,208,128,0.45);margin-top:-2px;font-weight:600;}
+.pts-gem{pointer-events:all;display:flex;align-items:center;gap:7px;background:rgba(200,134,10,0.1);border:1px solid rgba(200,134,10,0.3);border-radius:24px;padding:7px 14px;cursor:pointer;transition:all 0.25s;backdrop-filter:blur(12px);}
+.pts-gem:hover{background:rgba(200,134,10,0.2);border-color:rgba(200,134,10,0.55);}
+.gem-icon{font-size:1rem;animation:gemSpin 4s ease-in-out infinite;}
+@keyframes gemSpin{0%,45%,100%{transform:rotateY(0)}55%{transform:rotateY(180deg)}}
+.gem-val{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:1.05rem;color:#f0d080;}
+.gem-lbl{font-size:0.5rem;font-weight:700;letter-spacing:2px;color:rgba(240,208,128,0.45);}
+
+/* ── HINT ── */
+#hint{position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:30;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:5px 16px;font-size:0.6rem;letter-spacing:1px;color:rgba(255,255,255,0.4);pointer-events:none;white-space:nowrap;opacity:0;transition:opacity 0.6s;backdrop-filter:blur(8px);}
+#hint.show{opacity:1;}
+#hint.fade{opacity:0;}
+
+/* ── BOTTOM PANEL (hidden – controlled by Flutter overlay) ── */
+#panel{display:none!important;}
+#drawer{display:none!important;}
+#ov{display:none!important;}
+#toast{display:none!important;}
+#hud{display:none!important;}
+#hint{display:none!important;}
+
+/* tab row */
+.tabs{display:flex;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(5,3,10,0.55);backdrop-filter:blur(24px);}
+.tab{flex:1;padding:4px 1px 3px;text-align:center;cursor:pointer;transition:all 0.2s;border-bottom:2px solid transparent;position:relative;min-width:0;}
+.tab .ti{font-size:0.72rem;display:block;}
+.tab .tl{font-size:0.38rem;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.3);}
+.tab.on .tl{color:#c8860a;}
+.tab.on{border-bottom-color:#c8860a;}
+.tab.on .ti{filter:drop-shadow(0 0 6px rgba(200,134,10,0.6));}
+
+/* content */
+.tc{display:none;padding:4px 0 2px;background:rgba(5,3,10,0.55);backdrop-filter:blur(24px);overflow-y:auto;max-height:min(24vh,150px);}
+.tc.on{display:block;}
+
+/* scroll strip */
+.strip{display:flex;gap:5px;padding:0 10px 5px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.strip::-webkit-scrollbar{display:none;}
+
+/* cards */
+.card{flex-shrink:0;width:48px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:4px 2px 4px;display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;transition:all 0.2s cubic-bezier(.34,1.56,.64,1);}
+.card:active{transform:scale(0.91);}
+.card.on{border-color:rgba(200,134,10,0.55);background:rgba(200,134,10,0.1);box-shadow:0 0 14px rgba(200,134,10,0.15),inset 0 1px 0 rgba(240,208,128,0.08);}
+.card .ce{font-size:1.0rem;}
+.card .cn{font-size:0.42rem;font-weight:700;color:rgba(255,255,255,0.65);text-align:center;line-height:1.1;}
+.card .cc{font-size:0.38rem;font-weight:900;padding:1px 3px;border-radius:3px;background:rgba(200,134,10,0.15);color:#c8860a;}
+.card .cc.owned{background:rgba(80,200,80,0.12);color:#6dda6d;}
+
+/* swatch */
+.sw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,0.1);cursor:pointer;flex-shrink:0;transition:all 0.2s;position:relative;}
+.sw:active{transform:scale(0.88);}
+.sw.on{border-color:#f0d080;box-shadow:0 0 10px rgba(240,208,128,0.5);}
+.sw.on::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:#f0d080;font-weight:900;}
+.slbl{font-size:0.4rem;letter-spacing:2px;font-weight:700;color:rgba(255,255,255,0.25);padding:0 10px;margin-bottom:2px;text-transform:uppercase;}
+
+/* nav */
+.nav{display:flex;justify-content:space-around;align-items:center;padding:4px 8px 3px;background:rgba(5,3,10,0.7);border-top:1px solid rgba(255,255,255,0.05);}
+.ni{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 10px;border-radius:8px;cursor:pointer;transition:all 0.2s;border:1px solid transparent;}
+.ni.on{background:rgba(200,134,10,0.12);border-color:rgba(200,134,10,0.3);}
+.ni .ne{font-size:0.85rem;}
+.ni .nl{font-size:0.42rem;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.35);}
+.ni.on .nl{color:#c8860a;}
+
+/* ── TOAST ── */
+#toast{position:fixed;top:76px;left:50%;transform:translateX(-50%) translateY(-8px);opacity:0;z-index:100;background:rgba(10,5,9,0.92);border:1px solid rgba(200,134,10,0.4);border-radius:12px;padding:9px 22px;font-size:0.8rem;font-weight:700;color:#f0d080;pointer-events:none;transition:all 0.32s cubic-bezier(.34,1.56,.64,1);backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 1px rgba(200,134,10,0.08);max-width:86vw;text-align:center;white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ptpop */
+.pp{position:fixed;pointer-events:none;z-index:200;font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:#f0d080;text-shadow:0 0 10px rgba(200,134,10,0.7);animation:ppfly 1.3s ease-out forwards;}
+@keyframes ppfly{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-80px) scale(1.3)}}
+
+/* ── SHOP DRAWER ── */
+#drawer{position:fixed;bottom:-100%;left:0;right:0;max-width:430px;margin:0 auto;z-index:50;background:linear-gradient(180deg,#12091e,#080510);border-radius:22px 22px 0 0;border-top:1px solid rgba(200,134,10,0.3);padding:16px 16px 40px;transition:bottom 0.4s cubic-bezier(.34,1.56,.64,1);max-height:78dvh;overflow-y:auto;box-shadow:0 -24px 60px rgba(0,0,0,0.7);}
+#drawer.open{bottom:0;}
+.dh{width:34px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:0 auto 14px;}
+.dt{font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#f0d080;text-align:center;letter-spacing:3px;margin-bottom:4px;}
+.ds{font-size:0.62rem;letter-spacing:2px;color:rgba(240,208,128,0.3);text-align:center;margin-bottom:16px;font-weight:700;}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.si{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:12px 6px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;}
+.si:active{transform:scale(0.93);}
+.si::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(200,134,10,0.04),transparent);pointer-events:none;}
+.si.owned{border-color:rgba(80,200,80,0.3);background:rgba(80,200,80,0.04);}
+.si .se{font-size:1.9rem;display:block;margin-bottom:4px;}
+.si .sn{font-size:0.6rem;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:4px;}
+.si .sc{font-size:0.58rem;font-weight:900;padding:2px 8px;border-radius:6px;display:inline-block;background:rgba(200,134,10,0.12);color:#c8860a;}
+.si.owned .sc{background:rgba(80,200,80,0.12);color:#6dda6d;}
+.earn-box{margin-top:18px;border-top:1px solid rgba(255,255,255,0.05);padding-top:14px;}
+.earn-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:5px;}
+.earn-row .el{font-size:0.72rem;color:rgba(255,255,255,0.6);}
+.earn-row .ep{font-size:0.72rem;font-weight:900;color:#c8860a;}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:40;opacity:0;pointer-events:none;transition:opacity 0.3s;backdrop-filter:blur(4px);}
+#ov.show{opacity:1;pointer-events:all;}
+
+
+@media(max-height:600px){
+  #panel{max-height:min(28vh,160px)!important;}
+  .tc{max-height:min(15vh,90px)!important;}
+  .card{width:42px!important;padding:3px 2px!important;}
+  .card .ce{font-size:0.85rem!important;}
+  .tab{padding:4px 2px 3px!important;}
+  .tab .ti{font-size:0.75rem!important;}
+  .nav{padding:3px 8px 2px!important;}
+  .ni .ne{font-size:0.8rem!important;}
+  .slbl{margin-bottom:1px!important;}
+}
+@media(max-width:360px){
+  .card{width:40px!important;}
+  .card .ce{font-size:0.8rem!important;}
+  .strip{gap:4px!important;padding:0 8px 4px!important;}
+}
+
+</style>
+</head>
+<body>
+
+<!-- GRAIN + VIGNETTE -->
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<div id="aurora-overlay" style="display:none"><canvas id="aurora-canvas"></canvas></div>
+<canvas id="c"></canvas>
+
+<div id="hud" style="display:none"></div>
+<div id="hint" style="display:none"></div>
+
+<div id="panel" class="show">
+  <div class="tabs">
+    <div class="tab on" onclick="switchTab('om',this)"><span class="ti">🕉</span><span class="tl">OM</span></div>
+    <div class="tab" onclick="switchTab('rings',this)"><span class="ti">💫</span><span class="tl">RINGS</span></div>
+    <div class="tab" onclick="switchTab('color',this)"><span class="ti">🎨</span><span class="tl">COLOR</span></div>
+    <div class="tab" onclick="switchTab('glow',this)"><span class="ti">🔆</span><span class="tl">GLOW</span></div>
+    <div class="tab" onclick="switchTab('motion',this)"><span class="ti">🌀</span><span class="tl">MOTION</span></div>
+    <div class="tab" onclick="switchTab('fx',this)"><span class="ti">✨</span><span class="tl">FX</span></div>
+    <div class="tab" onclick="switchTab('decor',this)"><span class="ti">🏡</span><span class="tl">DECOR</span></div>
+    <div class="tab" onclick="switchTab('light',this)"><span class="ti">🕯️</span><span class="tl">LIGHT</span></div>
+  </div>
+
+  <!-- OM TAB -->
+  <div class="tc on" id="tc-om">
+    <div class="slbl">Sacred Symbol</div>
+    <div class="strip" id="tab-om">
+      <div class="card on" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem">\u0950</span><span class="cn">Classic Om</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;filter:drop-shadow(0 0 4px #fff)">\u0950</span><span class="cn">Satvik</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;filter:drop-shadow(0 0 6px gold)">\u0950</span><span class="cn">Divine</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#0ff">\u0950</span><span class="cn">Neon</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#a0f">\u0950</span><span class="cn">Galaxy</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#f60">\u0950</span><span class="cn">Flame</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#8df">\u0950</span><span class="cn">Crystal</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#6b6">\u0950</span><span class="cn">Zen</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#fc0">\u0950</span><span class="cn">Sacred</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#c8f">\u0950</span><span class="cn">Cosmic</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#f44">\u0950</span><span class="cn">Chakra Om</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950',this)"><span class="ce" style="font-size:1.3rem;color:#f8c">\u0950</span><span class="cn">Lotus Om</span></div>
+    </div>
+    <div class="slbl">Sacred Symbols</div>
+    <div class="strip" id="tab-om-extra">
+      <div class="card" onclick="setOmSymbol('\u5350',this)"><span class="ce" style="font-size:1.3rem">卐</span><span class="cn">Swastik</span></div>
+      <div class="card" onclick="setOmSymbol('\u0924\u094D\u0930',this)"><span class="ce" style="font-size:1.1rem">🔱</span><span class="cn">Trishul</span></div>
+      <div class="card" onclick="setOmSymbol('\u0936\u094D\u0930\u0940',this)"><span class="ce" style="font-size:1.1rem">श्री</span><span class="cn">Shri</span></div>
+      <div class="card" onclick="setOmSymbol('\u2740',this)"><span class="ce" style="font-size:1.3rem">❀</span><span class="cn">Rangoli</span></div>
+      <div class="card" onclick="setOmSymbol('\u2638',this)"><span class="ce" style="font-size:1.3rem">☸</span><span class="cn">Dharma</span></div>
+      <div class="card" onclick="setOmSymbol('\u2727',this)"><span class="ce" style="font-size:1.3rem">✧</span><span class="cn">Bindu</span></div>
+      <div class="card" onclick="setOmSymbol('\u2606',this)"><span class="ce" style="font-size:1.3rem">☆</span><span class="cn">Star</span></div>
+      <div class="card" onclick="setOmSymbol('\u0950\u0901',this)"><span class="ce" style="font-size:1.1rem">🙏</span><span class="cn">Namaste</span></div>
+      <div class="card" onclick="setOmSymbol('\u272A',this)"><span class="ce" style="font-size:1.3rem">✪</span><span class="cn">Sudarshan</span></div>
+      <div class="card" onclick="setOmSymbol('\u2726',this)"><span class="ce" style="font-size:1.3rem">✦</span><span class="cn">Mandala</span></div>
+      <div class="card" onclick="setOmSymbol('\u2742',this)"><span class="ce" style="font-size:1.3rem">❂</span><span class="cn">Yantra</span></div>
+      <div class="card" onclick="setOmSymbol('\u2660',this)"><span class="ce" style="font-size:1.3rem">🪷</span><span class="cn">Lotus</span></div>
+      <div class="card" onclick="setOmSymbol('\u2605',this)"><span class="ce" style="font-size:1.3rem">🪔</span><span class="cn">Diya</span></div>
+    </div>
+  </div>
+
+  <!-- RINGS TAB -->
+  <div class="tc" id="tc-rings">
+    <div class="slbl">Ring Style</div>
+    <div class="strip" id="tab-rings">
+      <div class="card" onclick="setOmRingStyle('chakra',this)"><span class="ce">☸</span><span class="cn">Chakra</span></div>
+      <div class="card" onclick="setOmRingStyle('single',this)"><span class="ce">⭕</span><span class="cn">Single</span></div>
+      <div class="card" onclick="setOmRingStyle('double',this)"><span class="ce">◎</span><span class="cn">Double</span></div>
+      <div class="card" onclick="setOmRingStyle('triple',this)"><span class="ce">◉</span><span class="cn">Triple</span></div>
+      <div class="card" onclick="setOmRingStyle('mandala',this)"><span class="ce">✿</span><span class="cn">Mandala</span></div>
+      <div class="card" onclick="setOmRingStyle('lotus',this)"><span class="ce">🪷</span><span class="cn">Lotus</span></div>
+      <div class="card" onclick="setOmRingStyle('cosmic',this)"><span class="ce">✦</span><span class="cn">Cosmic</span></div>
+      <div class="card" onclick="setOmRingStyle('galaxy',this)"><span class="ce">🌀</span><span class="cn">Galaxy</span></div>
+      <div class="card" onclick="setOmRingStyle('fire',this)"><span class="ce">🔥</span><span class="cn">Fire Ring</span></div>
+      <div class="card" onclick="setOmRingStyle('ripple',this)"><span class="ce">🌊</span><span class="cn">Ripple</span></div>
+      <div class="card" onclick="setOmRingStyle('constellation',this)"><span class="ce">⋆</span><span class="cn">Constell.</span></div>
+      <div class="card on" onclick="setOmRingStyle('none',this)"><span class="ce">∅</span><span class="cn">None</span></div>
+    </div>
+    <div class="slbl">Frame</div>
+    <div class="strip" id="ringframerow">
+      <div class="card on" onclick="setRingFrame('rings',this)"><span class="ce">⭕</span><span class="cn">Rings only</span></div>
+      <div class="card" onclick="setRingFrame('with_grid',this)"><span class="ce">⊞</span><span class="cn">Rings + Grid</span></div>
+    </div>
+    <div class="slbl">Ring type</div>
+    <div class="strip" id="ringtyperow">
+      <div class="card" onclick="setRingType('classic',this)"><span class="ce">⭕</span><span class="cn">Classic</span></div>
+      <div class="card on" onclick="setRingType('minimal',this)"><span class="ce">◯</span><span class="cn">Minimal</span></div>
+      <div class="card" onclick="setRingType('double',this)"><span class="ce">◎</span><span class="cn">Double</span></div>
+    </div>
+    <div class="slbl">Motion</div>
+    <div class="strip" id="ringmotionrow">
+      <div class="card" onclick="setRingMotion('slow',this)"><span class="ce">🐢</span><span class="cn">Slow</span></div>
+      <div class="card on" onclick="setRingMotion('medium',this)"><span class="ce">✨</span><span class="cn">Medium</span></div>
+      <div class="card" onclick="setRingMotion('fast',this)"><span class="ce">⚡</span><span class="cn">Fast</span></div>
+    </div>
+  </div>
+
+  <!-- COLOR TAB -->
+  <div class="tc" id="tc-color">
+    <div class="slbl">Ring &amp; Om Color</div>
+    <div class="strip" id="ringrow">
+      <div class="sw on" style="background:#D4AF37" onclick="setRingColor(212,175,55,this)" title="Gold"></div>
+      <div class="sw" style="background:#C0C0C0" onclick="setRingColor(192,192,192,this)" title="Silver"></div>
+      <div class="sw" style="background:#FF9933" onclick="setRingColor(255,153,51,this)" title="Saffron"></div>
+      <div class="sw" style="background:#14B8A6" onclick="setRingColor(20,184,166,this)" title="Teal"></div>
+      <div class="sw" style="background:#9C27B0" onclick="setRingColor(156,39,176,this)" title="Purple"></div>
+      <div class="sw" style="background:#E91E63" onclick="setRingColor(233,30,99,this)" title="Rose"></div>
+      <div class="sw" style="background:#10B981" onclick="setRingColor(16,185,129,this)" title="Emerald"></div>
+      <div class="sw" style="background:#E31B23" onclick="setRingColor(227,27,35,this)" title="Ruby"></div>
+      <div class="sw" style="background:#0F52BA" onclick="setRingColor(15,82,186,this)" title="Sapphire"></div>
+      <div class="sw" style="background:#FFBF00" onclick="setRingColor(255,191,0,this)" title="Amber"></div>
+      <div class="sw" style="background:#3D3D3D" onclick="setRingColor(61,61,61,this)" title="Obsidian"></div>
+      <div class="sw" style="background:#FF6B35" onclick="setRingColor(255,107,53,this)" title="Sunset"></div>
+      <div class="sw" style="background:#DC143C" onclick="setRingColor(220,20,60,this)" title="Crimson"></div>
+      <div class="sw" style="background:#00E5FF" onclick="setRingColor(0,229,255,this)" title="Cyan"></div>
+      <div class="sw" style="background:#FFF8DC" onclick="setRingColor(255,248,220,this)" title="Ivory"></div>
+      <div class="sw" style="background:#FF6F61" onclick="setRingColor(255,111,97,this)" title="Coral"></div>
+      <div class="sw" style="background:#191970" onclick="setRingColor(25,25,112,this)" title="Midnight"></div>
+      <div class="sw" style="background:#B57EDC" onclick="setRingColor(181,126,220,this)" title="Lavender"></div>
+      <div class="sw" style="background:#FFCBA4" onclick="setRingColor(255,203,164,this)" title="Peach"></div>
+      <div class="sw" style="background:#00A36C" onclick="setRingColor(0,163,108,this)" title="Jade"></div>
+      <div class="sw" style="background:#FF00FF" onclick="setRingColor(255,0,255,this)" title="Magenta"></div>
+      <div class="sw" style="background:#CD7F32" onclick="setRingColor(205,127,50,this)" title="Bronze"></div>
+      <div class="sw" style="background:#F7E7CE" onclick="setRingColor(247,231,206,this)" title="Champagne"></div>
+      <div class="sw" style="background:#7B2FBE" onclick="setRingColor(123,47,190,this)" title="Plasma"></div>
+      <div class="sw" style="background:#DE3163" onclick="setRingColor(222,49,99,this)" title="Cherry"></div>
+      <div class="sw" style="background:#FFFFFF" onclick="setRingColor(255,255,255,this)" title="White"></div>
+    </div>
+  </div>
+
+  <!-- GLOW TAB -->
+  <div class="tc" id="tc-glow">
+    <div class="slbl">Glow Color (Om Aura)</div>
+    <div class="strip" id="tab-glow">
+      <div class="card on" onclick="setGlowColor(212,175,55,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #D4AF37)">✨</span><span class="cn">Golden Aura</span></div>
+      <div class="card" onclick="setGlowColor(255,255,255,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #fff)">💡</span><span class="cn">Pure Light</span></div>
+      <div class="card" onclick="setGlowColor(255,153,51,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #FF9933)">🔥</span><span class="cn">Saffron</span></div>
+      <div class="card" onclick="setGlowColor(79,195,247,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #4FC3F7)">💎</span><span class="cn">Divine Blue</span></div>
+      <div class="card" onclick="setGlowColor(186,104,200,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #BA68C8)">🔮</span><span class="cn">Mystic Purple</span></div>
+      <div class="card" onclick="setGlowColor(0,0,0,this)"><span class="ce" style="filter:drop-shadow(0 0 6px #f0f)">🌈</span><span class="cn">Chakra Aura</span></div>
+    </div>
+  </div>
+
+  <!-- MOTION TAB -->
+  <div class="tc" id="tc-motion">
+    <div class="slbl">Animation Style</div>
+    <div class="strip" id="tab-motion">
+      <div class="card on" onclick="setAnimStyle('gentle',this)"><span class="ce">🍃</span><span class="cn">Gentle</span></div>
+      <div class="card" onclick="setAnimStyle('pulse',this)"><span class="ce">💓</span><span class="cn">Pulse</span></div>
+      <div class="card" onclick="setAnimStyle('breathe',this)"><span class="ce">🌬️</span><span class="cn">Breathe</span></div>
+      <div class="card" onclick="setAnimStyle('meditative',this)"><span class="ce">🧘</span><span class="cn">Meditative</span></div>
+      <div class="card" onclick="setAnimStyle('energetic',this)"><span class="ce">⚡</span><span class="cn">Energetic</span></div>
+      <div class="card" onclick="setAnimStyle('stillness',this)"><span class="ce">🕊️</span><span class="cn">Stillness</span></div>
+      <div class="card" onclick="setAnimStyle('hypnotic',this)"><span class="ce">🌀</span><span class="cn">Hypnotic</span></div>
+      <div class="card" onclick="setAnimStyle('cosmic',this)"><span class="ce">🌌</span><span class="cn">Cosmic</span></div>
+      <div class="card" onclick="setAnimStyle('zen',this)"><span class="ce">☯️</span><span class="cn">Zen Mode</span></div>
+    </div>
+  </div>
+
+  <!-- FX TAB -->
+  <div class="tc" id="tc-fx">
+    <div class="slbl">Toggles</div>
+    <div class="strip" id="tab-fx">
+      <div class="card" id="eff-aurora" onclick="toggleAurora(this)"><span class="ce">🌌</span><span class="cn">Aurora BG</span><span class="cc">Off</span></div>
+      <div class="card" id="eff-godrays" onclick="toggleGodRays(this)"><span class="ce">☀️</span><span class="cn">God rays</span><span class="cc">Off</span></div>
+      <div class="card" id="eff-templeglow" onclick="cycleTempleGlow(this)"><span class="ce">🕯</span><span class="cn">Temple glow</span><span class="cc">Med</span></div>
+      <div class="card" id="eff-dust" onclick="toggleDust(this)"><span class="ce">✨</span><span class="cn">Golden dust</span><span class="cc">On</span></div>
+      <div class="card" id="cd-fireflies-eff" onclick="toggleEffect('fireflies',this); document.getElementById('cd-fireflies')&&document.getElementById('cd-fireflies').classList.toggle('on',firefliesActive); updateEffectLabel('fireflies');"><span class="ce">✨</span><span class="cn">Fireflies</span><span class="cc">Off</span></div>
+      <div class="card" id="cd-rain-eff" onclick="toggleEffect('rain',this); document.getElementById('cd-rain')&&document.getElementById('cd-rain').classList.toggle('on',rainActive); updateEffectLabel('rain');"><span class="ce">🌧️</span><span class="cn">Rain</span><span class="cc">Off</span></div>
+    </div>
+    <div class="slbl">Special Effects</div>
+    <div class="strip">
+      <div class="card" onclick="setSpecialFX('fire_aura',this)"><span class="ce">🔥</span><span class="cn">Fire Aura</span></div>
+      <div class="card" onclick="setSpecialFX('water_ripples',this)"><span class="ce">🌊</span><span class="cn">Water Ripple</span></div>
+      <div class="card" onclick="setSpecialFX('divine_light',this)"><span class="ce">💡</span><span class="cn">Divine Light</span></div>
+      <div class="card" onclick="setSpecialFX('cosmic_swirl',this)"><span class="ce">🌀</span><span class="cn">Cosmic Swirl</span></div>
+      <div class="card" onclick="setSpecialFX('floating_petals',this)"><span class="ce">🌸</span><span class="cn">Petals</span></div>
+      <div class="card" onclick="setSpecialFX('chakra_glow',this)"><span class="ce">☸</span><span class="cn">Chakra Glow</span></div>
+      <div class="card" onclick="setSpecialFX('aura_waves',this)"><span class="ce">🌈</span><span class="cn">Aura Waves</span></div>
+      <div class="card" onclick="setSpecialFX('none',this)"><span class="ce">∅</span><span class="cn">None</span></div>
+    </div>
+  </div>
+
+  <!-- DECOR TAB -->
+  <div class="tc" id="tc-decor">
+    <div class="slbl">Tap to place · <span id="pv">650</span> 💎</div>
+    <div class="strip">
+      <div class="card on" id="cd-mandir" onclick="toggleObj('mandir')"><span class="ce">🛕</span><span class="cn">Mandir</span><span class="cc owned">✓</span></div>
+      <div class="card on" id="cd-diyas" onclick="toggleObj('diyas')"><span class="ce">🪔</span><span class="cn">Diyas</span><span class="cc owned">✓</span></div>
+      <div class="card" id="cd-peacock" onclick="buy('peacock','🦚','Peacock',100)"><span class="ce">🦚</span><span class="cn">Peacock</span><span class="cc">100</span></div>
+      <div class="card" id="cd-cow" onclick="buy('cow','🐄','Gau Mata',180)"><span class="ce">🐄</span><span class="cn">Gau Mata</span><span class="cc">180</span></div>
+      <div class="card" id="cd-parrot" onclick="buy('parrot','🦜','Parrot',80)"><span class="ce">🦜</span><span class="cn">Parrot</span><span class="cc">80</span></div>
+      <div class="card" id="cd-jhula" onclick="buy('jhula','🪑','Jhula',220)"><span class="ce">🪑</span><span class="cn">Jhula</span><span class="cc">220</span></div>
+      <div class="card" id="cd-rangoli" onclick="buy('rangoli','🎨','Rangoli',130)"><span class="ce">🎨</span><span class="cn">Rangoli</span><span class="cc">130</span></div>
+      <div class="card" id="cd-agarbatti" onclick="buy('agarbatti','🕯️','Agarbatti',60)"><span class="ce">🕯️</span><span class="cn">Agarbatti</span><span class="cc">60</span></div>
+      <div class="card" id="cd-bell" onclick="buy('bell','🔔','Ghanta',90)"><span class="ce">🔔</span><span class="cn">Ghanta</span><span class="cc">90</span></div>
+      <div class="card" id="cd-sparrow" onclick="buy('sparrow','🐦','Sparrow',70)"><span class="ce">🐦</span><span class="cn">Sparrow</span><span class="cc">70</span></div>
+    </div>
+    <div class="slbl">Atmosphere</div>
+    <div class="strip">
+      <div class="card" id="cd-fireflies" onclick="toggleEffect('fireflies',this)"><span class="ce">✨</span><span class="cn">Fireflies</span><span class="cc">Free</span></div>
+      <div class="card" id="cd-rain" onclick="toggleEffect('rain',this)"><span class="ce">🌧️</span><span class="cn">Rain</span><span class="cc">Free</span></div>
+    </div>
+    <div class="strip">
+      <div class="card" onclick="openShop()"><span class="ce">🛒</span><span class="cn">Shop</span></div>
+    </div>
+  </div>
+
+  <!-- LIGHT TAB -->
+  <div class="tc" id="tc-light">
+    <div class="slbl">Mood</div>
+    <div class="strip" id="moodrow">
+      <div class="card" onclick="mood('dawn',this)"><span class="ce">🌅</span><span class="cn">Dawn Puja</span></div>
+      <div class="card" onclick="mood('golden',this)"><span class="ce">✨</span><span class="cn">Golden</span></div>
+      <div class="card on" onclick="mood('midday',this)"><span class="ce">☀️</span><span class="cn">Midday</span></div>
+      <div class="card" onclick="mood('dusk',this)"><span class="ce">🌆</span><span class="cn">Dusk</span></div>
+      <div class="card" onclick="mood('night',this)"><span class="ce">🌙</span><span class="cn">Night</span></div>
+      <div class="card" onclick="mood('deepnight',this)"><span class="ce">🌌</span><span class="cn">Deep Night</span></div>
+    </div>
+    <div class="slbl">Diya Flame</div>
+    <div class="strip" id="diyarow">
+      <div class="sw on diya-sw" style="background:radial-gradient(#ffd080,#ff7700)" onclick="setDiya(0xff8c00,0xffcc44,this)"></div>
+      <div class="sw diya-sw" style="background:radial-gradient(#ffe066,#ffcc00)" onclick="setDiya(0xFFCC00,0xFFE066,this)"></div>
+      <div class="sw diya-sw" style="background:radial-gradient(#ff6644,#cc2200)" onclick="setDiya(0xcc2200,0xff4422,this)"></div>
+      <div class="sw diya-sw" style="background:radial-gradient(#aaddff,#2288cc)" onclick="setDiya(0x2288cc,0xaaddff,this)"></div>
+      <div class="sw diya-sw" style="background:radial-gradient(#ffaadd,#cc2288)" onclick="setDiya(0xcc2288,0xffaacc,this)"></div>
+      <div class="sw diya-sw" style="background:radial-gradient(#aaffaa,#22aa44)" onclick="setDiya(0x22aa44,0xaaffaa,this)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SHOP -->
+<div id="ov" onclick="closeShop()"></div>
+<div id="drawer">
+  <div class="dh"></div>
+  <div class="dt">दुकान</div>
+  <div class="ds">UNLOCK WITH SEVA POINTS</div>
+  <div class="sg" id="sg"></div>
+  <div class="earn-box">
+    <div class="slbl">Earn Points</div>
+    <div class="earn-row"><span class="el">📖 Read Shlok</span><span class="ep">+20</span></div>
+    <div class="earn-row"><span class="el">🎧 Listen Audio</span><span class="ep">+15</span></div>
+    <div class="earn-row"><span class="el">✅ Complete Task</span><span class="ep">+30</span></div>
+    <div class="earn-row"><span class="el">🔥 Daily Streak</span><span class="ep">+50</span></div>
+    <div class="earn-row"><span class="el">🧠 Perfect Quiz</span><span class="ep">+40</span></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+<script>
+(function boot(){
+  if(typeof THREE==='undefined'){ setTimeout(boot,50); return; }
+
+const W = ()=>renderer.domElement.clientWidth||window.innerWidth, H = ()=>renderer.domElement.clientHeight||window.innerHeight;
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.physicallyCorrectLights = true;
+
+let currentMood = "midday";
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0B1623,0.02);
+renderer.setClearColor(0x0B1623);
+
+const cam = new THREE.PerspectiveCamera(90,W()/H(),0.05,60);
+let FIXED_THETA_cur = 0.0, FIXED_PHI_cur = 0.28;
+const FIXED_THETA = 0.0, FIXED_PHI = 0.28;
+let theta=0.0, phi=0.28, radius=5.5;
+const target=new THREE.Vector3(0.0,0.5,-1.0);
+function updateCam(){
+  const cosP = Math.cos(FIXED_PHI_cur);
+  const sinP = Math.sin(FIXED_PHI_cur);
+  const maxR_z = (4.8 - target.z) / Math.max(cosP * Math.cos(FIXED_THETA_cur), 0.25);
+  const maxR_y = (6.8 - target.y) / Math.max(sinP, 0.1);
+  const safeR  = Math.min(radius, maxR_z, maxR_y, 8.0);
+  const cx = target.x + safeR * Math.sin(FIXED_THETA_cur) * cosP;
+  const cy = target.y + safeR * sinP;
+  const cz = target.z + safeR * Math.cos(FIXED_THETA_cur) * cosP;
+  cam.position.set(cx, cy, cz);
+  cam.lookAt(target);
+}
+function resize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width  = w + 'px';
+  renderer.domElement.style.height = h + 'px';
+  cam.aspect = w / h;
+  const aspect = w / h;
+  let fov;
+  if(aspect < 0.75)     fov = 95;
+  else if(aspect < 1.0) fov = 90;
+  else if(aspect < 1.5) fov = 78;
+  else                  fov = 70;
+  if(h < 600) fov += Math.round((600 - Math.max(h, 400)) / 200 * 15);
+  if(w < 360) fov += 8;
+  cam.fov = Math.min(fov, 110);
+  cam.updateProjectionMatrix();
+  const sizeBoost = h < 600 ? (600 - Math.max(h, 400)) / 200 * 1.5 : 0;
+  radius = Math.min(5.5 + sizeBoost, 7.0);
+  updateCam();
+}
+resize();
+setTimeout(resize, 200);
+window.addEventListener('resize', ()=>{ clearTimeout(window._rt); window._rt=setTimeout(resize,100); });
+new ResizeObserver(()=>{ clearTimeout(window._rt2); window._rt2=setTimeout(resize,50); }).observe(document.documentElement);
+
+const hemi = new THREE.HemisphereLight(0xffd9b0,0x3a2010,0.7);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffeed0,2.2);
+sun.position.set(2,5,2);
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.near=0.1; sun.shadow.camera.far=20;
+sun.shadow.camera.left=-5; sun.shadow.camera.right=5;
+sun.shadow.camera.top=5; sun.shadow.camera.bottom=-5;
+sun.shadow.bias=-0.001;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xc0d8ff,0.4);
+fill.position.set(-3,2,-2);
+scene.add(fill);
+const dl = [
+  new THREE.PointLight(0xff8c00,0,4,2),
+  new THREE.PointLight(0xff8c00,0,4,2),
+  new THREE.PointLight(0xff9900,0,3.5,2),
+];
+dl[0].position.set(-1.4,0.25,1.3);
+dl[1].position.set(1.4,0.25,1.3);
+dl[2].position.set(0,0.25,1.8);
+dl.forEach(l=>{l.castShadow=false;scene.add(l);});
+const mglow = new THREE.PointLight(0xffd080,0,3.5,2);
+mglow.position.set(0,1.6,-2.2);
+scene.add(mglow);
+const amb = new THREE.AmbientLight(0x4a3020,0.5);
+scene.add(amb);
+
+const wallFrames = mkWallFrames();
+const fireflies = mkFireflies();
+scene.add(fireflies);
+const rain = mkRain();
+scene.add(rain);
+let rainActive = false;
+let firefliesActive = false;
+
+const tSpot  = new THREE.SpotLight(0xffd700, 2.5, 12, Math.PI/5, 0.3, 1.5);
+tSpot.position.set(0, 6.5, -2.5);
+tSpot.target.position.set(0, 0, -2.8);
+tSpot.castShadow = false;
+scene.add(tSpot); scene.add(tSpot.target);
+const tRim   = new THREE.PointLight(0xff8844, 1.0, 5, 2);
+tRim.position.set(0, 2.5, -4.2);
+scene.add(tRim);
+const tBounce = new THREE.PointLight(0xffcc44, 1.2, 4, 2);
+tBounce.position.set(0, 0.3, -2.0);
+scene.add(tBounce);
+const tHalo = new THREE.PointLight(0xffd700, 0.8, 3, 2);
+tHalo.position.set(0, 3.2, -2.8);
+scene.add(tHalo);
+
+const M = (geo,col,rough=0.85,metal=0.0,emit=0x000000,emiti=0)=>{
+  const m=new THREE.MeshStandardMaterial({color:col,roughness:rough,metalness:metal,emissive:emit,emissiveIntensity:emiti});
+  return new THREE.Mesh(geo,m);
+};
+const Box = (w,h,d,c,r,me,ei)=>M(new THREE.BoxGeometry(w,h,d),c,r,me||0,0x000000,ei||0);
+const Cyl = (rt,rb,h,s,c,r=0.8)=>M(new THREE.CylinderGeometry(rt,rb,h,s),c,r);
+const Sph = (rad,c,r=0.7,me=0,emit=0,ei=0)=>M(new THREE.SphereGeometry(rad,20,14),c,r,me,emit,ei);
+function Bx(w,h,d,c,r=0.85){const m=new THREE.MeshStandardMaterial({color:c,roughness:r});return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);}
+
+const RW=12,RH=7,RD=10;
+const floorMat = new THREE.MeshStandardMaterial({color:0xa0714a,roughness:0.92,metalness:0.02});
+const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(RW,RD,20,20),floorMat);
+floorMesh.rotation.x=-Math.PI/2; floorMesh.receiveShadow=true; scene.add(floorMesh);
+
+const wallMat = new THREE.MeshStandardMaterial({color:0xc4956a,roughness:0.88,metalness:0.0,side:THREE.DoubleSide});
+const ceilMat = new THREE.MeshStandardMaterial({color:0xe8d0a0,roughness:0.9,side:THREE.DoubleSide});
+const walls = [];
+const wallDefs = [
+  {pos:[0,RH/2,-RD/2],rot:[0,0,0],size:[RW,RH,0.18],color:0xb8845a},
+  {pos:[-RW/2,RH/2,0],rot:[0,Math.PI/2,0],size:[RD,RH,0.18],color:0xc4956a},
+  {pos:[RW/2,RH/2,0],rot:[0,-Math.PI/2,0],size:[RD,RH,0.18],color:0xba8a60},
+  {pos:[0,RH,0],rot:[-Math.PI/2,0,0],size:[RW,RD,0.18],ceil:true},
+];
+wallDefs.forEach(d=>{
+  let wm = d.ceil ? ceilMat : wallMat.clone();
+  if(d.color) wm.color.setHex(d.color);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(...d.size),wm);
+  m.position.set(...d.pos); m.rotation.set(...d.rot); m.receiveShadow=true; m.castShadow=false;
+  walls.push(m); scene.add(m);
+});
+walls.forEach(w => { w.visible = false; });
+
+const _skirtGroup = new THREE.Group(); _skirtGroup.visible = false;
+const skirtMat=new THREE.MeshStandardMaterial({color:0x7a5530,roughness:0.8});
+[[-RD/2,0,0],[RD/2,0,0],[0,0,-RW/2],[0,0,RW/2]].forEach(([x,,z],i)=>{
+  const s=new THREE.Mesh(new THREE.BoxGeometry(i<2?0.08:RW,0.15,i<2?RD:0.08),skirtMat);
+  s.position.set(i===0?-RW/2:i===1?RW/2:0,0.075,i===2?-RD/2:i===3?RD/2:0);
+  _skirtGroup.add(s);
+});
+scene.add(_skirtGroup);
+
+const tileGeo=new THREE.PlaneGeometry(RW,RD,8,8);
+const tileMat=new THREE.MeshStandardMaterial({color:0x000000,transparent:true,opacity:0.04,wireframe:false,roughness:1});
+const tileMesh=new THREE.Mesh(tileGeo,tileMat);
+tileMesh.rotation.x=-Math.PI/2; tileMesh.position.y=0.005; scene.add(tileMesh);
+
+const _beamGroup = new THREE.Group(); _beamGroup.visible = false;
+const beamMat=new THREE.MeshStandardMaterial({color:0x5a3a18,roughness:0.85});
+for(let i=-1;i<=1;i++){
+  const b=new THREE.Mesh(new THREE.BoxGeometry(RW,0.14,0.28),beamMat);
+  b.position.set(0,RH-0.09,i*2.0); b.castShadow=true; _beamGroup.add(b);
+}
+scene.add(_beamGroup);
+
+floorMat.color.setHex(0xa0714a); floorMat.roughness = 0.92;
+renderer.toneMappingExposure = 1.4;
+
+const dustCount=200;
+const dustGeo=new THREE.BufferGeometry();
+const dustPos=new Float32Array(dustCount*3);
+const dustVel=new Float32Array(dustCount*3);
+for(let i=0;i<dustCount;i++){
+  dustPos[i*3]=  (Math.random()-0.5)*RW*0.9;
+  dustPos[i*3+1]=Math.random()*RH*0.8;
+  dustPos[i*3+2]=(Math.random()-0.5)*RD*0.9;
+  dustVel[i*3]  =(Math.random()-0.5)*0.003;
+  dustVel[i*3+1]=0.002+Math.random()*0.004;
+  dustVel[i*3+2]=(Math.random()-0.5)*0.003;
+}
+dustGeo.setAttribute('position',new THREE.BufferAttribute(dustPos,3));
+const dustMat=new THREE.PointsMaterial({color:0xffd080,size:0.025,transparent:true,opacity:0.55,sizeAttenuation:true});
+const dustPts=new THREE.Points(dustGeo,dustMat);
+scene.add(dustPts);
+
+function makeGodRay(x,yTop,z,angle){
+  const g=new THREE.Group();
+  const sh=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08,0.55,yTop,6,1,true),
+    new THREE.MeshBasicMaterial({color:0xffd080,transparent:true,opacity:0.045,side:THREE.DoubleSide,depthWrite:false})
+  );
+  sh.position.set(x,yTop/2,z); sh.rotation.z=angle;
+  g.add(sh); scene.add(g); return g;
+}
+const godRays=[makeGodRay(-1.5,RH-0.8,-1,0.12),makeGodRay(1.5,RH-0.8,-1,-0.12),makeGodRay(0,RH-0.8,-0.5,0)];
+godRays.forEach(r => r.visible = false);
+
+function mkWallFrames(){
+  const g = new THREE.Group();
+  const frameMat = new THREE.MeshStandardMaterial({color:0xb5860d,roughness:0.3,metalness:0.7});
+  function mkFrame(w,h,x,y,z,rotY,imgColor){
+    const fg = new THREE.Group();
+    const canvas = new THREE.Mesh(new THREE.BoxGeometry(w,h,0.02),
+      new THREE.MeshStandardMaterial({color:imgColor||0xf0d8a8,roughness:0.95}));
+    fg.add(canvas);
+    const fw=0.05, fd=0.04;
+    [[0,h/2+fw/2,0, w+fw*2,fw,fd],[0,-h/2-fw/2,0, w+fw*2,fw,fd],
+     [-w/2-fw/2,0,0, fw,h,fd],[w/2+fw/2,0,0, fw,h,fd]].forEach(([fx,fy,fz,bw,bh,bd])=>{
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd), frameMat);
+      strip.position.set(fx,fy,fz+0.02);
+      fg.add(strip);
+    });
+    fg.position.set(x,y,z);
+    fg.rotation.y = rotY;
+    g.add(fg);
+  }
+  mkFrame(1.2, 1.6, -3.5, 4.0, -4.88, 0, 0xd4a853);
+  mkFrame(1.2, 1.6,  3.5, 4.0, -4.88, 0, 0xc8956a);
+  mkFrame(0.8, 0.8,  0,   5.5, -4.88, 0, 0xe8d4a0);
+  mkFrame(1.4, 1.8,  -5.88, 3.5, -1.0, Math.PI/2, 0xc4956a);
+  mkFrame(1.0, 1.0,  -5.88, 5.0,  1.5, Math.PI/2, 0xd4a853);
+  mkFrame(1.4, 1.8,   5.88, 3.5, -1.0, -Math.PI/2, 0xb5860d);
+  return g;
+}
+
+wallFrames.visible = false;
+scene.add(wallFrames);
+
+// Ring controls – from RINGS tab only
+var ringColor = { r: 212, g: 175, b: 55 };
+var ringType = 'minimal';
+var ringMotionSpeed = 1;
+var ringFrame = 'rings';
+function setRingColor(r, g, b, el) {
+  ringColor.r = r; ringColor.g = g; ringColor.b = b;
+  document.querySelectorAll('#ringrow .sw').forEach(function(s){ s.classList.remove('on'); });
+  if (el) el.classList.add('on');
+  if (typeof toast === 'function') toast('🕉 Ring color updated');
+}
+function setRingType(type, el) {
+  ringType = type;
+  document.querySelectorAll('#ringtyperow .card').forEach(function(c){ c.classList.remove('on'); });
+  if (el) el.classList.add('on');
+  if (typeof toast === 'function') toast('🕉 Ring type: ' + type);
+}
+function setRingMotion(speed, el) {
+  ringMotionSpeed = speed === 'slow' ? 0.4 : speed === 'fast' ? 2.2 : 1;
+  document.querySelectorAll('#ringmotionrow .card').forEach(function(c){ c.classList.remove('on'); });
+  if (el) el.classList.add('on');
+  if (typeof toast === 'function') toast('🕉 Motion: ' + speed);
+}
+function setRingFrame(frame, el) {
+  ringFrame = frame;
+  document.querySelectorAll('#ringframerow .card').forEach(function(c){ c.classList.remove('on'); });
+  if (el) el.classList.add('on');
+  if (typeof toast === 'function') toast('🕉 Frame: ' + (frame === 'with_grid' ? 'Rings + Grid' : 'Rings only'));
+}
+
+function hslToRgb(h,s,l){s/=100;l/=100;var c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2,r1=0,g1=0,b1=0;if(h<60){r1=c;g1=x;}else if(h<120){r1=x;g1=c;}else if(h<180){g1=c;b1=x;}else if(h<240){g1=x;b1=c;}else if(h<300){r1=x;b1=c;}else{r1=c;b1=x;}return[Math.round((r1+m)*255),Math.round((g1+m)*255),Math.round((b1+m)*255)];}
+
+// --- Aangan customization state ---
+var omSymbol = '\u0950';
+var omRingStyle = 'none';
+var glowColor = { r: 212, g: 175, b: 55 };
+var animStyle = 'gentle';
+var animSpeedMult = 1.0;
+var specialFX = 'none';
+
+function _deselectRow(sel) { document.querySelectorAll(sel).forEach(function(c){ c.classList.remove('on'); }); }
+
+function setOmSymbol(sym, el) {
+  omSymbol = sym;
+  _deselectRow('#tab-om .card');
+  if (el) el.classList.add('on');
+  toast('\u0950 Symbol: ' + sym);
+}
+function setOmRingStyle(style, el) {
+  omRingStyle = style;
+  _deselectRow('#tab-rings .card');
+  if (el) el.classList.add('on');
+  toast('\u0950 Ring style: ' + style);
+}
+function setGlowColor(r, g, b, el) {
+  glowColor.r = r; glowColor.g = g; glowColor.b = b;
+  _deselectRow('#tab-glow .card');
+  if (el) el.classList.add('on');
+  toast('\u0950 Glow color updated');
+}
+function setAnimStyle(style, el) {
+  animStyle = style;
+  var speeds = {gentle:1,pulse:1.4,breathe:0.7,meditative:0.5,energetic:2.5,stillness:0,hypnotic:1.8,cosmic:1.2,zen:0.3};
+  animSpeedMult = speeds[style] || 1;
+  _deselectRow('#tab-motion .card');
+  if (el) el.classList.add('on');
+  toast('\u0950 Animation: ' + style);
+}
+function setSpecialFX(fx, el) {
+  specialFX = fx;
+  _deselectRow('#tab-fx .card');
+  if (el) el.classList.add('on');
+  toast('\u0950 FX: ' + fx);
+}
+
+// Draw rings to ctx – optional grid (Aangan sacred geometry), brighter on black wall
+// When used standalone, clears canvas. When called from paintWallComposite, layers on top.
+var _ringsStandalone = true;
+function paintRingsToCtx(ctx, w, h, t) {
+  if (!ctx || w < 1 || h < 1) return;
+  const cx = w / 2, cy = h * 0.35;
+  const twoPi = 2 * Math.PI;
+  const sin = Math.sin, cos = Math.cos;
+  const pulse = (sin(t * 3) + 1) / 2;
+  if (_ringsStandalone) ctx.clearRect(0, 0, w, h);
+  if (ringFrame === 'with_grid') {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t * 0.01);
+    ctx.translate(-cx, -cy);
+    const gridOpacity = 0.04 + pulse * 0.02;
+    ctx.strokeStyle = 'rgba(' + ringColor.r + ',' + ringColor.g + ',' + ringColor.b + ',' + gridOpacity + ')';
+    ctx.lineWidth = 0.8 * (w / 1024);
+    var spacing = 70 * (w / 1024);
+    for (var i = -w; i < w * 2; i += spacing) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i, h); ctx.lineTo(i + h, 0); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  var count = 4, step = 50, baseR = 100;
+  if (ringType === 'minimal') { count = 1; step = 80; baseR = 140; }
+  else if (ringType === 'double') { count = 8; step = 25; baseR = 80; }
+  for (let i = 0; i < count; i++) {
+    const radius = (baseR + i * step + pulse * (ringType === 'double' ? 4 : 8)) * (w / 1024);
+    const opacity = Math.max(0.12, (ringType === 'double' ? 0.22 : 0.32) - i * (ringType === 'double' ? 0.02 : 0.04));
+    ctx.strokeStyle = 'rgba(' + ringColor.r + ',' + ringColor.g + ',' + ringColor.b + ',' + opacity + ')';
+    ctx.lineWidth = (ringType === 'double' ? 1 : 1.5) * (w / 1024);
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, twoPi); ctx.stroke();
+  }
+}
+
+// Effect toggles (Aangan-style BG, glow, particles)
+var auroraOn = false, godRaysOn = false, templeGlowLevel = 1, dustOn = false;
+function toggleAurora(el) {
+  auroraOn = !auroraOn;
+  var ov = document.getElementById('aurora-overlay');
+  if (ov) ov.style.display = auroraOn ? 'block' : 'none';
+  var cc = el ? el.querySelector('.cc') : null;
+  if (cc) cc.textContent = auroraOn ? 'On' : 'Off';
+  if (el) el.classList.toggle('on', auroraOn);
+  if (typeof toast === 'function') toast(auroraOn ? '🌌 Aurora BG on' : '🌌 Aurora BG off');
+}
+function toggleGodRays(el) {
+  godRaysOn = !godRaysOn;
+  var cc = el ? el.querySelector('.cc') : null;
+  if (cc) cc.textContent = godRaysOn ? 'On' : 'Off';
+  if (el) el.classList.toggle('on', godRaysOn);
+  if (typeof toast === 'function') toast(godRaysOn ? '☀️ God rays on' : '☀️ God rays off');
+}
+function cycleTempleGlow(el) {
+  templeGlowLevel = (templeGlowLevel + 1) % 3;
+  var cc = el ? el.querySelector('.cc') : null;
+  if (cc) cc.textContent = templeGlowLevel === 0 ? 'Off' : templeGlowLevel === 1 ? 'Med' : 'High';
+  if (el) el.classList.toggle('on', templeGlowLevel > 0);
+  if (typeof toast === 'function') toast('🕯 Temple glow: ' + (templeGlowLevel === 0 ? 'Off' : templeGlowLevel === 1 ? 'Medium' : 'High'));
+}
+function toggleDust(el) {
+  dustOn = !dustOn;
+  if (typeof dustPts !== 'undefined') dustPts.visible = dustOn;
+  var cc = el ? el.querySelector('.cc') : null;
+  if (cc) cc.textContent = dustOn ? 'On' : 'Off';
+  if (el) el.classList.toggle('on', dustOn);
+  if (typeof toast === 'function') toast(dustOn ? '✨ Golden dust on' : '✨ Golden dust off');
+}
+function updateEffectLabel(id) {
+  var lab = id === 'fireflies' ? document.querySelector('#cd-fireflies-eff .cc') : document.querySelector('#cd-rain-eff .cc');
+  if (lab) lab.textContent = (id === 'fireflies' ? firefliesActive : rainActive) ? 'On' : 'Off';
+}
+
+// Aurora BG (Aangan-style: indigo, saffron, teal radial gradients) – boosted for wall
+function paintAuroraBG(ctx, w, h, t) {
+  if (!ctx || w < 1 || h < 1) return;
+  var cx = w / 2, cy = h * 0.35;
+  var sin = Math.sin, cos = Math.cos;
+  var S = w / 1024;
+  ctx.fillStyle = '#0a0509';
+  ctx.fillRect(0, 0, w, h);
+  var r1 = w * 0.6, r2 = w * 0.45, r3 = w * 0.4;
+  var o1x = cx + sin(t) * 80 * S, o1y = cy + cos(t * 0.7) * 50 * S;
+  var o2x = cx + cos(t * 0.5) * 50 * S, o2y = cy + sin(t * 0.3) * 40 * S;
+  var o3x = cx + cos(t * 0.8 + 2) * 100 * S, o3y = cy + sin(t * 0.6 + 1) * 60 * S;
+  var g1 = ctx.createRadialGradient(o1x, o1y, 0, o1x, o1y, r1);
+  g1.addColorStop(0, 'rgba(27,10,60,0.85)'); g1.addColorStop(1, 'rgba(13,27,42,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = g1; ctx.fillRect(0, 0, w, h);
+  var g2 = ctx.createRadialGradient(o2x, o2y, 0, o2x, o2y, r2);
+  g2.addColorStop(0, 'rgba(212,175,55,0.12)'); g2.addColorStop(1, 'rgba(11,22,35,0)');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, w, h);
+  var g3 = ctx.createRadialGradient(o3x, o3y, 0, o3x, o3y, r3);
+  g3.addColorStop(0, 'rgba(10,77,104,0.25)'); g3.addColorStop(1, 'rgba(11,22,35,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = g3; ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WALL COMPOSITE LAYERS (ported from Aangan Flutter screen)
+// All opacities tuned for 3D wall texture visibility
+// ═══════════════════════════════════════════════════════════════════
+
+// Layer 1: Sacred Geometry – concentric circles + Flower of Life (diagonal grid removed)
+function paintSacredGeometry(ctx, w, h, t) {
+  var cx = w / 2, cy = h * 0.35, S = w / 1024, twoPi = 2 * Math.PI;
+  var rotation = t * 0.008;
+  var pulse = (Math.sin(t * 1.8) + 1) / 2;
+  for (var j = 0; j < 5; j++) {
+    var radius = (100 + j * 55 + pulse * 10) * S;
+    ctx.strokeStyle = 'rgba(212,175,55,' + Math.max(0.02, 0.1 - j * 0.016) + ')';
+    ctx.lineWidth = 0.8 * S;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, twoPi); ctx.stroke();
+  }
+  var flowerR = 120 * S;
+  ctx.strokeStyle = 'rgba(212,175,55,0.06)';
+  ctx.lineWidth = 0.6 * S;
+  for (var k = 0; k < 6; k++) {
+    var a = k * Math.PI / 3 + rotation * 0.5;
+    var ox = cx + flowerR * 0.5 * Math.cos(a);
+    var oy = cy + flowerR * 0.5 * Math.sin(a);
+    ctx.beginPath(); ctx.arc(ox, oy, flowerR * 0.5, 0, twoPi); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, flowerR * 0.5, 0, twoPi); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, flowerR, 0, twoPi); ctx.stroke();
+}
+
+// Layer 2: God Rays – 12 rotating volumetric light rays + central glow
+function paintGodRays(ctx, w, h, t) {
+  var cx = w / 2, cy = h * 0.35, S = w / 1024;
+  var maxRadius = w * 0.75;
+  var twoPi = 2 * Math.PI;
+  var gr = glowColor.r, gg = glowColor.g, gb = glowColor.b;
+  var isChakra = (gr === 0 && gg === 0 && gb === 0);
+  if (isChakra) { var hue = (t * 20) % 360; var tc = hslToRgb(hue, 80, 60); gr = tc[0]; gg = tc[1]; gb = tc[2]; }
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (var i = 0; i < 12; i++) {
+    var angle = (i / 12) * twoPi + t * 0.02;
+    var rayOp = 0.06 + 0.04 * Math.sin(t * 0.15 + i * 0.8);
+    var rayW = 0.09 + 0.04 * Math.sin(t * 0.08 + i * 1.2);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(angle - rayW) * maxRadius, cy + Math.sin(angle - rayW) * maxRadius);
+    ctx.lineTo(cx + Math.cos(angle + rayW) * maxRadius, cy + Math.sin(angle + rayW) * maxRadius);
+    ctx.closePath();
+    var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxRadius);
+    grad.addColorStop(0, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + rayOp + ')');
+    grad.addColorStop(0.5, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + (rayOp * 0.4) + ')');
+    grad.addColorStop(1, 'rgba(' + gr + ',' + gg + ',' + gb + ',0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+  ctx.restore();
+  var glowI = 0.18 + 0.1 * Math.sin(t * 0.12);
+  var glowR = 120 * S;
+  var gGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+  gGlow.addColorStop(0, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + glowI + ')');
+  gGlow.addColorStop(0.4, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + (glowI * 0.5) + ')');
+  gGlow.addColorStop(1, 'rgba(' + gr + ',' + gg + ',' + gb + ',0)');
+  ctx.fillStyle = gGlow;
+  ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, twoPi); ctx.fill();
+}
+
+// Layer 3: Energy Pulse Waves – 3 staggered expanding golden rings
+function paintEnergyPulses(ctx, w, h, t) {
+  var cx = w / 2, cy = h * 0.35, S = w / 1024;
+  var maxR = w * 0.45;
+  var tNorm = (t * 0.08) % 1.0;
+  for (var i = 0; i < 3; i++) {
+    var phase = (tNorm + i / 3.0) % 1.0;
+    var radius = phase * maxR;
+    var opacity = (1 - phase) * 0.18;
+    if (opacity <= 0) continue;
+    ctx.strokeStyle = 'rgba(212,175,55,' + opacity + ')';
+    ctx.lineWidth = Math.max(0.8, 2.5 * (1 - phase)) * S;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, 2 * Math.PI); ctx.stroke();
+  }
+}
+
+// Layer 4: Rotating Concentric Rings around Om (from CustomizableOmSanctuary)
+function paintOmRings(ctx, w, h, t) {
+  if (omRingStyle === 'none') return;
+  var cx = w / 2, cy = h * 0.35, S = w / 1024, twoPi = 2 * Math.PI;
+  var r = ringColor.r, g = ringColor.g, b = ringColor.b;
+  var ring1Angle = t * 0.015;
+  var ring2Angle = -t * 0.022;
+  var ring3Angle = t * 0.03;
+  var breathe = 0.5 + 0.5 * Math.sin(t * 0.25);
+  var baseR = 140 * S;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ring1Angle);
+  ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.35)';
+  ctx.lineWidth = 1.8 * S;
+  ctx.beginPath(); ctx.arc(0, 0, baseR + breathe * 5 * S, 0, twoPi); ctx.stroke();
+  for (var i = 0; i < 8; i++) {
+    var a = i * twoPi / 8;
+    var sr = baseR * 0.3;
+    ctx.beginPath();
+    ctx.moveTo((baseR - 4 * S) * Math.cos(a - 0.2), (baseR - 4 * S) * Math.sin(a - 0.2));
+    ctx.quadraticCurveTo(
+      (baseR + sr * 0.7) * Math.cos(a - 0.15), (baseR + sr * 0.7) * Math.sin(a - 0.15),
+      (baseR + sr) * Math.cos(a), (baseR + sr) * Math.sin(a)
+    );
+    ctx.quadraticCurveTo(
+      (baseR + sr * 0.7) * Math.cos(a + 0.15), (baseR + sr * 0.7) * Math.sin(a + 0.15),
+      (baseR - 4 * S) * Math.cos(a + 0.2), (baseR - 4 * S) * Math.sin(a + 0.2)
+    );
+    ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.25)';
+    ctx.lineWidth = 1.2 * S;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ring2Angle);
+  var r2 = baseR * 0.72 + breathe * 3 * S;
+  ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.3)';
+  ctx.lineWidth = 1.5 * S;
+  ctx.beginPath(); ctx.arc(0, 0, r2, 0, twoPi); ctx.stroke();
+  ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.18)';
+  ctx.lineWidth = 1.0 * S;
+  ctx.beginPath(); ctx.arc(0, 0, r2 * 0.7, 0, twoPi); ctx.stroke();
+  for (var j = 0; j < 8; j++) {
+    var a2 = j * Math.PI / 4;
+    ctx.beginPath();
+    ctx.moveTo(r2 * 0.7 * Math.cos(a2), r2 * 0.7 * Math.sin(a2));
+    ctx.lineTo(r2 * Math.cos(a2), r2 * Math.sin(a2));
+    ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.22)';
+    ctx.lineWidth = 1.0 * S;
+    ctx.stroke();
+  }
+  for (var j2 = 0; j2 < 8; j2++) {
+    var sa = j2 * Math.PI / 4 + 0.1;
+    var ea = (j2 + 1) * Math.PI / 4 - 0.1;
+    ctx.beginPath();
+    ctx.arc(0, 0, r2 * 0.85, sa, ea);
+    ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.15)';
+    ctx.lineWidth = 1.0 * S;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ring3Angle);
+  var r3 = baseR * 1.35 + breathe * 4 * S;
+  ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.15)';
+  ctx.lineWidth = 1.0 * S;
+  ctx.setLineDash([8 * S, 6 * S]);
+  ctx.beginPath(); ctx.arc(0, 0, r3, 0, twoPi); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+  var dotRings = [baseR * 0.88, baseR * 1.1, baseR * 1.25];
+  var dotCounts = [12, 18, 24];
+  for (var dr = 0; dr < 3; dr++) {
+    var dRadius = dotRings[dr] + breathe * 2 * S;
+    var dCount = dotCounts[dr];
+    var dAngleOff = (dr % 2 === 0 ? 1 : -1) * t * (0.01 + dr * 0.005);
+    for (var di = 0; di < dCount; di++) {
+      var da = di * twoPi / dCount + dAngleOff;
+      var dx = cx + dRadius * Math.cos(da);
+      var dy = cy + dRadius * Math.sin(da);
+      var dotOp = 0.4 - dr * 0.1;
+      var dotSz = (2.5 - dr * 0.4) * S;
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + dotOp + ')';
+      ctx.beginPath(); ctx.arc(dx, dy, dotSz, 0, twoPi); ctx.fill();
+    }
+  }
+}
+
+// Layer 5: Glowing Om Symbol – multi-layer glow + sharp text, prominent
+function paintOmSymbol(ctx, w, h, t) {
+  var cx = w / 2, cy = h * 0.35, S = w / 1024;
+  var pulse = (Math.sin(t * 0.2) + 1) / 2;
+  var breathe = 0.5 + 0.5 * Math.sin(t * 0.25);
+  var fontSize = (130 + pulse * 12) * S;
+  var gr = glowColor.r, gg = glowColor.g, gb = glowColor.b;
+  var isChakra = (gr === 0 && gg === 0 && gb === 0);
+  if (isChakra) {
+    var hue = (t * 20) % 360;
+    var tc = hslToRgb(hue, 80, 60);
+    gr = tc[0]; gg = tc[1]; gb = tc[2];
+  }
+  var r = ringColor.r, g = ringColor.g, b = ringColor.b;
+  var sym = omSymbol || '\u0950';
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold ' + Math.round(fontSize * 1.4) + 'px serif';
+  var haloR = fontSize * 1.5;
+  var haloGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, haloR);
+  haloGrad.addColorStop(0, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + (0.15 + pulse * 0.08) + ')');
+  haloGrad.addColorStop(0.5, 'rgba(' + gr + ',' + gg + ',' + gb + ',' + (0.05 + pulse * 0.03) + ')');
+  haloGrad.addColorStop(1, 'rgba(' + gr + ',' + gg + ',' + gb + ',0)');
+  ctx.fillStyle = haloGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, haloR, 0, 2 * Math.PI); ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.shadowColor = 'rgba(' + gr + ',' + gg + ',' + gb + ',0.7)';
+  ctx.shadowBlur = 50 * S;
+  ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (0.2 + pulse * 0.1) + ')';
+  ctx.fillText(sym, cx, cy);
+  ctx.shadowBlur = 25 * S;
+  ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (0.35 + pulse * 0.12) + ')';
+  ctx.fillText(sym, cx, cy);
+  ctx.shadowBlur = 0;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (0.5 + breathe * 0.15) + ')';
+  ctx.fillText(sym, cx, cy);
+  ctx.restore();
+}
+
+// Layer 6: Floating Lotus Petals – drifting downward with rotation
+var _wallPetals = null;
+function initWallPetals(count) {
+  _wallPetals = [];
+  for (var i = 0; i < count; i++) {
+    _wallPetals.push({
+      x: Math.random(),
+      y: Math.random(),
+      speed: 0.015 + Math.random() * 0.03,
+      rotSpeed: 0.5 + Math.random() * 1.5,
+      size: (6 + Math.random() * 10),
+      phase: Math.random() * 2 * Math.PI
+    });
+  }
+}
+function paintLotusPetals(ctx, w, h, t) {
+  if (!_wallPetals) initWallPetals(10);
+  var S = w / 1024;
+  for (var i = 0; i < _wallPetals.length; i++) {
+    var p = _wallPetals[i];
+    var py = (p.y + t * p.speed * 0.08) % 1.3 - 0.15;
+    var px = p.x + Math.sin(t * 0.04 + p.phase) * 0.04;
+    var fade = py < 0 ? 0 : py > 1 ? 0 : (py < 0.1 ? py / 0.1 : py > 0.9 ? (1 - py) / 0.1 : 1.0);
+    if (fade <= 0) continue;
+    var s = p.size * S;
+    ctx.save();
+    ctx.translate(px * w, py * h);
+    ctx.rotate(t * 0.04 * p.rotSpeed + p.phase);
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.quadraticCurveTo(s * 0.6, -s * 0.3, 0, s * 0.5);
+    ctx.quadraticCurveTo(-s * 0.6, -s * 0.3, 0, -s);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,200,160,' + (0.15 * fade).toFixed(3) + ')';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(212,175,55,' + (0.25 * fade).toFixed(3) + ')';
+    ctx.lineWidth = 0.8 * S;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Layer 7: Twinkling Stars (from starfield painter)
+var _wallStars = null;
+function initWallStars(count) {
+  _wallStars = [];
+  var rng = { s: 123 };
+  function sr() { rng.s = (rng.s * 16807 + 0) % 2147483647; return (rng.s - 1) / 2147483646; }
+  for (var i = 0; i < count; i++) {
+    _wallStars.push({
+      x: sr(), y: sr(),
+      size: 1 + sr() * 2.5,
+      twinkleOff: sr()
+    });
+  }
+}
+function paintStarfield(ctx, w, h, t) {
+  if (!_wallStars) initWallStars(50);
+  var S = w / 1024;
+  var twoPi = 2 * Math.PI;
+  var r = ringColor.r, g = ringColor.g, b = ringColor.b;
+  var progress = (t * 0.03) % 1.0;
+  for (var i = 0; i < _wallStars.length; i++) {
+    var s = _wallStars[i];
+    var twinkle = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin((progress + s.twinkleOff) * twoPi));
+    var alpha = twinkle * 0.55;
+    ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(s.x * w, s.y * h, s.size * twinkle * S, 0, twoPi);
+    ctx.fill();
+  }
+}
+
+// Layer 8: Golden Particles – floating dust motes with glow
+var _wallParticles = null;
+function initWallParticles(count) {
+  _wallParticles = [];
+  for (var i = 0; i < count; i++) {
+    _wallParticles.push({
+      x: Math.random(), y: Math.random(),
+      speed: 0.02 + Math.random() * 0.04,
+      size: (1.5 + Math.random() * 3.0),
+      phase: Math.random() * 2 * Math.PI,
+      wobbleAmp: 0.008 + Math.random() * 0.02,
+      wobbleFreq: 1 + Math.random() * 2,
+      opacity: 0.3 + Math.random() * 0.5
+    });
+  }
+}
+function paintWallParticles(ctx, w, h, t) {
+  if (!_wallParticles) initWallParticles(40);
+  var twoPi = 2 * Math.PI;
+  var S = w / 1024;
+  for (var i = 0; i < _wallParticles.length; i++) {
+    var p = _wallParticles[i];
+    var py = (p.y - t * p.speed) % 1.0;
+    if (py < 0) py += 1.0;
+    var px = p.x + Math.sin(t * p.wobbleFreq + p.phase) * p.wobbleAmp;
+    var edgeFade = py < 0.1 ? py / 0.1 : py > 0.9 ? (1 - py) / 0.1 : 1.0;
+    var alpha = p.opacity * edgeFade * (0.7 + 0.3 * Math.sin(t * 0.5 + p.phase));
+    alpha = Math.max(0, Math.min(1, alpha));
+    var sz = p.size * S;
+    ctx.fillStyle = 'rgba(244,228,182,' + alpha.toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(px * w, py * h, sz, 0, twoPi); ctx.fill();
+    if (p.size > 2) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(212,175,55,' + (alpha * 0.4).toFixed(3) + ')';
+      ctx.shadowColor = 'rgba(212,175,55,0.5)';
+      ctx.shadowBlur = 6 * S;
+      ctx.beginPath(); ctx.arc(px * w, py * h, sz * 1.8, 0, twoPi); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+// Composite: all 9 layers painted onto the wall canvas each frame
+function paintSpecialFX(ctx, w, h, t) {
+  if (specialFX === 'none') return;
+  var cx = w / 2, cy = h * 0.35, S = w / 1024;
+  var r = ringColor.r, g = ringColor.g, b = ringColor.b;
+  ctx.save();
+  if (specialFX === 'fire_aura') {
+    for (var i = 0; i < 20; i++) {
+      var a = i / 20 * Math.PI * 2 + t * 0.05;
+      var rad = (120 + Math.sin(t * 0.3 + i) * 30) * S;
+      var grad = ctx.createRadialGradient(cx + Math.cos(a)*rad*0.5, cy + Math.sin(a)*rad*0.5, 0, cx + Math.cos(a)*rad*0.5, cy + Math.sin(a)*rad*0.5, 40*S);
+      grad.addColorStop(0, 'rgba(255,100,0,0.12)');
+      grad.addColorStop(1, 'rgba(255,50,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+  } else if (specialFX === 'water_ripples') {
+    for (var i2 = 0; i2 < 5; i2++) {
+      var rr = ((t * 0.04 + i2 * 0.2) % 1) * 200 * S;
+      var op = Math.max(0, 0.15 - rr / (200*S) * 0.15);
+      ctx.strokeStyle = 'rgba(0,150,255,' + op + ')';
+      ctx.lineWidth = 2 * S;
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 2*Math.PI); ctx.stroke();
+    }
+  } else if (specialFX === 'divine_light') {
+    ctx.globalCompositeOperation = 'lighter';
+    var lg = ctx.createRadialGradient(cx, cy - 50*S, 0, cx, cy - 50*S, 250*S);
+    lg.addColorStop(0, 'rgba(255,255,200,' + (0.08 + Math.sin(t*0.2)*0.04) + ')');
+    lg.addColorStop(1, 'rgba(255,255,200,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (specialFX === 'cosmic_swirl') {
+    ctx.translate(cx, cy);
+    for (var j = 0; j < 60; j++) {
+      var sa = j * 0.2 + t * 0.02;
+      var sr = j * 3 * S;
+      var sx = Math.cos(sa) * sr, sy = Math.sin(sa) * sr;
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (0.12 - j*0.002) + ')';
+      ctx.beginPath(); ctx.arc(sx, sy, (3 - j*0.03)*S, 0, 2*Math.PI); ctx.fill();
+    }
+    ctx.setTransform(1,0,0,1,0,0);
+  } else if (specialFX === 'floating_petals') {
+    paintLotusPetals(ctx, w, h, t);
+  } else if (specialFX === 'chakra_glow') {
+    var chakraColors = [[255,0,0],[255,128,0],[255,255,0],[0,200,0],[0,100,255],[75,0,130],[148,0,211]];
+    for (var k = 0; k < 7; k++) {
+      var cc = chakraColors[k];
+      var crad = (80 + k * 25) * S;
+      var cop = 0.06 + Math.sin(t * 0.15 + k) * 0.03;
+      ctx.strokeStyle = 'rgba(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ',' + cop + ')';
+      ctx.lineWidth = 3 * S;
+      ctx.beginPath(); ctx.arc(cx, cy, crad, 0, 2*Math.PI); ctx.stroke();
+    }
+  } else if (specialFX === 'aura_waves') {
+    ctx.globalCompositeOperation = 'lighter';
+    for (var aw = 0; aw < 3; aw++) {
+      var wrad = (100 + Math.sin(t * 0.1 + aw * 2) * 60) * S;
+      var hue2 = ((t * 15 + aw * 120) % 360);
+      var wc = hslToRgb(hue2, 70, 55);
+      ctx.strokeStyle = 'rgba(' + wc[0] + ',' + wc[1] + ',' + wc[2] + ',0.08)';
+      ctx.lineWidth = 4 * S;
+      ctx.beginPath(); ctx.arc(cx, cy, wrad, 0, 2*Math.PI); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+function paintWallComposite(ctx, w, h, t) {
+  if (!ctx || w < 1 || h < 1) return;
+  ctx.fillStyle = '#0B1623';
+  ctx.fillRect(0, 0, w, h);
+  if (auroraOn) paintAuroraBG(ctx, w, h, t);
+  if (godRaysOn) paintGodRays(ctx, w, h, t);
+  paintRingsToCtx(ctx, w, h, t);
+  paintOmSymbol(ctx, w, h, t);
+  if (omRingStyle !== 'none') paintOmRings(ctx, w, h, t);
+  if (dustOn) paintWallParticles(ctx, w, h, t);
+  if (specialFX !== 'none') paintSpecialFX(ctx, w, h, t);
+}
+
+// 3D rings plane on the back wall (behind the temple)
+const ringWallW = 2048, ringWallH = 1192;
+const ringWallCanvas = document.createElement('canvas');
+ringWallCanvas.width = ringWallW; ringWallCanvas.height = ringWallH;
+const ringWallCtx = ringWallCanvas.getContext('2d');
+const ringWallTexture = new THREE.CanvasTexture(ringWallCanvas);
+ringWallTexture.minFilter = THREE.LinearFilter; ringWallTexture.magFilter = THREE.LinearFilter;
+_ringsStandalone = false;
+paintWallComposite(ringWallCtx, ringWallW, ringWallH, 0);
+ringWallTexture.needsUpdate = true;
+const ringWallMat = new THREE.MeshBasicMaterial({
+  map: ringWallTexture,
+  transparent: true,
+  opacity: 1.0,
+  depthWrite: false,
+  depthTest: true,
+  side: THREE.DoubleSide
+});
+const ringWallPlane = new THREE.Mesh(new THREE.PlaneGeometry(RW, RH), ringWallMat);
+ringWallPlane.position.set(0, RH/2, -RD/2 + 0.55);
+ringWallPlane.renderOrder = 0;
+scene.add(ringWallPlane);
+
+/* Trim & pillars hidden for black-night mode */
+
+const objs={};
+
+let templeLoaded = false;
+let templeGroup = null;
+
+function mkMandir() {
+  const g = new THREE.Group();
+  const placeholder = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01),new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  g.add(placeholder);
+  g.position.set(0, 0, -4.2);
+  g.name = 'mandirGroup';
+  try {
+    const loader = new THREE.GLTFLoader();
+    if(THREE.DRACOLoader) { const draco = new THREE.DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); loader.setDRACOLoader(draco); }
+    toast('🛕 Loading temple...');
+    loader.load('temple.glb',
+      function(gltf) {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2.8 / maxDim;
+        model.scale.setScalar(scale);
+        const box2 = new THREE.Box3().setFromObject(model);
+        const center = box2.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+        const box3 = new THREE.Box3().setFromObject(model);
+        model.position.y -= box3.min.y;
+        model.traverse(child => { if(child.isMesh) { child.castShadow = true; child.receiveShadow = true; if(child.material) child.material.roughness = Math.min(child.material.roughness || 0.8, 0.85); }});
+        while(g.children.length) g.remove(g.children[0]);
+        g.add(model); templeLoaded = true; templeGroup = g;
+        const tbox = new THREE.Box3().setFromObject(model);
+        const tcenter = tbox.getCenter(new THREE.Vector3());
+        tSpot.target.position.set(g.position.x+tcenter.x, g.position.y+tcenter.y, g.position.z+tcenter.z);
+        tSpot.position.set(g.position.x+tcenter.x, g.position.y+tcenter.y+4, g.position.z+tcenter.z+1.2);
+        tRim.position.set(g.position.x+tcenter.x, g.position.y+tcenter.y+2, g.position.z+tcenter.z-1.5);
+        tBounce.position.set(g.position.x+tcenter.x, g.position.y+tbox.min.y+0.3, g.position.z+tcenter.z);
+        tHalo.position.set(g.position.x+tcenter.x, g.position.y+tbox.max.y+0.5, g.position.z+tcenter.z);
+        toast('✨ Temple loaded!');
+      },
+      function(progress) { if(progress.total > 0) console.log('Temple loading:', Math.round(progress.loaded / progress.total * 100) + '%'); },
+      function(error) {
+        console.warn('Local GLB not found, using fallback temple:', error.message || error);
+        toast('🛕 Using built-in temple');
+        const fallback = mkMandirFallback();
+        while(g.children.length) g.remove(g.children[0]);
+        fallback.children.forEach(c => g.add(c.clone()));
+      }
+    );
+  } catch(e) { const fallback = mkMandirFallback(); while(g.children.length) g.remove(g.children[0]); fallback.children.forEach(c => g.add(c)); }
+  return g;
+}
+
+function mkMandirFallback(){
+  const g=new THREE.Group();
+  const wm=new THREE.MeshStandardMaterial({color:0xf5e6c0,roughness:0.65,metalness:0.05});
+  const gm=new THREE.MeshStandardMaterial({color:0xD4A017,roughness:0.4,metalness:0.5,emissive:0xD4A017,emissiveIntensity:0.08});
+  const dm=new THREE.MeshStandardMaterial({color:0x1a0e06,roughness:0.9});
+  [0.22,0.18,0.14].forEach((w,i)=>{ const step=new THREE.Mesh(new THREE.BoxGeometry(w*8,0.06,w*4.5),wm); step.position.y=i*0.06; step.receiveShadow=true; g.add(step); });
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.95,0.62),wm); body.position.y=0.655; body.castShadow=true; g.add(body);
+  const inner=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.72,0.05),dm); inner.position.set(0,0.69,-0.315); g.add(inner);
+  const arch=new THREE.Mesh(new THREE.TorusGeometry(0.24,0.04,8,20,Math.PI),wm); arch.position.set(0,0.82,-0.315); arch.rotation.z=Math.PI; g.add(arch);
+  [[-0.46,-0.22],[0.46,-0.22],[-0.46,0.22],[0.46,0.22]].forEach(([x,z])=>{ const col=new THREE.Mesh(new THREE.CylinderGeometry(0.048,0.052,1.05,10),wm); col.position.set(x,0.705,z); col.castShadow=true; g.add(col); const cap=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.06,0.12),wm); cap.position.set(x,1.26,z); g.add(cap); });
+  [[0.52,0.35],[0.4,0.32],[0.28,0.28],[0.18,0.24]].forEach(([r,h],i)=>{ const level=new THREE.Mesh(new THREE.CylinderGeometry(r*0.7,r,h,8),gm); level.position.y=1.3+i*(h+0.02); g.add(level); });
+  const kal=Sph(0.09,0xFFD700,0.25,0.6,0xFFD700,0.15); kal.position.y=2.55; g.add(kal);
+  const idol=new THREE.Mesh(new THREE.PlaneGeometry(0.28,0.4),new THREE.MeshBasicMaterial({color:0xffd080,transparent:true,opacity:0.7})); idol.position.set(0,0.72,-0.3); g.add(idol);
+  [-0.38,0,0.38].forEach(x=>{ g.add(mkOneDiya(x,0.14,0.32,0.06)); });
+  g.position.set(0,0,-2.8);
+  return g;
+}
+
+function mkOneDiya(x,y,z,sc=1){
+  const g=new THREE.Group();
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.1*sc,0.07*sc,0.06*sc,14),new THREE.MeshStandardMaterial({color:0xb05a1a,roughness:0.6,metalness:0.1}));
+  bowl.position.y=0.03*sc; g.add(bowl);
+  const wick=new THREE.Mesh(new THREE.CylinderGeometry(0.005*sc,0.005*sc,0.05*sc,4),new THREE.MeshStandardMaterial({color:0x333300}));
+  wick.position.y=0.08*sc; g.add(wick);
+  const fOut=new THREE.Mesh(new THREE.ConeGeometry(0.045*sc,0.16*sc,8),new THREE.MeshBasicMaterial({color:0xff5500,transparent:true,opacity:0.7}));
+  fOut.position.y=0.19*sc; g.add(fOut);
+  const fIn=new THREE.Mesh(new THREE.ConeGeometry(0.022*sc,0.1*sc,6),new THREE.MeshBasicMaterial({color:0xffee44,transparent:true,opacity:0.9}));
+  fIn.position.y=0.21*sc; g.add(fIn);
+  g.position.set(x,y,z);
+  return g;
+}
+
+function mkDiyas(){
+  const g=new THREE.Group();
+  [[-2.2,0,-2.2],[0,0,-2.2],[2.2,0,-2.2],[-3.0,0,-2.8],[-1.2,0,-2.8],[1.2,0,-2.8],[3.0,0,-2.8],[-1.8,0,-3.4],[-0.6,0,-3.4],[0.6,0,-3.4],[1.8,0,-3.4]].forEach(([x,y,z])=>g.add(mkOneDiya(x,y,z,1)));
+  return g;
+}
+
+function mkPeacock(){ const g=new THREE.Group(); const body=new THREE.Mesh(new THREE.SphereGeometry(0.22,14,10),new THREE.MeshStandardMaterial({color:0x0d5c3a,roughness:0.65,metalness:0.2})); body.scale.set(1,0.88,1.35); body.position.y=0.22; body.castShadow=true; g.add(body); const chest=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),new THREE.MeshStandardMaterial({color:0x004488,roughness:0.4,metalness:0.5,emissive:0x003366,emissiveIntensity:0.1})); chest.scale.set(1,0.9,0.6); chest.position.set(0.1,0.24,0.18); g.add(chest); const neck=Cyl(0.052,0.068,0.3,8,0x006688,0.6); neck.position.set(0.06,0.5,0.05); neck.rotation.z=-0.15; g.add(neck); const head=Sph(0.1,0x006688,0.55,0.15,0x0088aa,0.05); head.position.set(0.1,0.72,0.04); g.add(head); const beak=new THREE.Mesh(new THREE.ConeGeometry(0.02,0.08,5),new THREE.MeshStandardMaterial({color:0xcc8800})); beak.position.set(0.2,0.72,0.04); beak.rotation.z=-Math.PI/2; g.add(beak); for(let i=0;i<6;i++){ const cr=Cyl(0.004,0.004,0.12,4,0x00AADD,0.7); const a=(i/6)*Math.PI-Math.PI/2; cr.position.set(0.1+Math.cos(a)*0.04,0.84+Math.abs(Math.sin(i*1.1))*0.02,0.04); cr.rotation.z=Math.cos(a)*0.5; const crtip=Sph(0.018,0x00EEFF,0.4,0.3,0x00CCFF,0.3); crtip.position.set(0.1+Math.cos(a)*0.05,0.98+Math.abs(Math.sin(i*1.1))*0.02,0.04); g.add(cr); g.add(crtip); } const featherColors=[0x0d5c3a,0x004488,0x00aacc,0x226622,0x7700aa]; for(let i=0;i<9;i++){ const a=((i/8)-0.5)*Math.PI*0.85; const len=0.55+Math.abs(Math.cos(a))*0.25; const fw=new THREE.Mesh(new THREE.PlaneGeometry(0.1,len),new THREE.MeshStandardMaterial({color:featherColors[i%5],roughness:0.7,side:THREE.DoubleSide,transparent:true,opacity:0.88,metalness:0.15})); fw.position.set(-0.22,0.4+len*0.5*Math.sin(a*0.3),0); fw.rotation.set(0,0,a-0.1+Math.sin(a)*0.2); g.add(fw); const eye=Sph(0.045,0x00AACC,0.3,0.3,0x00DDFF,0.25); eye.position.set(-0.22+Math.cos(a-0.1)*len*0.48,0.4+len*0.48*Math.sin(a*0.3+0.15),0.01); g.add(eye); const eyeInner=Sph(0.022,0xFFD700,0.2,0.5,0xFFDD00,0.4); eyeInner.position.copy(eye.position); eyeInner.position.z=0.03; g.add(eyeInner); } [-0.06,0.06].forEach(z=>{ const leg=Cyl(0.014,0.014,0.22,5,0x7a6010); leg.position.set(0.04,0.11,z); g.add(leg); const foot=Cyl(0.012,0.01,0.1,4,0x7a6010); foot.position.set(0.04,0.01,z); foot.rotation.z=0.4; g.add(foot); }); g.position.set(-4.0,0,-1.5); g.rotation.y=0.4; g.scale.setScalar(1.4); return g; }
+
+function mkCow(){ const g=new THREE.Group(); const bm=new THREE.MeshStandardMaterial({color:0xf0ead8,roughness:0.88}); const bm2=new THREE.MeshStandardMaterial({color:0xd4c8a0,roughness:0.9}); const body=new THREE.Mesh(new THREE.SphereGeometry(0.32,14,10),bm); body.scale.set(1.6,0.88,1.0); body.position.y=0.32; body.castShadow=true; g.add(body); const belly=new THREE.Mesh(new THREE.SphereGeometry(0.26,10,8),new THREE.MeshStandardMaterial({color:0xfff5dc,roughness:0.9})); belly.scale.set(1.2,0.7,0.85); belly.position.set(0,0.25,0); g.add(belly); [[0.2,0.38,0.2,0x8a7060,0.35],[-0.3,0.42,-0.1,0xb08060,0.28]].forEach(([x,y,z,c,s])=>{ const p=Sph(s,c,0.95); p.scale.set(1.5,1,1.2); p.position.set(x,y,z); g.add(p); }); const head=new THREE.Mesh(new THREE.SphereGeometry(0.2,12,9),bm); head.scale.set(1.1,1.0,1.2); head.position.set(0.56,0.46,0); head.castShadow=true; g.add(head); const snout=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8),new THREE.MeshStandardMaterial({color:0xffc0a0,roughness:0.88})); snout.scale.set(1,0.75,0.85); snout.position.set(0.72,0.4,0); g.add(snout); [-0.04,0.04].forEach(z=>{ const n=Cyl(0.018,0.018,0.01,6,0xcc8888); n.position.set(0.82,0.41,z); n.rotation.z=Math.PI/2; g.add(n); }); [[-0.04,0.55],[0.04,-0.55]].forEach(([z])=>{ const eye=Sph(0.038,0x1a0a00,0.3); eye.position.set(0.63,0.54,z); g.add(eye); const shine=Sph(0.014,0xffffff,0.1); shine.position.set(0.66,0.57,z+0.02); g.add(shine); }); [-0.08,0.08].forEach((z,i)=>{ const h=new THREE.Mesh(new THREE.ConeGeometry(0.022,0.22,6),new THREE.MeshStandardMaterial({color:0xf0ddb0,roughness:0.7})); h.position.set(0.54,0.7,z); h.rotation.set(0,0,i===0?-0.35:0.35); g.add(h); }); [-1,1].forEach(s=>{ const ear=new THREE.Mesh(new THREE.SphereGeometry(0.09,8,7),bm2); ear.scale.set(0.6,1,0.4); ear.position.set(0.5,0.56,s*0.22); g.add(ear); }); const bindi=Sph(0.025,0xff2222,0.5,0,0xff0000,0.2); bindi.position.set(0.72,0.56,0); g.add(bindi); [[-0.25,0,-0.12],[-0.25,0,0.12],[0.22,0,-0.12],[0.22,0,0.12]].forEach(([x,,z])=>{ const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.065,0.055,0.33,10),bm); leg.position.set(x,0.165,z); leg.castShadow=true; g.add(leg); const hoof=Cyl(0.062,0.058,0.06,8,0x3a2a1a,0.7); hoof.position.set(x,-0.015,z); g.add(hoof); }); const udder=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,7),new THREE.MeshStandardMaterial({color:0xffc0c0,roughness:0.88})); udder.scale.set(1.1,0.7,0.8); udder.position.set(-0.05,0.1,0); g.add(udder); const tail=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-0.51,0.38,0),new THREE.Vector3(-0.7,0.25,0.05),new THREE.Vector3(-0.65,0.08,0.1)]),10,0.018,6,false),new THREE.MeshStandardMaterial({color:0xd0b880,roughness:0.9})); g.add(tail); const tuft=Sph(0.06,0xd0b880,0.95); tuft.position.set(-0.63,0.06,0.1); g.add(tuft); for(let i=0;i<10;i++){ const a=(i/10)*Math.PI*0.6-Math.PI*0.1; const flower=Sph(0.04,i%2===0?0xff8800:0xffcc00,0.6); flower.position.set(0.38+Math.cos(a)*0.28,0.56+Math.sin(a)*0.1,0); g.add(flower); } g.position.set(3.5,0,0.5); g.rotation.y=-0.3; g.scale.setScalar(1.3); return g; }
+
+function mkParrot(){ const g=new THREE.Group(); const gm2=new THREE.MeshStandardMaterial({color:0x22aa44,roughness:0.65,metalness:0.1}); const body=new THREE.Mesh(new THREE.SphereGeometry(0.14,12,9),gm2); body.scale.set(0.82,1.08,0.82); body.position.y=0.14; body.castShadow=true; g.add(body); const head=new THREE.Mesh(new THREE.SphereGeometry(0.105,12,9),gm2); head.position.y=0.32; g.add(head); const ring=Cyl(0.08,0.08,0.04,10,0xcc2266,0.7); ring.position.y=0.25; g.add(ring); const beak=new THREE.Mesh(new THREE.ConeGeometry(0.024,0.1,6),new THREE.MeshStandardMaterial({color:0xcc6600,roughness:0.6})); beak.position.set(0.1,0.32,0); beak.rotation.z=-Math.PI/2; g.add(beak); const beak2=new THREE.Mesh(new THREE.ConeGeometry(0.02,0.08,6),new THREE.MeshStandardMaterial({color:0xdd7700})); beak2.position.set(0.1,0.29,0); beak2.rotation.z=Math.PI/2+0.4; g.add(beak2); const eye=Sph(0.022,0x111100,0.3); eye.position.set(0.08,0.36,0.055); g.add(eye); const eyeShine=Sph(0.008,0xffffff,0.1); eyeShine.position.set(0.1,0.37,0.065); g.add(eyeShine); const eyeRing=new THREE.Mesh(new THREE.TorusGeometry(0.028,0.006,5,10),new THREE.MeshStandardMaterial({color:0xffee66})); eyeRing.position.copy(eye.position); eyeRing.rotation.y=Math.PI/2; g.add(eyeRing); [-1,1].forEach(s=>{ const wm=new THREE.MeshStandardMaterial({color:0x1a9940,roughness:0.7,side:THREE.DoubleSide,metalness:0.05}); const wing=new THREE.Mesh(new THREE.PlaneGeometry(0.22,0.28),wm); wing.position.set(s*0.16,0.15,0); wing.rotation.set(0.1,s*-0.2,s*0.45); g.add(wing); for(let i=0;i<4;i++){ const f=new THREE.Mesh(new THREE.PlaneGeometry(0.06,0.14),new THREE.MeshStandardMaterial({color:0x228844,roughness:0.8,side:THREE.DoubleSide})); f.position.set(s*0.24+s*i*0.01,0.06-i*0.02,0); f.rotation.set(0.15,s*-0.15,s*(0.3+i*0.08)); g.add(f); } }); const tail=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.35,5),new THREE.MeshStandardMaterial({color:0x55cc22,roughness:0.7,side:THREE.DoubleSide})); tail.position.set(-0.08,0.06,0); tail.rotation.z=Math.PI/2+0.5; g.add(tail); const perch=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.02,0.5,8),new THREE.MeshStandardMaterial({color:0x6b3a1a,roughness:0.88})); perch.rotation.z=Math.PI/2; perch.position.y=0.02; g.add(perch); const pb=Bx(0.12,0.4,0.12,0x5a3015,0.9); pb.position.set(0,-0.2,0); g.add(pb); g.position.set(3.5,0,-2.0); g.scale.setScalar(1.3); return g; }
+
+function mkJhula(){ const g=new THREE.Group(); const wm=new THREE.MeshStandardMaterial({color:0x6b3a1a,roughness:0.85}); const bracket=Bx(0.08,0.18,0.18,0x4a2810,0.8); bracket.position.set(0,1.65,-3.12); g.add(bracket); const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.025,1.1,10),wm); bar.rotation.z=Math.PI/2; bar.position.y=1.62; g.add(bar); function mkRope(x){ const points=[]; for(let i=0;i<=12;i++){const t=i/12;points.push(new THREE.Vector3(x,1.6-t*1.1,0));} return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),12,0.014,6,false),new THREE.MeshStandardMaterial({color:0xd4b880,roughness:0.9})); } g.add(mkRope(-0.42)); g.add(mkRope(0.42)); const seat=new THREE.Mesh(new THREE.BoxGeometry(0.95,0.07,0.32),new THREE.MeshStandardMaterial({color:0x8b4513,roughness:0.75,metalness:0.05})); seat.position.y=0.52; g.add(seat); [-0.35,0,0.35].forEach(x=>{ const notch=Cyl(0.025,0.025,0.07,6,0x7a3a10,0.8); notch.position.set(x,0.56,0); g.add(notch); }); const back=Bx(0.92,0.5,0.06,0x7a3a10,0.78); back.position.set(0,0.77,-0.14); g.add(back); [-0.44,0.44].forEach(x=>{ const arm=Bx(0.06,0.08,0.3,0x7a3a10,0.8); arm.position.set(x,0.6,0); g.add(arm); }); for(let i=0;i<12;i++){ const a=i/11; const fc=i%3===0?0xff8800:i%3===1?0xff2288:0xffee00; const fl=Sph(0.04,fc,0.7); fl.position.set(-0.5+a*1.0,1.68+Math.sin(a*Math.PI)*0.06,0); g.add(fl); } g.position.set(5.0,3.2,-1.0); g.scale.setScalar(1.3); return g; }
+
+function mkRangoli(){ const g=new THREE.Group(); const rc=[0xff6b00,0xff2d9b,0xffd700,0x00f5ff,0x39ff14,0xbf5fff,0xff4400,0x00aaff]; for(let ring=0;ring<5;ring++){ const r=0.18+ring*0.22; const segs=6+ring*4; for(let i=0;i<segs;i++){ const a=(i/segs)*Math.PI*2; const petal=new THREE.Mesh(new THREE.CircleGeometry(0.08-ring*0.008,7),new THREE.MeshBasicMaterial({color:rc[(i+ring*2)%8]})); petal.rotation.x=-Math.PI/2; petal.position.set(Math.cos(a)*r,0.002,Math.sin(a)*r); g.add(petal); } } const center=new THREE.Mesh(new THREE.CircleGeometry(0.14,20),new THREE.MeshBasicMaterial({color:0xFFD700})); center.rotation.x=-Math.PI/2; center.position.y=0.003; g.add(center); const omGlow=new THREE.Mesh(new THREE.CircleGeometry(0.06,16),new THREE.MeshBasicMaterial({color:0xff6600,transparent:true,opacity:0.9})); omGlow.rotation.x=-Math.PI/2; omGlow.position.y=0.004; g.add(omGlow); g.position.set(-2.5,0,0.5); return g; }
+
+const wallArts={};
+function mkOmSymbol(){ const g=new THREE.Group(); const back=new THREE.Mesh(new THREE.CircleGeometry(0.5,32),new THREE.MeshStandardMaterial({color:0xD4A017,roughness:0.3,metalness:0.6,emissive:0xD4A017,emissiveIntensity:0.12})); back.position.set(-0.8,2.6,-3.86); g.add(back); const inner=new THREE.Mesh(new THREE.CircleGeometry(0.38,32),new THREE.MeshStandardMaterial({color:0xfff0c0,roughness:0.2,metalness:0.4})); inner.position.set(-0.8,2.6,-3.84); g.add(inner); const ring=new THREE.Mesh(new THREE.TorusGeometry(0.48,0.03,8,32),new THREE.MeshStandardMaterial({color:0xD4A017,metalness:0.7,roughness:0.2})); ring.position.set(0,0,2.8); g.scale.setScalar(1.5); return g; }
+function mkTorana(){ const g=new THREE.Group(); const ropeGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-3.5,4.5,-3.82),new THREE.Vector3(-1.5,4.1,-3.82),new THREE.Vector3(0,4.3,-3.82),new THREE.Vector3(1.5,4.1,-3.82),new THREE.Vector3(3.5,4.5,-3.82)]),30,0.02,6,false); g.add(new THREE.Mesh(ropeGeo,new THREE.MeshStandardMaterial({color:0xaa8822,roughness:0.8}))); for(let i=0;i<14;i++){ const t=i/13; const fc=i%2===0?0xff8800:i%2===1?0xffcc00:0xff2288; const x=-3.5+t*7; const y=4.5-4*t*(1-t)*0.5; const fl=Sph(0.1,fc,0.7); fl.position.set(x,y,-3.82); g.add(fl); const stm=Cyl(0.01,0.01,0.15,4,0x228822); stm.position.set(x,y-0.12,-3.82); g.add(stm); const leaf=new THREE.Mesh(new THREE.PlaneGeometry(0.12,0.18),new THREE.MeshStandardMaterial({color:0x2d8820,roughness:0.9,side:THREE.DoubleSide})); leaf.position.set(x,y-0.2,-3.8); leaf.rotation.x=0.5; g.add(leaf); } return g; }
+function mkMirror(){ const g=new THREE.Group(); const frame=new THREE.Mesh(new THREE.TorusGeometry(0.42,0.065,10,30),new THREE.MeshStandardMaterial({color:0xD4A017,roughness:0.25,metalness:0.75})); frame.position.set(2.0,2.5,-3.84); g.add(frame); const glass=new THREE.Mesh(new THREE.CircleGeometry(0.36,32),new THREE.MeshStandardMaterial({color:0xc8e8ff,roughness:0.05,metalness:0.8,transparent:true,opacity:0.7})); glass.position.set(2.0,2.5,-3.83); g.add(glass); const sheen=new THREE.Mesh(new THREE.PlaneGeometry(0.2,0.4),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.15})); sheen.position.set(1.88,2.58,-3.81); sheen.rotation.z=-0.3; g.add(sheen); return g; }
+
+['mandir','diyas'].forEach(id=>{
+  const fn={mandir:mkMandir,diyas:mkDiyas}[id];
+  const o=fn(); o.castShadow=true; scene.add(o); objs[id]=o;
+});
+const owned=new Set(['mandir','diyas']);
+const active=new Set(['mandir','diyas']);
+dl.forEach(l=>l.intensity=2.5);
+mglow.intensity=2.8;
+
+let dragging=false, lx=0, ly=0;
+updateCam();
+
+let introSweep=true;
+let sweepT=0;
+const sweepDuration=3.5;
+const startTheta=-0.5, endTheta=0.0;
+const startPhi=0.2, endPhi=0.28;
+const startR=11, endR=5.5;
+
+const cv=document.getElementById('c');
+cv.addEventListener('mousedown',e=>{if(!introSweep){dragging=true;lx=e.clientX;ly=e.clientY;}});
+window.addEventListener('mouseup',()=>dragging=false);
+cv.addEventListener('click',e=>{onTap(e.clientX,e.clientY);});
+window.addEventListener('mousemove',e=>{
+  if(!dragging) return;
+  const dx = e.clientX - lx;
+  FIXED_THETA_cur = Math.max(-0.9, Math.min(0.9, FIXED_THETA_cur - dx*0.006));
+  lx = e.clientX; ly = e.clientY;
+  updateCam();
+});
+let ltd=0;
+let _tapX=0,_tapY=0,_tapT=0;
+cv.addEventListener('touchstart',e=>{e.preventDefault();_tapX=e.touches[0].clientX;_tapY=e.touches[0].clientY;_tapT=Date.now();if(introSweep)return;if(e.touches.length===1){dragging=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}if(e.touches.length===2)ltd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);},{passive:false});
+cv.addEventListener('touchend',e=>{
+  const dx=Math.abs(e.changedTouches[0].clientX-_tapX),dy=Math.abs(e.changedTouches[0].clientY-_tapY);
+  if(dx<12&&dy<12&&Date.now()-_tapT<300)onTap(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+});
+cv.addEventListener('touchend',e=>{if(e.touches.length===0)dragging=false;});
+cv.addEventListener('touchmove',e=>{
+  e.preventDefault();if(introSweep)return;
+  if(e.touches.length===1&&dragging){
+    const dx = e.touches[0].clientX - lx;
+    FIXED_THETA_cur = Math.max(-0.9, Math.min(0.9, FIXED_THETA_cur - dx*0.007));
+    lx=e.touches[0].clientX; ly=e.touches[0].clientY;
+    updateCam();
+  }
+  if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);radius=Math.max(0.8,Math.min(7.0,radius-(d-ltd)*0.025));ltd=d;updateCam();}
+},{passive:false});
+
+const moods={
+  dawn:      {hemi:[0xffccaa,0x2a1505,.65],sun:[0xffddaa,1.8], fill:[0xffaa66,.2],amb:[0x3a1808,.45],fog:0x0B1623,exp:1.1, temple:[0xffcc88,2.2, 0xff8844,0.8, 0xffaa44,1.2]},
+  golden:    {hemi:[0xffee88,0x2a1a02,.8], sun:[0xFFE44D,2.2], fill:[0xffcc44,.3],amb:[0x241400,.5], fog:0x0B1623,exp:1.3, temple:[0xffd700,3.0, 0xff9900,1.2, 0xffcc00,1.8]},
+  midday:    {hemi:[0xffffff,0x5a7030,.9], sun:[0xfff8f0,2.5], fill:[0xddeeff,.4],amb:[0x303830,.5], fog:0x0B1623,exp:1.4, temple:[0xffffff,2.0, 0xeef8ff,0.6, 0xffffff,1.0]},
+  dusk:      {hemi:[0xff8844,0x1a0a0a,.55],sun:[0xff6622,1.4], fill:[0x8844ff,.2],amb:[0x2a0808,.4], fog:0x0B1623,exp:0.9, temple:[0xff6622,2.5, 0xaa44ff,1.0, 0xff4400,1.4]},
+  night:     {hemi:[0x2244aa,0x060410,.35],sun:[0x1122cc,.25], fill:[0x4466ff,.1],amb:[0x04060e,.35],fog:0x0B1623,exp:0.7, temple:[0xffcc44,3.5, 0x4488ff,0.8, 0xffaa22,2.0]},
+  deepnight: {hemi:[0x111133,0x020204,.25],sun:[0x080844,.12], fill:[0x2233cc,.08],amb:[0x020208,.3], fog:0x0B1623,exp:0.55, temple:[0xff8800,4.0, 0x2244cc,0.5, 0xff6600,2.5]},
+};
+function mood(id,el){
+  const m=moods[id];
+  hemi.color.setHex(m.hemi[0]);hemi.groundColor.setHex(m.hemi[1]);hemi.intensity=m.hemi[2];
+  sun.color.setHex(m.sun[0]);sun.intensity=m.sun[1];
+  fill.color.setHex(m.fill[0]);fill.intensity=m.fill[1];
+  amb.color.setHex(m.amb[0]);amb.intensity=m.amb[1];
+  scene.fog.color.setHex(m.fog);renderer.setClearColor(m.fog);
+  renderer.toneMappingExposure=m.exp;
+  if(m.temple){ tSpot.color.setHex(m.temple[0]); tSpot.intensity=m.temple[1]; tRim.color.setHex(m.temple[2]); tRim.intensity=m.temple[3]; tBounce.color.setHex(m.temple[4]); tBounce.intensity=m.temple[5]; tHalo.color.setHex(m.temple[0]); tHalo.intensity=m.temple[1]*0.25; }
+  document.querySelectorAll('#moodrow .card').forEach(c=>c.classList.remove('on'));
+  currentMood = id; if(el) el.classList.add('on');
+  const mn={dawn:'🌅 Dawn Puja',golden:'✨ Golden Hour',midday:'☀️ Midday',dusk:'🌆 Dusk',night:'🌙 Night',deepnight:'🌌 Deep Night'};
+  toast(mn[id]||id);
+  if(typeof fireflies!=='undefined'){
+    if(id==='night'||id==='deepnight'){if(!firefliesActive){firefliesActive=true;fireflies.visible=true;const fc=document.getElementById('cd-fireflies');if(fc)fc.classList.add('on');}}
+    else if(id==='midday'||id==='golden'){if(firefliesActive){firefliesActive=false;fireflies.visible=false;const fc=document.getElementById('cd-fireflies');if(fc)fc.classList.remove('on');}}
+    if((id==='midday')&&rainActive){rainActive=false;rain.visible=false;const rc=document.getElementById('cd-rain');if(rc)rc.classList.remove('on');}
+  }
+}
+
+const clock=new THREE.Clock();
+let pts2=650;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta(); const t=clock.getElapsedTime();
+  if(introSweep){ sweepT+=dt; const p=Math.min(1,sweepT/sweepDuration); const e=1-(1-p)*(1-p)*(1-p); theta=startTheta+(endTheta-startTheta)*e; phi=startPhi+(endPhi-startPhi)*e; radius=startR+(endR-startR)*e; updateCam(); if(p>=1) introSweep=false; }
+  const dp=dustGeo.attributes.position;
+  for(let i=0;i<dustCount;i++){ dp.array[i*3]+=dustVel[i*3]; dp.array[i*3+1]+=dustVel[i*3+1]; dp.array[i*3+2]+=dustVel[i*3+2]; if(dp.array[i*3+1]>6.8){dp.array[i*3+1]=0;dp.array[i*3]=(Math.random()-0.5)*RW*0.9;} if(Math.abs(dp.array[i*3])>RW/2||Math.abs(dp.array[i*3+2])>RD/2){dp.array[i*3]=(Math.random()-0.5)*RW*0.9;dp.array[i*3+2]=(Math.random()-0.5)*RD*0.9;} }
+  dp.needsUpdate=true;
+  if (typeof godRays !== 'undefined') godRays.forEach(function(g){ g.visible = godRaysOn; });
+  if (typeof godRays !== 'undefined') godRays.forEach((g,i)=>{const c=g.children[0];if(c)c.material.opacity=0.03+Math.sin(t*0.5+i)*0.02;});
+  if (typeof dustPts !== 'undefined') dustPts.visible = dustOn;
+  const f1=2.2+Math.sin(t*11.3)*0.5+Math.sin(t*7.1)*0.3+Math.random()*0.4;
+  const f2=2.0+Math.sin(t*9.7+0.4)*0.5+Math.random()*0.3;
+  const f3=1.8+Math.sin(t*13.2+1.1)*0.4+Math.random()*0.35;
+  dl[0].intensity=active.has('diyas')?f1:0; dl[1].intensity=active.has('diyas')?f2:0; dl[2].intensity=active.has('diyas')?f3*0.7:0;
+  var templeGlowScale = (typeof templeGlowLevel !== 'undefined' && templeGlowLevel === 0) ? 0 : (templeGlowLevel === 2 ? 1.5 : 1);
+  if(typeof tHalo !== 'undefined') { const baseHaloInt = (moods[currentMood]?.temple?.[1] || 1) * 0.25; tHalo.intensity = baseHaloInt * (0.85 + 0.12*Math.sin(t*3.1) + 0.06*Math.sin(t*7.3)) * templeGlowScale; }
+  if(typeof tRim !== 'undefined') { const baseRim = (moods[currentMood]?.temple?.[3] !== undefined ? moods[currentMood].temple[3] : 1); tRim.intensity = baseRim * (0.9 + 0.08*Math.sin(t*2.7)) * templeGlowScale; }
+  mglow.intensity=active.has('mandir')?(2.5+Math.sin(t*2.2)*0.4):0;
+  if(objs.peacock){objs.peacock.rotation.y=0.4+Math.sin(t*0.4)*0.25;}
+  if(objs.parrot){objs.parrot.position.y=1.4+Math.sin(t*1.8)*0.04;objs.parrot.rotation.z=Math.sin(t*1.2)*0.1;}
+  if(objs.cow){objs.cow.scale.set(1,1+Math.sin(t*1.1)*0.007,1);}
+  if(objs.jhula){objs.jhula.rotation.z=Math.sin(t*1.15)*0.16;}
+  if(objs.agarbatti && active.has('agarbatti')){ const sg=objs.agarbatti.userData.smokeGeo; const sv=objs.agarbatti.userData.smokeVel; const sp=sg.attributes.position.array; const sc=objs.agarbatti.userData.smokeCount; for(let i=0;i<sc;i++){ sp[i*3]+=sv[i*3]+Math.sin(t*2.1+i)*0.0008; sp[i*3+1]+=sv[i*3+1]; sp[i*3+2]+=sv[i*3+2]+Math.cos(t*1.7+i)*0.0006; if(sp[i*3+1]>2.2){sp[i*3]=(Math.random()-0.5)*0.04;sp[i*3+1]=1.1;sp[i*3+2]=(Math.random()-0.5)*0.04;sv[i*3]=(Math.random()-0.5)*0.003;sv[i*3+2]=(Math.random()-0.5)*0.003;} } sg.attributes.position.needsUpdate=true; if(objs.agarbatti.userData.glow) objs.agarbatti.userData.glow.intensity=0.5+Math.sin(t*8.3)*0.15+Math.random()*0.1; }
+  if(objs.bell){ const bd=objs.bell.userData; if(bd.ringing>0){ const swing=Math.sin(t*22)*Math.exp(-bd.ringing*0.8)*0.35; objs.bell.rotation.z=swing; if(bd.clapper)bd.clapper.position.x=Math.sin(t*22+0.3)*0.06*Math.exp(-bd.ringing*0.8); bd.ringing=Math.max(0,bd.ringing-dt*0.8); } else { objs.bell.rotation.z=Math.sin(t*0.6)*0.012; } }
+  if(objs.sparrow && active.has('sparrow')){ const sd=objs.sparrow.userData; sd.hopTimer+=dt; objs.sparrow.rotation.y=Math.sin(t*0.4)*0.3; objs.sparrow.position.y=sd.basePos.y+Math.abs(Math.sin(t*3.5))*0.015; if(sd.hopTimer>3.5){ sd.hopTimer=0; const nx=(Math.random()-0.5)*3; sd.basePos.x=nx; objs.sparrow.position.x=Math.max(-5.8,Math.min(-4.8,nx)); objs.sparrow.position.y=2.0; } }
+  if(firefliesActive){ const fd=fireflies.userData; const fp=fd.geo.attributes.position.array; for(let i=0;i<fd.count;i++){ fp[i*3]+=fd.vel[i*3]+Math.sin(t*1.1+fd.phase[i])*0.004; fp[i*3+1]+=fd.vel[i*3+1]+Math.cos(t*0.8+fd.phase[i])*0.002; fp[i*3+2]+=fd.vel[i*3+2]+Math.sin(t*0.9+fd.phase[i]*1.3)*0.003; if(Math.abs(fp[i*3])>3.5)fd.vel[i*3]*=-1; if(fp[i*3+1]<0.2||fp[i*3+1]>3.2)fd.vel[i*3+1]*=-1; if(Math.abs(fp[i*3+2])>3.5)fd.vel[i*3+2]*=-1; } fd.geo.attributes.position.needsUpdate=true; fireflies.material.opacity=0.6+Math.sin(t*4.5)*0.3+Math.sin(t*11.3)*0.1; }
+  if(rainActive){ const rd=rain.userData; const rp=rd.geo.attributes.position.array; for(let i=0;i<rd.count;i++){ rp[i*3+1]-=rd.vel[i]; rp[i*3]+=0.005; if(rp[i*3+1]<0){rp[i*3]=(Math.random()-0.5)*8;rp[i*3+1]=4.8;rp[i*3+2]=(Math.random()-0.5)*8;} } rd.geo.attributes.position.needsUpdate=true; }
+  var ringT = (typeof ringMotionSpeed !== 'undefined' ? ringMotionSpeed : 1) * animSpeedMult * t * 2 * Math.PI / 20;
+  if(typeof paintWallComposite==='function' && ringWallCtx){ paintWallComposite(ringWallCtx, ringWallW, ringWallH, ringT); ringWallTexture.needsUpdate = true; }
+  if (auroraOn && typeof paintAuroraBG === 'function') {
+    var ac = document.getElementById('aurora-canvas');
+    if (ac) {
+      var r = ac.getBoundingClientRect();
+      if (ac.width !== r.width || ac.height !== r.height) { ac.width = r.width; ac.height = r.height; }
+      var actx = ac.getContext('2d');
+      if (actx) paintAuroraBG(actx, ac.width, ac.height, t);
+    }
+  }
+  renderer.render(scene,cam);
+}
+animate();
+
+// Apply midday mood at startup
+{
+  const m = moods.midday;
+  hemi.color.setHex(m.hemi[0]); hemi.groundColor.setHex(m.hemi[1]); hemi.intensity = m.hemi[2];
+  sun.color.setHex(m.sun[0]); sun.intensity = m.sun[1];
+  fill.color.setHex(m.fill[0]); fill.intensity = m.fill[1];
+  amb.color.setHex(m.amb[0]); amb.intensity = m.amb[1];
+  if (m.temple) { tSpot.color.setHex(m.temple[0]); tSpot.intensity = m.temple[1]; tRim.color.setHex(m.temple[2]); tRim.intensity = m.temple[3]; tBounce.color.setHex(m.temple[4]); tBounce.intensity = m.temple[5]; tHalo.color.setHex(m.temple[0]); tHalo.intensity = m.temple[1] * 0.25; }
+}
+
+function updatePts(){const pv=document.getElementById('pv');if(pv)pv.textContent=pts2;}
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg;t.classList.add('show'); clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2500); }
+function ptPop(n,x,y){ const p=document.createElement('div'); p.className='pp';p.textContent=(n>0?'+':'')+n+' 💎'; p.style.cssText=`top:${y||window.innerHeight*0.38}px;left:${x||window.innerWidth/2-30}px;`; document.body.appendChild(p);setTimeout(()=>p.remove(),1300); }
+function switchTab(id,el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); document.querySelectorAll('.tc').forEach(t=>t.classList.remove('on')); el.classList.add('on'); document.getElementById('tc-'+id).classList.add('on'); }
+
+function mkAgarbatti(){ const g=new THREE.Group(); const mat=n=>new THREE.MeshStandardMaterial({color:n,roughness:0.7,metalness:0.1}); const base=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.15,0.06,12),mat(0xb5860d)); base.position.y=0.03; const cup=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.1,0.08,12),mat(0xc49a0a)); cup.position.y=0.1; g.add(base,cup); const stickMat=new THREE.MeshStandardMaterial({color:0x8B4513,roughness:0.9}); const tipMat=new THREE.MeshStandardMaterial({color:0xff6600,emissive:0xff3300,emissiveIntensity:0.8,roughness:0.3}); [-0.18,0,0.18].forEach((a)=>{ const stick=new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.008,1.1,6),stickMat); stick.rotation.z=a; stick.position.set(Math.sin(a)*0.05,0.62,0); g.add(stick); const tip=new THREE.Mesh(new THREE.SphereGeometry(0.018,6,6),tipMat); tip.position.set(Math.sin(a)*0.115,1.15+Math.abs(a)*0.15,0); g.add(tip); }); const smokeCount=60; const smokeGeo=new THREE.BufferGeometry(); const smokePos=new Float32Array(smokeCount*3); const smokeVel=new Float32Array(smokeCount*3); for(let i=0;i<smokeCount;i++){ smokePos[i*3]=(Math.random()-0.5)*0.05; smokePos[i*3+1]=1.1+Math.random()*0.8; smokePos[i*3+2]=(Math.random()-0.5)*0.05; smokeVel[i*3]=(Math.random()-0.5)*0.003; smokeVel[i*3+1]=0.006+Math.random()*0.004; smokeVel[i*3+2]=(Math.random()-0.5)*0.003; } smokeGeo.setAttribute('position',new THREE.BufferAttribute(smokePos,3)); const smokeMat=new THREE.PointsMaterial({color:0xddccbb,size:0.06,transparent:true,opacity:0.35,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true}); g.add(new THREE.Points(smokeGeo,smokeMat)); g.userData.smokeGeo=smokeGeo; g.userData.smokeVel=smokeVel; g.userData.smokeCount=smokeCount; const glow=new THREE.PointLight(0xff8833,0.6,1.5,2); glow.position.set(0,1.1,0); g.add(glow); g.userData.glow=glow; g.position.set(-1.8,0,-3.0); g.scale.setScalar(1.1); return g; }
+
+function mkBell(){ const g=new THREE.Group(); const brass=new THREE.MeshStandardMaterial({color:0xd4a017,roughness:0.25,metalness:0.85,envMapIntensity:1.2}); const dark=new THREE.MeshStandardMaterial({color:0x8B6914,roughness:0.4,metalness:0.7}); const pts=[]; pts.push(new THREE.Vector2(0,0)); pts.push(new THREE.Vector2(0.22,0.02)); pts.push(new THREE.Vector2(0.28,0.1)); pts.push(new THREE.Vector2(0.30,0.22)); pts.push(new THREE.Vector2(0.28,0.36)); pts.push(new THREE.Vector2(0.22,0.5)); pts.push(new THREE.Vector2(0.14,0.62)); pts.push(new THREE.Vector2(0.08,0.72)); pts.push(new THREE.Vector2(0.05,0.80)); const bellGeo=new THREE.LatheGeometry(pts,24); const bell=new THREE.Mesh(bellGeo,brass); bell.castShadow=true; g.add(bell); const knob=new THREE.Mesh(new THREE.SphereGeometry(0.06,12,8),dark); knob.position.y=0.82; const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.18,8),dark); rod.position.y=0.98; g.add(knob,rod); [0.15,0.35,0.55].forEach(y=>{ const ring=new THREE.Mesh(new THREE.TorusGeometry(0.27-y*0.15,0.012,8,24),dark); ring.rotation.x=Math.PI/2; ring.position.y=y; g.add(ring); }); const clapper=new THREE.Mesh(new THREE.SphereGeometry(0.055,10,8),dark); clapper.position.y=0.06; g.add(clapper); g.userData.clapper=clapper; g.userData.ringing=0; const ropeMat=new THREE.MeshStandardMaterial({color:0xcc4400,roughness:0.9}); const rope=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.7,6),ropeMat); rope.position.y=1.45; g.add(rope); g.position.set(0,5.5,-4.0); g.scale.setScalar(0.9); g.userData.baseY=3.2; return g; }
+
+function mkFireflies(){ const count=35; const geo=new THREE.BufferGeometry(); const pos=new Float32Array(count*3); const vel=new Float32Array(count*3); const phase=new Float32Array(count); for(let i=0;i<count;i++){ pos[i*3]=(Math.random()-0.5)*6; pos[i*3+1]=0.3+Math.random()*2.5; pos[i*3+2]=(Math.random()-0.5)*5-1; vel[i*3]=(Math.random()-0.5)*0.008; vel[i*3+1]=(Math.random()-0.5)*0.004; vel[i*3+2]=(Math.random()-0.5)*0.006; phase[i]=Math.random()*Math.PI*2; } geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); const mat=new THREE.PointsMaterial({color:0xaaff44,size:0.09,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true}); const pts=new THREE.Points(geo,mat); pts.userData={vel,phase,count,geo}; pts.visible=false; return pts; }
+
+function mkRain(){ const count=400; const geo=new THREE.BufferGeometry(); const pos=new Float32Array(count*3); const vel=new Float32Array(count); for(let i=0;i<count;i++){ pos[i*3]=(Math.random()-0.5)*8; pos[i*3+1]=Math.random()*5; pos[i*3+2]=(Math.random()-0.5)*8; vel[i]=0.06+Math.random()*0.04; } geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); const mat=new THREE.PointsMaterial({color:0xaaccff,size:0.025,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true}); const pts=new THREE.Points(geo,mat); pts.userData={vel,count,geo}; pts.visible=false; return pts; }
+
+function mkSparrow(){ const g=new THREE.Group(); const brown=new THREE.MeshStandardMaterial({color:0x8B5E3C,roughness:0.85}); const dkbrn=new THREE.MeshStandardMaterial({color:0x5C3317,roughness:0.85}); const cream=new THREE.MeshStandardMaterial({color:0xF5DEB3,roughness:0.85}); const body=new THREE.Mesh(new THREE.SphereGeometry(0.09,12,10),brown); body.scale.set(1,1,1.3); g.add(body); const head=new THREE.Mesh(new THREE.SphereGeometry(0.065,12,10),brown); head.position.set(0,0.08,0.12); g.add(head); const eye=new THREE.Mesh(new THREE.SphereGeometry(0.013,6,6),new THREE.MeshStandardMaterial({color:0x000000,roughness:0.1,metalness:0.8})); eye.position.set(0.03,0.1,0.175); const eyeShine=new THREE.Mesh(new THREE.SphereGeometry(0.005,6,6),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xffffff,emissiveIntensity:1})); eyeShine.position.set(0.033,0.105,0.185); g.add(eye,eyeShine); const beak=new THREE.Mesh(new THREE.ConeGeometry(0.016,0.045,6),dkbrn); beak.rotation.x=-Math.PI/2; beak.position.set(0,0.08,0.215); g.add(beak); [-1,1].forEach(side=>{ const wing=new THREE.Mesh(new THREE.SphereGeometry(0.07,8,6),brown); wing.scale.set(0.4,0.25,1.1); wing.position.set(side*0.1,-0.01,-0.02); wing.rotation.z=side*0.3; g.add(wing); const stripe=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,4),cream); stripe.scale.set(0.3,0.15,0.9); stripe.position.set(side*0.1,0.01,-0.01); g.add(stripe); }); const tail=new THREE.Mesh(new THREE.ConeGeometry(0.04,0.1,6),dkbrn); tail.rotation.x=Math.PI/2; tail.position.set(0,-0.02,-0.17); g.add(tail); [-1,1].forEach(side=>{ const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.05,4),dkbrn); leg.position.set(side*0.03,-0.1,0); g.add(leg); }); const chest=new THREE.Mesh(new THREE.SphereGeometry(0.06,10,8),cream); chest.scale.set(0.7,0.8,0.5); chest.position.set(0,0,0.08); g.add(chest); g.scale.setScalar(1.8); g.position.set(-5.5,2.0,0.5); g.userData.basePos=g.position.clone(); g.userData.wingPhase=Math.random()*Math.PI*2; g.userData.hopTimer=0; return g; }
+
+const builders={mandir:mkMandir,diyas:mkDiyas,peacock:mkPeacock,cow:mkCow,parrot:mkParrot,jhula:mkJhula,rangoli:mkRangoli,agarbatti:mkAgarbatti,bell:mkBell,sparrow:mkSparrow};
+
+function toggleObj(id){ if(!owned.has(id))return; if(active.has(id)){ if(objs[id]){scene.remove(objs[id]);delete objs[id];} active.delete(id); document.getElementById('cd-'+id)?.classList.remove('on'); toast('Removed from Aangan'); }else{ if(builders[id]){const o=builders[id]();scene.add(o);objs[id]=o;} active.add(id); document.getElementById('cd-'+id)?.classList.add('on'); toast('✨ Added to Aangan'); } }
+
+function buy(id,em,name,cost){ if(owned.has(id)){toggleObj(id);return;} if(pts2<cost){toast('🔒 Need '+cost+' pts. Keep learning!');return;} pts2-=cost;updatePts();owned.add(id);active.add(id); if(builders[id]){const o=builders[id]();scene.add(o);objs[id]=o;} ptPop(-cost); const cd=document.getElementById('cd-'+id); if(cd){cd.classList.add('on');cd.querySelector('.cc').textContent='✓';cd.querySelector('.cc').classList.add('owned');cd.onclick=()=>toggleObj(id);} document.getElementById('sgi-'+id)?.classList.add('owned'); toast('🎊 '+em+' '+name+' added to your Aangan!'); closeShop(); }
+
+function setWall(wallC,ceilC,el){ walls.forEach((w,i)=>{ if(i===0) return; if(i<3)w.material.color.setHex(wallC); else w.material.color.setHex(ceilC); }); document.querySelectorAll('#wallrow .sw').forEach(s=>s.classList.remove('on')); if(el) el.classList.add('on'); toast('🎨 Walls updated!'); }
+
+function toggleWallArt(id){ if(wallArts[id]){scene.remove(wallArts[id]);delete wallArts[id];document.getElementById('wa-'+id)?.classList.remove('on');toast('Removed');return;} const fns={om:mkOmSymbol,torana:mkTorana,mirror:mkMirror}; if(fns[id]){const o=fns[id]();scene.add(o);wallArts[id]=o;} document.getElementById('wa-'+id)?.classList.add('on'); toast('✨ Wall art added!'); }
+
+function setDiya(col1,col2,el){ dl[0].color.setHex(col1);dl[1].color.setHex(col1);dl[2].color.setHex(col2); document.querySelectorAll('.diya-sw').forEach(s=>s.classList.remove('on')); if(el) el.classList.add('on');toast('🪔 Flame color updated'); }
+
+const floorC={mud:0xa0714a,marble:0xf0f0f0,stone:0x888880,wood:0x7a4a22,mosaic:0x4488bb};
+function setFloor(id,el){ const rough={mud:0.92,marble:0.15,stone:0.88,wood:0.78,mosaic:0.55}; const metal={mud:0.0,marble:0.05,stone:0.02,wood:0.0,mosaic:0.1}; floorMat.color.setHex(floorC[id]); floorMat.roughness=rough[id]||0.85; floorMat.metalness=metal[id]||0; floorMat.needsUpdate=true; document.querySelectorAll('#floorstrip .card').forEach(c=>c.classList.remove('on')); if(el) el.classList.add('on'); toast('🪵 Floor: '+id.charAt(0).toUpperCase()+id.slice(1)); }
+
+const shopData=[{id:'peacock',e:'🦚',n:'Peacock',c:100},{id:'cow',e:'🐄',n:'Gau Mata',c:180},{id:'parrot',e:'🦜',n:'Parrot',c:80},{id:'jhula',e:'🪑',n:'Jhula',c:220},{id:'rangoli',e:'🎨',n:'Rangoli',c:130}];
+function openShop(){ document.getElementById('sg').innerHTML=shopData.map(s=>`<div class="si ${owned.has(s.id)?'owned':''}" id="sgi-${s.id}" onclick="buy('${s.id}','${s.e}','${s.n}',${s.c})"><span class="se">${s.e}</span><div class="sn">${s.n}</div><div class="sc">${owned.has(s.id)?'✅ Owned':'💎 '+s.c}</div></div>`).join(''); document.getElementById('drawer').classList.add('open'); document.getElementById('ov').classList.add('show'); }
+function closeShop(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('ov').classList.remove('show'); }
+
+function showApp(){ const intro=document.getElementById('intro'); if(intro) intro.classList.add('hide'); const hud=document.getElementById('hud'); if(hud) hud.classList.add('show'); const panel=document.getElementById('panel'); if(panel) panel.classList.add('show'); const hint=document.getElementById('hint'); if(hint){ hint.classList.add('show'); setTimeout(()=>hint.classList.add('fade'),4000); } }
+
+function toggleEffect(id, el){ if(id==='fireflies'){ firefliesActive=!firefliesActive; fireflies.visible=firefliesActive; if(el) el.classList.toggle('on',firefliesActive); if(typeof updateEffectLabel==='function') updateEffectLabel('fireflies'); toast(firefliesActive?'✨ Fireflies appear!':'✨ Fireflies gone'); } else if(id==='rain'){ rainActive=!rainActive; rain.visible=rainActive; if(el) el.classList.toggle('on',rainActive); if(typeof updateEffectLabel==='function') updateEffectLabel('rain'); toast(rainActive?'🌧️ Sawan rain begins...':'☀️ Rain has stopped'); } }
+function ringBell(){ if(objs.bell){ objs.bell.userData.ringing=3.0; toast('🔔 Jai Shri Ram!'); } }
+function onTap(cx,cy){ const rect=renderer.domElement.getBoundingClientRect(); const mouse=new THREE.Vector2(((cx-rect.left)/rect.width)*2-1,-((cy-rect.top)/rect.height)*2+1); const rc=new THREE.Raycaster(); rc.setFromCamera(mouse,cam); if(objs.bell&&rc.intersectObject(objs.bell,true).length>0){ringBell();return;} if(objs.agarbatti&&rc.intersectObject(objs.agarbatti,true).length>0){toast('🕯️ Peace and blessings...');return;} if(objs.sparrow&&rc.intersectObject(objs.sparrow,true).length>0){toast('🐦 Chirp! The little sparrow sings...');return;} }
+
+let viewTween = null;
+const VIEWS = { center: {theta:0.0,phi:0.28,tx:0.0,ty:0.5,tz:-1.0}, left: {theta:-0.55,phi:0.28,tx:1.5,ty:0.5,tz:-0.5}, right: {theta:0.55,phi:0.28,tx:-1.5,ty:0.5,tz:-0.5} };
+let currentView = 'center';
+function setView(id){
+  if(currentView === id) return; currentView = id;
+  document.querySelectorAll('.vbtn').forEach(b => b.classList.remove('on'));
+  const btn = document.getElementById('vbtn-'+id); if(btn) btn.classList.add('on');
+  const v = VIEWS[id];
+  const sTheta = FIXED_THETA_cur, sPhi = FIXED_PHI_cur, sTx = target.x, sTy = target.y, sTz = target.z;
+  const dur = 0.55;
+  if(viewTween) cancelAnimationFrame(viewTween);
+  function ease(t){ return t<0.5 ? 2*t*t : -1+(4-2*t)*t; }
+  const startTime = performance.now();
+  function tick(){
+    const t = Math.min((performance.now()-startTime)/1000/dur, 1); const e = ease(t);
+    FIXED_THETA_cur = sTheta + (v.theta - sTheta)*e; FIXED_PHI_cur = sPhi + (v.phi - sPhi)*e;
+    target.x = sTx + (v.tx - sTx)*e; target.y = sTy + (v.ty - sTy)*e; target.z = sTz + (v.tz - sTz)*e;
+    updateCam();
+    if(t < 1) viewTween = requestAnimationFrame(tick);
+    else { FIXED_THETA_cur = v.theta; FIXED_PHI_cur = v.phi; viewTween = null; }
+  }
+  tick();
+}
+
+  window.mood=mood; window.toast=toast; window.ptPop=ptPop; window.switchTab=switchTab; window.setRingColor=setRingColor; window.setRingType=setRingType; window.setRingMotion=setRingMotion; window.setRingFrame=setRingFrame; window.toggleAurora=toggleAurora; window.toggleGodRays=toggleGodRays; window.cycleTempleGlow=cycleTempleGlow; window.toggleDust=toggleDust; window.updateEffectLabel=updateEffectLabel; window.toggleObj=toggleObj; window.buy=buy; window.setWall=setWall; window.toggleWallArt=toggleWallArt; window.setDiya=setDiya; window.setFloor=setFloor; window.openShop=openShop; window.closeShop=closeShop; window.showApp=showApp; window.toggleEffect=toggleEffect; window.ringBell=ringBell; window.setView=setView; window.setOmSymbol=setOmSymbol; window.setOmRingStyle=setOmRingStyle; window.setGlowColor=setGlowColor; window.setAnimStyle=setAnimStyle; window.setSpecialFX=setSpecialFX;
+
+})();
+</script>
+
+
+</body>
+</html>

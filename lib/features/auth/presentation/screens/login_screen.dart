@@ -18,13 +18,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final lang = ref.watch(languageProvider);
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // App Logo/Title
-              Text(
+      backgroundColor: const Color(0xFF0F0E14),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: const Color(0xFF0F0E14),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // App Logo/Title
+                Text(
                 AppConfig.appName.toUpperCase(),
                 style: Theme.of(context).textTheme.displayLarge,
               ),
@@ -206,6 +211,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

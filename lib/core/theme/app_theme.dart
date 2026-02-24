@@ -62,12 +62,12 @@ class AppTheme {
           fontWeight: FontWeight.w500,
           color: AppColors.primaryText,
         ),
-        bodyLarge: GoogleFonts.merriweather(
+        bodyLarge: GoogleFonts.inter(
           fontSize: 18,
           color: AppColors.primaryText,
           height: 1.6,
         ),
-        bodyMedium: GoogleFonts.merriweather(
+        bodyMedium: GoogleFonts.inter(
           fontSize: 16,
           color: AppColors.primaryText,
           height: 1.6,

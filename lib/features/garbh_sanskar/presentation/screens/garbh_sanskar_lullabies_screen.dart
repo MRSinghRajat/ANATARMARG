@@ -570,7 +570,7 @@ class _LullabyTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.white40,
+                    color: Colors.white.withValues(alpha: 0.4),
                     height: 1.6,
                   ),
                 ),

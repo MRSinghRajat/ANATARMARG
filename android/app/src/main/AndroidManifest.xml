@@ -2,6 +2,9 @@
     
     <!-- Permissions for image picker -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- For scheduled local notifications (daily "tasks ready") -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     

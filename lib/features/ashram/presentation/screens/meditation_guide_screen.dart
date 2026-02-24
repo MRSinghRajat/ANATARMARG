@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/sound_manager.dart';
 
 /// Step model from meditation_guides JSONB
 class _MeditationStep {
@@ -298,6 +299,7 @@ class _MeditationGuideScreenState extends State<MeditationGuideScreen>
       _breathPhase = 'Inhale';
       _breathPhaseRemaining = pattern.inhaleSeconds;
     });
+    SoundManager().playOneShot('sounds/meditation_inhale.mp3');
     _breathController.duration =
         Duration(seconds: pattern.inhaleSeconds);
     _breathController.forward();
@@ -380,12 +382,20 @@ class _MeditationGuideScreenState extends State<MeditationGuideScreen>
       _breathPhase = nextPhase;
       _breathPhaseRemaining = nextDuration;
     });
+    if (nextPhase == 'Inhale') {
+      SoundManager().playOneShot('sounds/meditation_inhale.mp3');
+    } else if (nextPhase == 'Exhale') {
+      SoundManager().playOneShot('sounds/meditation_exhale.mp3');
+    }
   }
 
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_stepSecondsRemaining > 1) {
+        if (_stepSecondsRemaining == 10) {
+          SoundManager().playOneShot('sounds/meditation_step.mp3');
+        }
         setState(() => _stepSecondsRemaining--);
       } else {
         _advanceStep();
@@ -395,6 +405,7 @@ class _MeditationGuideScreenState extends State<MeditationGuideScreen>
 
   void _advanceStep() {
     _timer?.cancel();
+    SoundManager().playOneShot('sounds/meditation_step.mp3');
     if (_currentStepIndex < _selectedGuide!.steps.length - 1) {
       _fadeController.forward(from: 0.0);
       setState(() {

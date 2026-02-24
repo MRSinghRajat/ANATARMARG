@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../sanctuary/data/models/sanctuary_customization_model.dart';
 import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 import '../../../sanctuary/presentation/widgets/customizable_om_sanctuary.dart';
 import '../../../sanctuary/presentation/widgets/sanctuary_shop_sheet.dart';
+import '../../data/services/asset_server.dart';
 
 /// Redesigned Aangan Screen with Customizable Om Sanctuary
 /// Features:
@@ -46,6 +50,27 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   // Loading state
   bool _customizationLoaded = false;
 
+  // Aatma (sanctuary) vs Mandir (3D) tab: 0 = Aatma, 1 = Mandir
+  int _aanganTabIndex = 0;
+
+  // Asset server + WebView for Mandir 3D (lazy-started on first Mandir tap)
+  final AssetServer _assetServer = AssetServer();
+  WebViewController? _mandirWebViewController;
+  bool _mandirServerStarted = false;
+
+  // Aatma sheet
+  final DraggableScrollableController _aatmaSheetController =
+      DraggableScrollableController();
+  bool _isAatmaSheetMinimized = false;
+
+  // Mandir sheet
+  final DraggableScrollableController _mandirSheetController =
+      DraggableScrollableController();
+  bool _isMandirSheetMinimized = false;
+
+  static const double _sheetMinSize = 0.065;
+  static const double _sheetMidSize = 0.40;
+
   SanctuaryCustomization get _displayCustomization =>
       _previewCustomization ??
       _appliedCustomization ??
@@ -60,7 +85,46 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   @override
   void dispose() {
     _customizationSubscription?.cancel();
+    _aatmaSheetController.dispose();
+    _mandirSheetController.dispose();
+    if (_mandirServerStarted && !kIsWeb) _assetServer.stop();
     super.dispose();
+  }
+
+  void _minimizeAatmaSheet() {
+    _aatmaSheetController.animateTo(
+      _sheetMinSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    if (mounted) setState(() => _isAatmaSheetMinimized = true);
+  }
+
+  void _expandAatmaSheet() {
+    _aatmaSheetController.animateTo(
+      _sheetMidSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    if (mounted) setState(() => _isAatmaSheetMinimized = false);
+  }
+
+  void _minimizeMandirSheet() {
+    _mandirSheetController.animateTo(
+      _sheetMinSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    if (mounted) setState(() => _isMandirSheetMinimized = true);
+  }
+
+  void _expandMandirSheet() {
+    _mandirSheetController.animateTo(
+      _sheetMidSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    if (mounted) setState(() => _isMandirSheetMinimized = false);
   }
 
   Future<void> _initializeServices() async {
@@ -117,214 +181,302 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
     });
   }
 
+  void _onMandirAction(String jsCall) {
+    _mandirWebViewController?.runJavaScript(jsCall);
+  }
+
+  void _ensureMandirServer() {
+    if (_mandirServerStarted || kIsWeb) return;
+    _mandirServerStarted = true;
+    _assetServer.start().then((_) {
+      if (!mounted) return;
+      final port = _assetServer.port;
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(const Color(0xFF0B1623))
+        ..loadRequest(Uri.parse('http://localhost:$port/'));
+      setState(() {
+        _mandirWebViewController = controller;
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final topHeight = screenHeight * 0.55; // 55% for sanctuary area — pushed down
+    final topHeight = screenHeight * 0.62;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1623),
       body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Layer 0: Deep aurora / nebula background
-            const Positioned.fill(child: _AuroraBackground()),
+        child: _aanganTabIndex == 0
+            ? _buildAatmaLayout(topHeight)
+            : _buildMandirLayout(),
+      ),
+    );
+  }
 
-            // Layer 1: Animated sacred geometry grid
-            const Positioned.fill(child: _AnimatedGeometryOverlay()),
+  Widget _buildAatmaLayout(double topHeight) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: _AuroraBackground()),
+        const Positioned.fill(child: _AnimatedGeometryOverlay()),
+        const Positioned.fill(child: _AmbientParticles()),
+        const Positioned.fill(child: _FloatingLotusPetals()),
 
-            // Layer 2: Floating ambient particles (golden dust)
-            const Positioned.fill(child: _AmbientParticles()),
-
-            // Layer 3: Floating lotus petals
-            const Positioned.fill(child: _FloatingLotusPetals()),
-
-            // Top Section: Om Sanctuary + Header
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: topHeight,
-              child: Column(
-                children: [
-                  const SizedBox(height: 12),
-
-                  // Header with stats
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _buildHeader(),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Om Sanctuary with god rays + pulse + touch ripple
-                  Expanded(
-                    child: _TouchRippleLayer(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // God rays behind the Om
-                          const _GodRays(),
-
-                          // Energy pulse waves
-                          const _EnergyPulseWaves(),
-
-                          // Om Sanctuary
-                          if (_customizationLoaded)
-                            CustomizableOmSanctuary(
-                              size: 280,
-                              customization: _displayCustomization,
-                            ),
-
-                          // Preview indicator
-                          if (_isPreviewMode)
-                            Positioned(
-                              top: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF9933)
-                                      .withValues(alpha: 0.9),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.visibility,
-                                        size: 14, color: Colors.white),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'PREVIEW MODE',
-                                      style: GoogleFonts.tenorSans(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 6),
-
-                  // Tagline
-                  _buildTagline(),
-
-                  const SizedBox(height: 6),
-                ],
+        Positioned(
+          top: 0, left: 0, right: 0, height: topHeight,
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _buildAatmaMandirTabBar(),
               ),
-            ),
-
-            // Bottom Section: Customization Shop Sheet
-            Positioned.fill(
-              child: NotificationListener<DraggableScrollableNotification>(
-                onNotification: (notification) => false,
-                child: DraggableScrollableSheet(
-                  initialChildSize: 0.40,
-                  minChildSize: 0.12,
-                  maxChildSize: 0.95,
-                  snap: true,
-                  snapSizes: const [0.12, 0.40, 0.65, 0.95],
-                  builder: (context, scrollController) {
-                    return SanctuaryShopSheet(
-                      scrollController: scrollController,
-                      onPreviewChange: _onPreviewChange,
-                      onPreviewClear: _onPreviewClear,
-                      onApplied: _onApplied,
-                    );
-                  },
+              const SizedBox(height: 16),
+              Expanded(
+                child: _TouchRippleLayer(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      const _GodRays(),
+                      const _EnergyPulseWaves(),
+                      if (_customizationLoaded)
+                        CustomizableOmSanctuary(
+                          size: 280,
+                          customization: _displayCustomization,
+                        ),
+                      if (_isPreviewMode)
+                        Positioned(
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF9933)
+                                  .withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.visibility,
+                                    size: 14, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'PREVIEW MODE',
+                                  style: GoogleFonts.tenorSans(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return StreamBuilder<int>(
-      stream: _coinService.coinStream,
-      initialData: _coinService.currentBalance,
-      builder: (context, coinSnapshot) {
-        final coins = coinSnapshot.data ?? 0;
-
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            // Only diamond balance
-            _buildStatBubble('$coins', '💎'),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatBubble(String value, String icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A2837).withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFFD4AF37).withOpacity(0.15),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 14)),
-          const SizedBox(width: 5),
-          Text(
-            value,
-            style: GoogleFonts.tenorSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-              color: const Color(0xFFF4E4B6),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTagline() {
-    return Column(
-      children: [
-        Text(
-          'YOUR SANCTUARY',
-          style: GoogleFonts.tenorSans(
-            fontSize: 11,
-            letterSpacing: 3,
-            color: const Color(0xFFF4E4B6).withOpacity(0.5),
-            fontWeight: FontWeight.w400,
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFF4E4B6), Color(0xFFD4AF37)],
-          ).createShader(bounds),
-          child: Text(
-            'Make it uniquely yours',
-            style: GoogleFonts.cormorantGaramond(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-              letterSpacing: 1,
+
+        // Aatma shop sheet
+        Positioned.fill(
+          child: NotificationListener<DraggableScrollableNotification>(
+            onNotification: (notification) {
+              if (mounted) {
+                final isMin = notification.extent <= _sheetMinSize + 0.02;
+                if (isMin != _isAatmaSheetMinimized) {
+                  setState(() => _isAatmaSheetMinimized = isMin);
+                }
+              }
+              return false;
+            },
+            child: DraggableScrollableSheet(
+              controller: _aatmaSheetController,
+              initialChildSize: _isAatmaSheetMinimized ? _sheetMinSize : _sheetMidSize,
+              minChildSize: _sheetMinSize,
+              maxChildSize: 0.95,
+              snap: true,
+              snapSizes: const [0.065, 0.12, 0.40, 0.65, 0.95],
+              builder: (context, scrollController) {
+                return SanctuaryShopSheet(
+                  scrollController: scrollController,
+                  isMinimized: _isAatmaSheetMinimized,
+                  aanganTab: AanganTab.aatma,
+                  onMinimizeTap: _minimizeAatmaSheet,
+                  onExpandTap: _expandAatmaSheet,
+                  onPreviewChange: _onPreviewChange,
+                  onPreviewClear: _onPreviewClear,
+                  onApplied: _onApplied,
+                );
+              },
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMandirLayout() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 3D WebView fills entire background
+        if (_mandirWebViewController != null)
+          Positioned.fill(
+            child: WebViewWidget(controller: _mandirWebViewController!),
+          )
+        else
+          Positioned.fill(
+            child: ColoredBox(
+              color: const Color(0xFF0B1623),
+              child: Center(
+                child: Text(
+                  'Loading Mandir...',
+                  style: GoogleFonts.tenorSans(
+                    fontSize: 13,
+                    color: Colors.white38,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        // Tab bar floating on top
+        Positioned(
+          top: 12, left: 24, right: 24,
+          child: _buildAatmaMandirTabBar(),
+        ),
+
+        // Mandir shop sheet
+        Positioned.fill(
+          child: NotificationListener<DraggableScrollableNotification>(
+            onNotification: (notification) {
+              if (mounted) {
+                final isMin = notification.extent <= _sheetMinSize + 0.02;
+                if (isMin != _isMandirSheetMinimized) {
+                  setState(() => _isMandirSheetMinimized = isMin);
+                }
+              }
+              return false;
+            },
+            child: DraggableScrollableSheet(
+              controller: _mandirSheetController,
+              initialChildSize: _isMandirSheetMinimized ? _sheetMinSize : _sheetMidSize,
+              minChildSize: _sheetMinSize,
+              maxChildSize: 0.95,
+              snap: true,
+              snapSizes: const [0.065, 0.12, 0.40, 0.65, 0.95],
+              builder: (context, scrollController) {
+                return SanctuaryShopSheet(
+                  scrollController: scrollController,
+                  isMinimized: _isMandirSheetMinimized,
+                  aanganTab: AanganTab.mandir,
+                  onMinimizeTap: _minimizeMandirSheet,
+                  onExpandTap: _expandMandirSheet,
+                  onMandirAction: _onMandirAction,
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Tab bar: Aatma (sanctuary) | Mandir (3D) — pill style, gold active with underline
+  Widget _buildAatmaMandirTabBar() {
+    return Center(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TabBarTab(
+            label: 'AATMA',
+            isActive: _aanganTabIndex == 0,
+            onTap: () => setState(() => _aanganTabIndex = 0),
+          ),
+          const SizedBox(width: 2),
+          _TabBarTab(
+            label: 'MANDIR',
+            isActive: _aanganTabIndex == 1,
+            onTap: () {
+              _ensureMandirServer();
+              setState(() => _aanganTabIndex = 1);
+            },
+          ),
+        ],
+      ),
+    ));
+  }
+}
+
+/// Single tab: gold text + short underline when active, grey when inactive
+class _TabBarTab extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _TabBarTab({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          decoration: BoxDecoration(
+            color: isActive
+                ? AppColors.ashramAccentGold.withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.tenorSans(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: isActive
+                      ? AppColors.ashramAccentGold
+                      : Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(height: 3),
+                Container(
+                  width: 20,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: AppColors.ashramAccentGold,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -494,33 +646,6 @@ class _AnimatedGeometryPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height * 0.35;
-
-    canvas.save();
-    canvas.translate(cx, cy);
-    canvas.rotate(rotation * 0.1); // Very subtle rotation
-    canvas.translate(-cx, -cy);
-
-    // Diagonal lines — subtle golden grid
-    final opacity = 0.02 + pulse * 0.015; // Pulses between 2% and 3.5%
-    final paint = Paint()
-      ..color = Color.fromRGBO(212, 175, 55, opacity)
-      ..strokeWidth = 0.8;
-
-    const spacing = 70.0;
-    for (var i = -size.width; i < size.width * 2; i += spacing) {
-      canvas.drawLine(
-        Offset(i, 0),
-        Offset(i + size.height, size.height),
-        paint,
-      );
-      canvas.drawLine(
-        Offset(i, size.height),
-        Offset(i + size.height, 0),
-        paint,
-      );
-    }
-
-    canvas.restore();
 
     // Concentric sacred circles around the Om area
     final circlePaint = Paint()

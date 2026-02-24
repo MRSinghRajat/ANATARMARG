@@ -470,6 +470,8 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
     final deityColors = _getDeityGradient(text.deitySlug);
     final typeColors = _getTypeGradient(text.type);
     final deityName = _capitalize(text.deitySlug ?? '');
+    final coverUrl = text.coverImageUrl;
+    final hasCoverImage = coverUrl != null && coverUrl.isNotEmpty;
 
     return Material(
       color: Colors.transparent,
@@ -500,8 +502,16 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Deity gradient background
-                _buildDeityGradientCover(deityName, deityColors),
+                // Cover image or deity gradient background
+                if (hasCoverImage)
+                  Image.network(
+                    coverUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _buildDeityGradientCover(deityName, deityColors),
+                  )
+                else
+                  _buildDeityGradientCover(deityName, deityColors),
                 // Bottom gradient for readability
                 Container(
                   decoration: BoxDecoration(

@@ -11,6 +11,9 @@ import 'core/utils/app_router.dart';
 import 'core/utils/sound_manager.dart';
 import 'core/services/supabase_service.dart';
 import 'core/services/revenuecat_service.dart';
+import 'core/services/push_notification_service.dart';
+import 'core/services/daily_notification_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'shared/services/avatar_growth_service.dart';
 import 'shared/services/premium_service.dart';
 import 'features/onboarding/presentation/screens/spiritual_onboarding_screen.dart';
@@ -38,6 +41,22 @@ void main() async {
     print('Supabase initialization failed: $e. App will use local data.');
   }
 
+  // Initialize Firebase and push notifications (Apple APNs via FCM)
+  try {
+    await Firebase.initializeApp();
+    await PushNotificationService().initialize();
+    PushNotificationService.setupForegroundHandler();
+  } catch (e) {
+    print('Firebase / push init failed: $e. Add Firebase project and GoogleService-Info.plist for push.');
+  }
+
+  // Daily local notification at 6:00 AM: "Your daily tasks are ready"
+  try {
+    await DailyNotificationService().initialize();
+  } catch (e) {
+    print('Daily notification init failed: $e');
+  }
+
   // Initialize Inner Avatar (vision-aligned growth system)
   try {
     await AvatarGrowthService().initialize();
@@ -54,9 +73,9 @@ void main() async {
     print('RevenueCat initialization failed: $e. Subscriptions may not work.');
   }
 
-  // Disable Google Fonts runtime fetching to prevent ImageDecoder errors.
-  // Fonts are bundled locally in assets/fonts/ instead.
-  GoogleFonts.config.allowRuntimeFetching = false;
+  // Allow Google Fonts to load from network for fonts not in assets (e.g. Cormorant Light/Medium, Tenor Sans, Merriweather).
+  // Bundled fonts in pubspec (Cormorant Garamond, Inter, etc.) are still used when specified in theme.
+  GoogleFonts.config.allowRuntimeFetching = true;
 
   // Check if onboarding has been completed
   _onboardingComplete = await SpiritualOnboardingScreen.isOnboardingComplete();

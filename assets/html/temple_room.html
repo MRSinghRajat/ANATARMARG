@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Temple 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    #c { display: block; width: 100%; height: 100%; touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script>
+(function() {
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 100);
+  let camDistance = 4.6;
+  const camDistanceMin = 4.6;
+  const camDistanceMax = 12;
+  function updateCamPosition() {
+    cam.position.set(0, 0.35, camDistance);
+    cam.lookAt(0, 0.05, 0);
+  }
+  updateCamPosition();
+  cam.updateProjectionMatrix();
+
+  const hemi = new THREE.HemisphereLight(0xffd9b0, 0x3a2010, 0.8);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffeed0, 1.2);
+  sun.position.set(2, 4, 2);
+  scene.add(sun);
+
+  const group = new THREE.Group();
+  group.position.set(0, -0.35, 0);
+  scene.add(group);
+
+  var floorPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    new THREE.MeshStandardMaterial({ color: 0xfafaf8, roughness: 0.85, metalness: 0.05 })
+  );
+  floorPlane.rotation.x = -Math.PI / 2;
+  floorPlane.position.y = -0.5;
+  floorPlane.receiveShadow = true;
+  scene.add(floorPlane);
+
+  var groundPresets = {
+    white:   { color: 0xfafaf8, roughness: 0.85, metalness: 0.05 },
+    mud:     { color: 0x5c4033, roughness: 0.95, metalness: 0.02 },
+    water:   { color: 0x1a4d6e, roughness: 0.15, metalness: 0.1 },
+    mountain:{ color: 0x4a4a4a, roughness: 0.9, metalness: 0.05 },
+    sand:    { color: 0xc2b280, roughness: 0.9, metalness: 0.02 },
+    green:   { color: 0x2d5a27, roughness: 0.85, metalness: 0.03 }
+  };
+  window.setGroundType = function(type) {
+    var p = groundPresets[type] || groundPresets.white;
+    floorPlane.material.color.setHex(p.color);
+    floorPlane.material.roughness = p.roughness;
+    floorPlane.material.metalness = p.metalness;
+  };
+
+  const loader = new THREE.GLTFLoader();
+  if (typeof THREE.DRACOLoader !== 'undefined') {
+    const draco = new THREE.DRACOLoader();
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+    loader.setDRACOLoader(draco);
+  }
+  loader.load('temple.glb',
+    function(gltf) {
+      const model = gltf.scene;
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 2.25 / maxDim;
+      model.scale.setScalar(scale);
+      const box2 = new THREE.Box3().setFromObject(model);
+      const center = box2.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      const box3 = new THREE.Box3().setFromObject(model);
+      model.position.y -= box3.min.y;
+      model.traverse(function(child) {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) child.material.roughness = Math.min(child.material.roughness || 0.8, 0.85);
+        }
+      });
+      group.add(model);
+    },
+    undefined,
+    function() { /* fallback: leave group empty or add placeholder */ }
+  );
+
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    camDistance += e.deltaY * 0.02;
+    camDistance = Math.max(camDistanceMin, Math.min(camDistanceMax, camDistance));
+    updateCamPosition();
+  }, { passive: false });
+
+  let touchStartDist = 0, touchStartCamDist = camDistance;
+  canvas.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      touchStartDist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      touchStartCamDist = camDistance;
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const d = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      const delta = (touchStartDist - d) * 0.02;
+      camDistance = Math.max(camDistanceMin, Math.min(camDistanceMax, touchStartCamDist + delta));
+      updateCamPosition();
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', function(e) {
+    if (e.touches.length < 2) touchStartDist = 0;
+  }, { passive: true });
+
+  window.addEventListener('resize', function() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h);
+    cam.aspect = w / h;
+    cam.updateProjectionMatrix();
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, cam);
+  }
+  animate();
+})();
+  </script>
+</body>
+</html>
