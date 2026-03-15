@@ -10,12 +10,15 @@ class CustomizableOmSanctuary extends StatefulWidget {
   final double size;
   final SanctuaryCustomization? customization;
   final bool showPreview; // If true, shows preview mode (used in shop)
-  
+  /// When false, all animations are stopped to improve performance (e.g. when sheet is minimized).
+  final bool animate;
+
   const CustomizableOmSanctuary({
     super.key,
     this.size = 340,
     this.customization,
     this.showPreview = false,
+    this.animate = true,
   });
 
   @override
@@ -42,7 +45,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
     _customization = widget.customization ?? 
         _customizationService.currentCustomization;
     
-    // Initialize animation controllers based on animation style
+    // Initialize animation controllers (no repeat yet — deferred for performance)
     _initializeAnimations();
     
     // Listen to customization changes
@@ -52,46 +55,76 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
           setState(() {
             _customization = customization;
             _updateAnimationSpeeds();
+            if (widget.animate) _startControllersForStyle();
           });
         }
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyAnimate(widget.animate);
+    });
+  }
+
+  void _applyAnimate(bool animate) {
+    if (!mounted) return;
+    if (animate) {
+      _updateAnimationSpeeds();
+      _startControllersForStyle();
+    } else {
+      _stopAllControllers();
+    }
+  }
+
+  void _stopAllControllers() {
+    _ringController1.stop();
+    _ringController2.stop();
+    _ringController3.stop();
+    _glowController.stop();
+    _particleController.stop();
+    _breatheController.stop();
+  }
+
+  void _startControllersForStyle() {
+    if (_customization.animationStyle == SanctuaryAnimationStyle.stillness) return;
+    _ringController1.repeat();
+    _ringController2.repeat();
+    _ringController3.repeat();
+    _glowController.repeat();
+    _particleController.repeat();
+    _breatheController.repeat(reverse: true);
   }
 
   void _initializeAnimations() {
-    // Ring rotation controllers
+    // Ring rotation controllers (slower = fewer repaints, better performance)
     _ringController1 = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 60),
-    )..repeat();
+      duration: const Duration(seconds: 90),
+    );
     
     _ringController2 = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 45),
-    )..repeat();
+      duration: const Duration(seconds: 60),
+    );
     
     _ringController3 = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 30),
-    )..repeat();
+      duration: const Duration(seconds: 40),
+    );
     
-    // Glow pulse controller
     _glowController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
+      duration: const Duration(seconds: 3),
+    );
     
-    // Particle controller
     _particleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
-    )..repeat();
+      duration: const Duration(seconds: 6),
+    );
     
-    // Breathe controller
     _breatheController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
+      duration: const Duration(seconds: 5),
+    );
     
     _updateAnimationSpeeds();
   }
@@ -273,20 +306,45 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         _breatheController.duration = const Duration(seconds: 12);
         break;
     }
-    
-    // Restart animations with new durations
-    if (_customization.animationStyle != SanctuaryAnimationStyle.stillness) {
-      if (!_ringController1.isAnimating) _ringController1.repeat();
-      if (!_ringController2.isAnimating) _ringController2.repeat();
-      if (!_glowController.isAnimating) _glowController.repeat();
-      if (!_particleController.isAnimating) _particleController.repeat();
-      if (!_breatheController.isAnimating) _breatheController.repeat(reverse: true);
+
+    // Only start controllers that are relevant to the selected animation style.
+    _ringController1.stop();
+    _ringController2.stop();
+    _ringController3.stop();
+    _glowController.stop();
+    _particleController.stop();
+    _breatheController.stop();
+
+    switch (_customization.animationStyle) {
+      case SanctuaryAnimationStyle.stillness:
+        return;
+      case SanctuaryAnimationStyle.breathe:
+        _glowController.repeat();
+        _breatheController.repeat(reverse: true);
+        return;
+      case SanctuaryAnimationStyle.pulse:
+        _glowController.repeat();
+        return;
+      default:
+        _ringController1.repeat();
+        _ringController2.repeat();
+        _ringController3.repeat();
+        _glowController.repeat();
+        _breatheController.repeat(reverse: true);
+        if (_customization.particleStyle != ParticleStyle.none ||
+            _customization.animationStyle == SanctuaryAnimationStyle.particles) {
+          _particleController.repeat();
+        }
+        break;
     }
   }
 
   @override
-  void didUpdateWidget(CustomizableOmSanctuary oldWidget) {
+  void didUpdateWidget(covariant CustomizableOmSanctuary oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      _applyAnimate(widget.animate);
+    }
     final newConfig = widget.customization;
     if (newConfig == null) return;
     // Update when parent passes a new preview so the sanctuary reflects it
@@ -298,13 +356,18 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         newConfig.animationStyle != _customization.animationStyle ||
         newConfig.backgroundStyle != _customization.backgroundStyle ||
         newConfig.glowColor != _customization.glowColor ||
-        newConfig.deityImage != _customization.deityImage ||
+        newConfig.deityImageId != _customization.deityImageId ||
+        newConfig.deityImageScale != _customization.deityImageScale ||
+        newConfig.deityImageFit != _customization.deityImageFit ||
         newConfig.specialEffect != _customization.specialEffect ||
         newConfig.particleStyle != _customization.particleStyle;
     if (refChanged || contentChanged) {
       setState(() {
         _customization = newConfig;
         _updateAnimationSpeeds();
+        if (widget.animate) {
+          _startControllersForStyle();
+        }
       });
     }
   }
@@ -335,38 +398,57 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
               child: _buildBackground(),
             ),
           
-          // Particles layer (new particle system)
-          if (_customization.particleStyle != ParticleStyle.none)
-            AnimatedBuilder(
-              animation: _particleController,
-              builder: (context, _) {
-                return CustomPaint(
-                  size: Size(widget.size, widget.size),
-                  painter: _ParticleSystemPainter(
-                    progress: _particleController.value,
-                    style: _customization.particleStyle,
-                    color: _customization.glowColor.color,
+          // Particles layer (new particle system) — only when motion uses rotation (not Breathe/Pulse/Stillness)
+          if (_customization.particleStyle != ParticleStyle.none &&
+              _customization.animationStyle != SanctuaryAnimationStyle.breathe &&
+              _customization.animationStyle != SanctuaryAnimationStyle.pulse &&
+              _customization.animationStyle != SanctuaryAnimationStyle.stillness)
+            Positioned.fill(
+              child: Center(
+                child: SizedBox(
+                  width: widget.size,
+                  height: widget.size,
+                  child: AnimatedBuilder(
+                    animation: _particleController,
+                    builder: (context, _) {
+                      return CustomPaint(
+                        size: Size(widget.size, widget.size),
+                        painter: _ParticleSystemPainter(
+                          progress: _particleController.value,
+                          style: _customization.particleStyle,
+                          color: _customization.glowColor.color,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ),
             ),
           
-          // Legacy particles (if animation style is particles)
+          // Legacy particles (if animation style is particles) — centered
           if (_customization.animationStyle == SanctuaryAnimationStyle.particles)
-            AnimatedBuilder(
-              animation: _particleController,
-              builder: (context, _) {
-                return CustomPaint(
-                  size: Size(widget.size, widget.size),
-                  painter: _ParticlesPainter(
-                    progress: _particleController.value,
-                    color: _customization.ringColor.primaryColor,
+            Positioned.fill(
+              child: Center(
+                child: SizedBox(
+                  width: widget.size,
+                  height: widget.size,
+                  child: AnimatedBuilder(
+                    animation: _particleController,
+                    builder: (context, _) {
+                      return CustomPaint(
+                        size: Size(widget.size, widget.size),
+                        painter: _ParticlesPainter(
+                          progress: _particleController.value,
+                          color: _customization.ringColor.primaryColor,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ),
             ),
           
-          // Frame style (behind rings)
+          // Frame style (behind rings) — only animates when motion uses ring rotation
           if (_customization.frameStyle != FrameStyle.none)
             _buildFrame(),
           
@@ -453,97 +535,125 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
   Widget _buildRings() {
     final ringColor = _customization.ringColor;
     final ringStyle = _customization.ringStyle;
-    
+    final animStyle = _customization.animationStyle;
+
     if (ringStyle == RingStyle.none) {
       return const SizedBox.shrink();
     }
-    
-    return AnimatedBuilder(
-      animation: Listenable.merge([
+
+    final useRingRotation = animStyle != SanctuaryAnimationStyle.breathe &&
+        animStyle != SanctuaryAnimationStyle.pulse &&
+        animStyle != SanctuaryAnimationStyle.stillness;
+    final listenables = <Listenable>[
+      if (useRingRotation) ...[
         _ringController1,
         _ringController2,
         _ringController3,
+      ],
+      if (animStyle == SanctuaryAnimationStyle.breathe) ...[
         _breatheController,
-      ]),
+        _glowController,
+      ] else if (animStyle == SanctuaryAnimationStyle.pulse) ...[
+        _glowController,
+      ] else if (useRingRotation) ...[
+        _glowController,
+      ] else ...[
+        _glowController,
+      ],
+    ];
+    final merged = Listenable.merge(listenables);
+
+    return AnimatedBuilder(
+      animation: merged,
       builder: (context, _) {
-        final breatheScale = _customization.animationStyle == SanctuaryAnimationStyle.breathe
-            ? 1.0 + 0.05 * _breatheController.value
-            : 1.0;
-        final pulseScale = _customization.animationStyle == SanctuaryAnimationStyle.pulse
-            ? 1.0 + 0.08 * (0.5 + 0.5 * math.sin(_glowController.value * 2 * math.pi))
-            : 1.0;
-        
+        final breatheScale =
+            animStyle == SanctuaryAnimationStyle.breathe
+                ? 1.0 + 0.05 * _breatheController.value
+                : 1.0;
+        final pulseScale =
+            animStyle == SanctuaryAnimationStyle.pulse
+                ? 1.0 + 0.08 * (0.5 + 0.5 * math.sin(_glowController.value * 2 * math.pi))
+                : 1.0;
+
         return Transform.scale(
           scale: breatheScale * pulseScale,
           child: Stack(
             alignment: Alignment.center,
-            children: _buildRingsByStyle(ringStyle, ringColor),
+            children: _buildRingsByStyle(ringStyle, ringColor, useRingRotation),
           ),
         );
       },
     );
   }
 
-  List<Widget> _buildRingsByStyle(RingStyle style, RingColor ringColor) {
+  List<Widget> _buildRingsByStyle(
+    RingStyle style,
+    RingColor ringColor, [
+    bool useRingRotation = true,
+  ]) {
     final color1 = ringColor.primaryColor;
     final color2 = ringColor.secondaryColor;
     final isRainbow = ringColor == RingColor.rainbow;
-    
+    final rot1 = useRingRotation ? _ringController1.value * 2 * math.pi : 0.0;
+    final rot2 = useRingRotation ? _ringController2.value * 2 * math.pi : 0.0;
+    final rot3 = useRingRotation ? _ringController3.value * 2 * math.pi : 0.0;
+    final prog1 = useRingRotation ? _ringController1.value : 0.0;
+
     switch (style) {
       case RingStyle.singleRing:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1.5),
           ),
         ];
-      
+
       case RingStyle.doubleRing:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1.5),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi,
+            angle: -rot2,
             child: _buildRing(widget.size * 0.80, color2.withOpacity(0.7), 1),
           ),
         ];
-      
+
       case RingStyle.tripleRing:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1.5),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi,
+            angle: -rot2,
             child: _buildRing(widget.size * 0.80, color2.withOpacity(0.6), 1),
           ),
           Transform.rotate(
-            angle: _ringController3.value * 2 * math.pi,
+            angle: rot3,
             child: _buildRing(widget.size * 0.65, color1.withOpacity(0.4), 0.8),
           ),
         ];
-      
+
       case RingStyle.mandala:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _MandalaPainter(
                 color: color1,
-                progress: _ringController1.value,
+                progress: prog1,
               ),
             ),
           ),
         ];
-      
+
       case RingStyle.lotus:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 0.5 * math.pi,
+            angle: rot1 * 0.25,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _LotusPetalsPainter(
@@ -553,11 +663,11 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
             ),
           ),
         ];
-      
+
       case RingStyle.cosmic:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -573,7 +683,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
       case RingStyle.chakra:
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _ChakraRingPainter(
@@ -593,15 +703,15 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Golden spiral — triple ring with fibonacci scaling
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1.2),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi * 1.618,
+            angle: -rot2 * 1.618,
             child: _buildRing(widget.size * 0.76, color2.withOpacity(0.6), 0.8),
           ),
           Transform.rotate(
-            angle: _ringController3.value * 2 * math.pi * 2.618,
+            angle: rot3 * 2.618,
             child: _buildRing(widget.size * 0.58, color1.withOpacity(0.35), 0.6),
           ),
         ];
@@ -610,7 +720,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Double helix — two rings with vertical offset illusion
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -622,7 +732,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
             ),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi + math.pi / 4,
+            angle: -rot2 + math.pi / 4,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -639,17 +749,17 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Galaxy spiral — mandala with slow counter-rotation
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi * 0.5,
+            angle: rot1 * 0.5,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _MandalaPainter(
                 color: color1,
-                progress: _ringController1.value,
+                progress: prog1,
               ),
             ),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi * 0.3,
+            angle: -rot2 * 0.3,
             child: _buildRing(widget.size * 0.7, color2.withOpacity(0.3), 0.5),
           ),
         ];
@@ -658,7 +768,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Zodiac — chakra ring variant
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi * 0.1,
+            angle: rot1 * 0.1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _ChakraRingPainter(
@@ -687,17 +797,17 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Fire ring — mandala with warm glow
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi * 2,
+            angle: rot1 * 2,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _MandalaPainter(
                 color: color1,
-                progress: _ringController1.value,
+                progress: prog1,
               ),
             ),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi * 1.5,
+            angle: -rot2 * 1.5,
             child: _buildRing(widget.size * 0.85, color2.withOpacity(0.4), 2),
           ),
         ];
@@ -706,15 +816,15 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Aurora — triple ring with offset phases
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1.withOpacity(0.6), 1.5),
           ),
           Transform.rotate(
-            angle: _ringController2.value * 2 * math.pi + math.pi / 3,
+            angle: rot2 + math.pi / 3,
             child: _buildRing(widget.size * 0.88, color2.withOpacity(0.4), 1),
           ),
           Transform.rotate(
-            angle: -_ringController3.value * 2 * math.pi + math.pi * 2 / 3,
+            angle: -rot3 + math.pi * 2 / 3,
             child: _buildRing(widget.size * 0.81, color1.withOpacity(0.25), 0.8),
           ),
         ];
@@ -723,11 +833,11 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Infinity — double ring crossing
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.9, color1, 1.2),
           ),
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi + math.pi / 2,
+            angle: rot1 + math.pi / 2,
             child: _buildRing(widget.size * 0.9, color2.withOpacity(0.5), 1.2),
           ),
         ];
@@ -738,8 +848,8 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
           for (var i = 0; i < 6; i++)
             Transform.translate(
               offset: Offset(
-                math.cos(i * math.pi / 3 + _ringController1.value * 2 * math.pi) * widget.size * 0.15,
-                math.sin(i * math.pi / 3 + _ringController1.value * 2 * math.pi) * widget.size * 0.15,
+                math.cos(i * math.pi / 3 + rot1) * widget.size * 0.15,
+                math.sin(i * math.pi / 3 + rot1) * widget.size * 0.15,
               ),
               child: _buildRing(widget.size * 0.5, color1.withOpacity(0.2), 0.5),
             ),
@@ -749,7 +859,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Pulsing dots
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -766,14 +876,14 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Orbital paths — multiple ellipses
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1),
           ),
           Transform(
             alignment: Alignment.center,
             transform: Matrix4.identity()..scale(1.0, 0.6),
             child: Transform.rotate(
-              angle: _ringController2.value * 2 * math.pi,
+              angle: rot2,
               child: _buildRing(widget.size * 0.85, color2.withOpacity(0.4), 0.8),
             ),
           ),
@@ -781,7 +891,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
             alignment: Alignment.center,
             transform: Matrix4.identity()..scale(0.6, 1.0),
             child: Transform.rotate(
-              angle: -_ringController3.value * 2 * math.pi,
+              angle: -rot3,
               child: _buildRing(widget.size * 0.85, color1.withOpacity(0.3), 0.6),
             ),
           ),
@@ -791,11 +901,11 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Prism — rotating triangle + circle
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 1.2),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi,
+            angle: -rot2,
             child: _buildRing(widget.size * 0.75, color2.withOpacity(0.4), 0.8),
           ),
         ];
@@ -804,14 +914,14 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Quantum — fast multi-orbit
         return [
           Transform.rotate(
-            angle: _ringController1.value * 4 * math.pi,
+            angle: rot1 * 2,
             child: _buildRing(widget.size * 0.9, color1, 0.8),
           ),
           Transform(
             alignment: Alignment.center,
             transform: Matrix4.identity()..rotateX(math.pi / 4),
             child: Transform.rotate(
-              angle: -_ringController2.value * 4 * math.pi,
+              angle: -rot2 * 2,
               child: _buildRing(widget.size * 0.9, color2.withOpacity(0.5), 0.8),
             ),
           ),
@@ -819,7 +929,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
             alignment: Alignment.center,
             transform: Matrix4.identity()..rotateY(math.pi / 4),
             child: Transform.rotate(
-              angle: _ringController3.value * 4 * math.pi,
+              angle: rot3 * 2,
               child: _buildRing(widget.size * 0.9, color1.withOpacity(0.3), 0.8),
             ),
           ),
@@ -830,7 +940,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         return [
           for (var i = 0; i < 5; i++)
             Transform.rotate(
-              angle: _ringController1.value * 2 * math.pi + i * 0.3,
+              angle: rot1 + i * 0.3,
               child: _buildRing(
                 widget.size * (0.95 - i * 0.12),
                 color1.withOpacity(0.6 - i * 0.1),
@@ -854,7 +964,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Constellation — cosmic dots with connections
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi * 0.2,
+            angle: rot1 * 0.2,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -872,11 +982,11 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Matrix — single thin ring + cosmic dots
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi * 3,
+            angle: rot1 * 3,
             child: _buildRing(widget.size * 0.95, color1.withOpacity(0.4), 0.5),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi * 2,
+            angle: -rot2 * 2,
             child: CustomPaint(
               size: Size(widget.size, widget.size),
               painter: _CosmicDotsPainter(
@@ -893,11 +1003,11 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         // Diamond facets — rotating double rings
         return [
           Transform.rotate(
-            angle: _ringController1.value * 2 * math.pi,
+            angle: rot1,
             child: _buildRing(widget.size * 0.95, color1, 2),
           ),
           Transform.rotate(
-            angle: -_ringController2.value * 2 * math.pi,
+            angle: -rot2,
             child: _buildRing(widget.size * 0.82, color2.withOpacity(0.5), 1.5),
           ),
         ];
@@ -919,9 +1029,9 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
   }
 
   Widget _buildCenterContent() {
-    // Check if deity image is selected
-    if (_customization.deityImage != null) {
-      return _buildDeityImage(_customization.deityImage!);
+    final deity = getDeityById(_customization.deityImageId);
+    if (deity != null) {
+      return _buildDeityImage(deity);
     }
     
     // Otherwise show Om symbol
@@ -1447,9 +1557,7 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
     }
   }
 
-  Widget _buildDeityImage(DeityImage deity) {
-    // For now, show emoji representation
-    // In production, this would load actual deity images
+  Widget _buildDeityImage(DeityConfig deity) {
     return AnimatedBuilder(
       animation: _glowController,
       builder: (context, _) {
@@ -1457,39 +1565,62 @@ class _CustomizableOmSanctuaryState extends State<CustomizableOmSanctuary>
         final glowIntensity = _customization.animationStyle != SanctuaryAnimationStyle.stillness
             ? 0.3 + 0.3 * (0.5 + 0.5 * math.sin(t * 2 * math.pi))
             : 0.4;
-        
-        return Container(
-          width: widget.size * 0.4,
-          height: widget.size * 0.4,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _customization.ringColor.primaryColor.withOpacity(0.1),
-            boxShadow: [
-              BoxShadow(
-                color: _customization.glowColor.color.withOpacity(glowIntensity),
-                blurRadius: 30,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  deity.emoji,
-                  style: TextStyle(fontSize: widget.size * 0.15),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  deity.displayName,
-                  style: GoogleFonts.tenorSans(
-                    fontSize: widget.size * 0.035,
-                    color: _customization.ringColor.primaryColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
+        final baseSize = widget.size * 0.4;
+        final circleSize = widget.size * 0.28;
+        final fit = _customization.deityImageFit ?? BoxFit.cover;
+        final scale = _customization.deityImageScale.clamp(0.5, 2.0);
+
+        // Zoom scales the whole deity widget (circle + image + name) for a bigger view;
+        // image always fits fully in the circle so the face stays visible.
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: baseSize,
+            height: baseSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _customization.ringColor.primaryColor.withOpacity(0.1),
+              boxShadow: [
+                BoxShadow(
+                  color: _customization.glowColor.color.withOpacity(glowIntensity),
+                  blurRadius: 30,
                 ),
               ],
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipOval(
+                    child: SizedBox(
+                      width: circleSize,
+                      height: circleSize,
+                      child: FittedBox(
+                        fit: fit,
+                        child: Image.asset(
+                          deity.assetPath,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Text(
+                              deity.emoji,
+                              style: TextStyle(fontSize: widget.size * 0.12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    deity.displayName,
+                    style: GoogleFonts.tenorSans(
+                      fontSize: widget.size * 0.035,
+                      color: _customization.ringColor.primaryColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         );

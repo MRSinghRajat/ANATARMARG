@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
 
@@ -134,20 +135,15 @@ class _AnimatedOnboardingScreenState
       ),
       child: Stack(
         children: [
-          // Wooden floor
+          // Wooden floor (solid color; texture asset optional)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             height: 80,
             child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF8B6F47),
-                image: DecorationImage(
-                  image: const AssetImage('assets/images/placeholder_wood.png'),
-                  repeat: ImageRepeat.repeat,
-                  onError: (_, __) {},
-                ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF8B6F47),
               ),
             ),
           ),
@@ -531,12 +527,29 @@ class _AnimatedOnboardingScreenState
           ],
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Title (only on last page)
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Logo in background — no fixed dimensions; scales to fit, content overlays it
+          Positioned.fill(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Image.asset(
+                  AppConfig.appLogoPath,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
+          // Content overlays the logo
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Title (only on last page)
             if (_currentPage == 2) ...[
               Text(
                 'Unlock the Store',
@@ -569,28 +582,28 @@ class _AnimatedOnboardingScreenState
               const SizedBox(height: 20),
             ],
 
-            // Pagination Dots
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (index) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _currentPage == index ? 12 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _currentPage == index
-                        ? Colors.white
-                        : Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
-            ),
+                // Pagination Dots
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(3, (index) {
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: _currentPage == index ? 12 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _currentPage == index
+                            ? Colors.white
+                            : Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    );
+                  }),
+                ),
 
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // Already have account link
-            TextButton(
+                // Already have account link
+                TextButton(
               onPressed: _navigateToLogin,
               child: Text(
                 'Already have an account',
@@ -599,15 +612,15 @@ class _AnimatedOnboardingScreenState
                   decoration: TextDecoration.underline,
                   decorationColor: Colors.grey.shade700,
                 ),
+                ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // Begin Your Journey button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+                // Begin Your Journey button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                 onPressed: _navigateToHome,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade600,
@@ -627,8 +640,10 @@ class _AnimatedOnboardingScreenState
                 ),
               ),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../providers/book_providers.dart';
 import 'sacred_story_reader_screen.dart';
@@ -20,6 +25,8 @@ class _AllSacredStoriesScreenState
   String _searchQuery = '';
   String? _selectedCategory;
   String? _selectedDeity;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -62,7 +69,19 @@ class _AllSacredStoriesScreenState
   }
 
   @override
+  void initState() {
+    super.initState();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+  }
+
+  @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -119,9 +138,18 @@ class _AllSacredStoriesScreenState
 
     return Scaffold(
       backgroundColor: AppColors.charcoalDark,
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(sacredStoriesCollectionProvider);
+          ref.invalidate(sacredStoryCategoriesProvider);
+        },
+        color: AppColors.matteGold,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
+          slivers: [
           _buildAppBar(),
           SliverToBoxAdapter(child: _buildSearchBar()),
           SliverToBoxAdapter(
@@ -138,9 +166,11 @@ class _AllSacredStoriesScreenState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.auto_stories,
-                        size: 56,
-                        color: AppColors.matteGold.withOpacity(0.3)),
+                    SizedBox(
+                      width: 160,
+                      height: 160,
+                      child: const AntarmargPlaceholder(compact: true),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No stories match your filters',
@@ -163,7 +193,12 @@ class _AllSacredStoriesScreenState
               padding: const EdgeInsets.symmetric(horizontal: 16),
               sliver: SliverGrid(
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) => _buildStoryCard(paged[i]),
+                  (context, i) {
+                    final story = paged[i];
+                    final isLocked =
+                        !_isPremium && story.isPremium;
+                    return _buildStoryCard(story, isLocked: isLocked);
+                  },
                   childCount: paged.length,
                 ),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -180,6 +215,7 @@ class _AllSacredStoriesScreenState
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
+        ),
       ),
     );
   }
@@ -425,7 +461,7 @@ class _AllSacredStoriesScreenState
     );
   }
 
-  Widget _buildStoryCard(SacredStoryModel story) {
+  Widget _buildStoryCard(SacredStoryModel story, {bool isLocked = false}) {
     final deityName = _getDeityDisplayName(story.deitySlug);
     final deityColors = _getDeityGradient(story.deitySlug);
     final catColors = _getCategoryGradient(story.category);
@@ -436,16 +472,20 @@ class _AllSacredStoriesScreenState
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SacredStoryReaderScreen(story: story),
-            ),
-          );
-        },
+        onTap: isLocked
+            ? () => PaywallScreen.showAsBottomSheet(context)
+            : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SacredStoryReaderScreen(story: story),
+                  ),
+                );
+              },
         borderRadius: BorderRadius.circular(20),
-        child: Container(
+        child: Opacity(
+          opacity: isLocked ? 0.6 : 1.0,
+          child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppColors.matteGold.withOpacity(0.1)),
@@ -462,13 +502,13 @@ class _AllSacredStoriesScreenState
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Background: cover image or deity name gradient
+                // Background: cover image or deity name gradient (cached for fast tab switching)
                 if (hasImage)
-                  Image.network(
-                    coverUrl,
+                  AppNetworkImage(
+                    imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        _buildDeityNameCover(deityName, deityColors),
+                    cacheFailure: true,
+                    fallback: _buildDeityNameCover(deityName, deityColors),
                   )
                 else
                   _buildDeityNameCover(deityName, deityColors),
@@ -557,16 +597,48 @@ class _AllSacredStoriesScreenState
                     ],
                   ),
                 ),
+                if (isLocked)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4AF37).withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock,
+                              color: Colors.white, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            'PRO',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
+        ),
         ),
       ),
     );
   }
 
-  /// Deity name as a book title page in gradient
+  /// Deity name as a book title page in gradient. Shows "Antar मार्ग" when empty.
   Widget _buildDeityNameCover(String deityName, List<Color> colors) {
+    final displayName = deityName.isEmpty ? 'Antar मार्ग' : deityName;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -623,7 +695,7 @@ class _AllSacredStoriesScreenState
                   ],
                 ).createShader(bounds),
                 child: Text(
-                  deityName,
+                  displayName,
                   style: GoogleFonts.crimsonPro(
                     fontSize: 32,
                     fontWeight: FontWeight.w900,

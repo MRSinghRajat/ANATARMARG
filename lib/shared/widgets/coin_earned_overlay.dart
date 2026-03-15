@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Shows a flying coin animation from [fromKey] (or screen center) to top-right,
-/// then displays a top-positioned snackbar with "+X coins".
+/// then displays a top-positioned snackbar with "+X [currencyLabel]".
 class CoinEarnedOverlay {
   static const Duration _flightDuration = Duration(milliseconds: 600);
   static const Duration _snackbarDuration = Duration(seconds: 2);
@@ -11,6 +11,8 @@ class CoinEarnedOverlay {
     BuildContext context, {
     required int amount,
     GlobalKey? fromKey,
+    /// Display name for the currency (e.g. "Karma"). Defaults to "Karma".
+    String currencyLabel = 'Karma',
   }) async {
     final overlay = Overlay.of(context);
     final mediaQuery = MediaQuery.of(context);
@@ -42,9 +44,10 @@ class CoinEarnedOverlay {
         startOffset: startOffset,
         endOffset: endOffset,
         amount: amount,
+        currencyLabel: currencyLabel,
         onComplete: () {
           entry.remove();
-          _showTopSnackBar(context, amount);
+          _showTopSnackBar(context, amount, currencyLabel);
         },
       ),
     );
@@ -52,7 +55,8 @@ class CoinEarnedOverlay {
     overlay.insert(entry);
   }
 
-  static void _showTopSnackBar(BuildContext context, int amount) {
+  static void _showTopSnackBar(
+      BuildContext context, int amount, String currencyLabel) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showMaterialBanner(
       MaterialBanner(
@@ -61,7 +65,7 @@ class CoinEarnedOverlay {
           children: [
             const Icon(Icons.diamond, color: Colors.white),
             const SizedBox(width: 8),
-            Text('+$amount coins!',
+            Text('+$amount $currencyLabel!',
                 style: const TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
           ],
@@ -85,12 +89,14 @@ class _FlyingCoinOverlay extends StatefulWidget {
   final Offset startOffset;
   final Offset endOffset;
   final int amount;
+  final String currencyLabel;
   final VoidCallback onComplete;
 
   const _FlyingCoinOverlay({
     required this.startOffset,
     required this.endOffset,
     required this.amount,
+    required this.currencyLabel,
     required this.onComplete,
   });
 

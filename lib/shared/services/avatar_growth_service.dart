@@ -30,7 +30,7 @@ class AvatarGrowthService {
     _currentAvatar = await _avatarRepository.getAvatar();
     _isInitialized = true;
 
-    // Sync wisdom level to GuideAnimationService for Rive/AnimatedGuide
+    // Sync wisdom level to GuideAnimationService for AnimatedGuide
     _guideService.updateWisdomLevel(_currentAvatar!.wisdomLevel);
 
     // Listen for avatar changes and sync to GuideAnimationService

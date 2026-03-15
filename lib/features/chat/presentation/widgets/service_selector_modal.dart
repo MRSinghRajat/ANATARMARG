@@ -21,14 +21,16 @@ class ServiceSelectorModal extends StatelessWidget {
     return Container(
       height: screenHeight * 0.85,
       decoration: BoxDecoration(
-        color: AppColors.ashramBackgroundDark,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(
-          top: BorderSide(
-            color: AppColors.ashramSaffron.withOpacity(0.3),
-            width: 1,
-          ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryOrange.withValues(alpha: 0.2),
+            AppColors.deepPurple.withValues(alpha: 0.2),
+          ],
         ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [
@@ -38,7 +40,7 @@ class ServiceSelectorModal extends StatelessWidget {
             width: 48,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -70,7 +72,7 @@ class ServiceSelectorModal extends StatelessWidget {
                   'Select a spiritual service to begin your consultation',
                   style: GoogleFonts.outfit(
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -132,25 +134,25 @@ class _ServiceCard extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: isSelected
                   ? [
-                      AppColors.ashramSaffron.withOpacity(0.3),
-                      AppColors.ashramSaffron.withOpacity(0.1),
+                      AppColors.primaryOrange.withValues(alpha: 0.3),
+                      AppColors.deepPurple.withValues(alpha: 0.2),
                     ]
                   : [
-                      Colors.white.withOpacity(0.08),
-                      Colors.white.withOpacity(0.03),
+                      AppColors.primaryOrange.withValues(alpha: 0.12),
+                      AppColors.deepPurple.withValues(alpha: 0.08),
                     ],
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected
-                  ? AppColors.ashramSaffron.withOpacity(0.6)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppColors.primaryOrange.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.1),
               width: isSelected ? 2 : 1,
             ),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: AppColors.ashramSaffron.withOpacity(0.2),
+                      color: AppColors.primaryOrange.withValues(alpha: 0.2),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -167,8 +169,9 @@ class _ServiceCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.ashramSaffron,
+                      color: AppColors.primaryOrange,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                     ),
                     child: Text(
                       '★ Popular',
@@ -197,7 +200,7 @@ class _ServiceCard extends StatelessWidget {
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: isSelected
-                            ? AppColors.ashramAccentGold
+                            ? AppColors.primaryOrange
                             : Colors.white,
                       ),
                       textAlign: TextAlign.center,
@@ -210,7 +213,7 @@ class _ServiceCard extends StatelessWidget {
                         service.shortDescription,
                         style: GoogleFonts.outfit(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                           height: 1.3,
                         ),
                         textAlign: TextAlign.center,

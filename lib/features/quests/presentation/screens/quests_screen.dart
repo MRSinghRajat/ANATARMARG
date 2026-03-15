@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../../shared/services/feature_gate_config.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../data/models/parva_model.dart';
 import '../../data/repositories/parva_repository.dart';
 import '../widgets/parva_card.dart';
@@ -19,6 +23,8 @@ class _QuestsScreenState extends ConsumerState<QuestsScreen> {
   final CoinService _coinService = CoinService();
   List<ParvaModel> _parvas = [];
   bool _isLoading = true;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
   // Mock user data - replace with actual user service
   final String _userName = 'Bala Sadhu';
@@ -31,6 +37,18 @@ class _QuestsScreenState extends ConsumerState<QuestsScreen> {
     super.initState();
     _loadParvas();
     _coinService.initialize();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    _premiumSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadParvas() async {
@@ -286,14 +304,54 @@ class _QuestsScreenState extends ConsumerState<QuestsScreen> {
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.75, // Adjusted to prevent overflow
+        childAspectRatio: 0.75,
       ),
       itemCount: parvas.length,
       itemBuilder: (context, index) {
         final parva = parvas[index];
-        return ParvaCard(
-          parva: parva,
-          onTap: () => _onParvaTap(parva.id),
+        final isLocked =
+            !_isPremium && index >= FeatureGateConfig.freeParvasCount;
+        return Opacity(
+          opacity: isLocked ? 0.5 : 1.0,
+          child: Stack(
+            children: [
+              ParvaCard(
+                parva: parva,
+                onTap: isLocked
+                    ? () => PaywallScreen.showAsBottomSheet(context)
+                    : () => _onParvaTap(parva.id),
+              ),
+              if (isLocked)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4AF37).withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock, color: Colors.white, size: 10),
+                        SizedBox(width: 4),
+                        Text(
+                          'PRO',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

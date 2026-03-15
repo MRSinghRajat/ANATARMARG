@@ -12,17 +12,14 @@ import '../../../../core/utils/sound_manager.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../ashram/data/models/user_spiritual_progress_model.dart';
-import '../../../ashram/data/models/daily_task_model.dart';
 import '../../../ashram/data/repositories/spiritual_progress_repository.dart';
-import '../../../ashram/data/repositories/achievement_repository.dart';
-import '../../../ashram/data/repositories/daily_task_repository.dart';
-import '../../../ashram/data/models/achievement_model.dart';
-import '../../../ashram/presentation/widgets/streak_stats_card.dart';
 import '../../../subscription/presentation/screens/paywall_screen.dart';
-import '../../../subscription/presentation/screens/customer_center_screen.dart';
 import '../providers/language_provider.dart';
 import '../widgets/bookmarked_section.dart';
 import 'language_settings_screen.dart';
+import 'edit_profile_screen.dart';
+import '../../../../core/services/compressed_image_cache.dart';
+import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -35,21 +32,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final SoundManager _soundManager = SoundManager();
   final CoinService _coinService = CoinService();
   final SpiritualProgressRepository _progressRepository = SpiritualProgressRepository();
-  final AchievementRepository _achievementRepository = AchievementRepository();
-  final DailyTaskRepository _dailyTaskRepository = DailyTaskRepository();
 
   bool _isSoundEnabled = true;
   double _soundVolume = 0.5;
 
   UserSpiritualProgress? _progress;
-  List<UserAchievement> _recentAchievements = [];
-  int _totalAchievements = 0;
-  int _unlockedAchievements = 0;
   bool _isPremium = false;
   bool _isLoading = true;
-  Map<DateTime, List<UserDailyTask>> _timelineHistory = {};
-  
+  bool _isClearingCache = false;
+  int _avatarCacheBuster = 0;
+
   StreamSubscription<int>? _coinSubscription;
+  StreamSubscription<bool>? _premiumSubscription;
 
   @override
   void initState() {
@@ -59,10 +53,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _coinSubscription = _coinService.coinStream.listen((_) {
       if (mounted) setState(() {});
     });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
   }
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _coinSubscription?.cancel();
     super.dispose();
   }
@@ -78,6 +76,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (_) {}
   }
 
+  Future<void> _clearImageCache() async {
+    if (_isClearingCache) return;
+    setState(() => _isClearingCache = true);
+    try {
+      await CompressedImageCache.instance.clearCache();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Image cache cleared. Storage freed.',
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+            backgroundColor: AppColors.cardDark,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to clear cache: $e', style: GoogleFonts.poppins(fontSize: 13)),
+            backgroundColor: Colors.red.shade900,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isClearingCache = false);
+    }
+  }
+
   Future<void> _loadUserData() async {
     setState(() => _isLoading = true);
 
@@ -85,31 +115,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // Load spiritual progress
       final progress = await _progressRepository.getProgress();
 
-      // Load achievements
-      final allAchievements = await _achievementRepository.getAllAchievements();
-      final userAchievements = await _achievementRepository.getUserAchievements();
-      final recentUnlocks = await _achievementRepository.getRecentUnlocks();
-
-      // Load timeline (task history from journey start)
-      int timelineDays = 90;
-      if (progress != null) {
-        final now = DateTime.now();
-        final start = progress.journeyStartDate;
-        timelineDays = now.difference(DateTime(start.year, start.month, start.day)).inDays.clamp(1, 365);
-      }
-      final timeline = await _dailyTaskRepository.getTaskHistory(timelineDays);
-
       // Check premium status
       final isPremium = await PremiumService.instance.isPremium;
 
       if (mounted) {
         setState(() {
           _progress = progress;
-          _totalAchievements = allAchievements.length;
-          _unlockedAchievements = userAchievements.length;
-          _recentAchievements = recentUnlocks.take(3).toList();
           _isPremium = isPremium;
-          _timelineHistory = timeline;
           _isLoading = false;
         });
       }
@@ -161,6 +173,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onRefresh: _loadUserData,
                 color: AppColors.primaryOrange,
                 child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: ClampingScrollPhysics(),
+                  ),
                   slivers: [
                     // Custom App Bar
                     SliverToBoxAdapter(
@@ -174,22 +189,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: _buildProfileCard(),
                       ),
                     ),
-                    
-                    // Streak Stats Card
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: StreakStatsCard(progress: _progress),
-                      ),
-                    ),
 
-                    // Timeline / Your journey
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _buildTimelineSection(),
-                      ),
-                    ),
+                    SliverToBoxAdapter(child: const SizedBox(height: 20)),
 
                     // Coins and Premium Section
                     SliverToBoxAdapter(
@@ -198,15 +199,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: _buildCoinsAndPremiumSection(),
                       ),
                     ),
-                    
-                    // Achievements Section
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: _buildAchievementsSection(),
-                      ),
-                    ),
-                    
+
+                    SliverToBoxAdapter(child: const SizedBox(height: 16)),
+
                     // Bookmarked Section
                     const SliverToBoxAdapter(
                       child: Padding(
@@ -267,88 +262,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildTimelineSection() {
-    if (_timelineHistory.isEmpty) return const SizedBox.shrink();
-
-    final dates = _timelineHistory.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
-    final recentDates = dates.take(30).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.timeline, color: AppColors.primaryOrange, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                'Your journey',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Daily streak and task history from the day you started.',
-            style: GoogleFonts.poppins(
-              color: Colors.white54,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...recentDates.map((date) {
-            final tasks = _timelineHistory[date]!
-                .where((t) => t.status == TaskStatus.completed)
-                .toList();
-            if (tasks.isEmpty) return const SizedBox.shrink();
-            final dateStr = '${date.day}/${date.month}/${date.year}';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    dateStr,
-                    style: GoogleFonts.poppins(
-                      color: AppColors.primaryOrange.withValues(alpha: 0.9),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      tasks.map((t) => t.title).join(', '),
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        height: 1.3,
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   Widget _buildProfileCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -391,7 +304,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: _userAvatar != null
                     ? ClipOval(
                         child: Image.network(
-                          _userAvatar!,
+                          '$_userAvatar${_avatarCacheBuster > 0 ? '?v=$_avatarCacheBuster' : ''}',
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => _buildAvatarPlaceholder(),
                         ),
@@ -484,13 +397,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           
-          // Edit button
-          IconButton(
-            onPressed: () {
-              // TODO: Edit profile
-            },
-            icon: const Icon(Icons.edit_outlined, color: Colors.white54),
-          ),
+          // Edit button (only when logged in)
+          if (SupabaseService().currentUserId != null)
+            IconButton(
+              onPressed: () async {
+                final updated = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => const EditProfileScreen(),
+                  ),
+                );
+                if (updated == true) {
+                  setState(() => _avatarCacheBuster = DateTime.now().millisecondsSinceEpoch);
+                  _loadUserData();
+                }
+              },
+              icon: const Icon(Icons.edit_outlined, color: Colors.white54),
+            ),
         ],
       ),
     );
@@ -566,18 +488,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         Expanded(
           child: GestureDetector(
             onTap: () {
-              if (_isPremium) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CustomerCenterScreen()),
-                );
-              } else {
-                PaywallScreen.showAsBottomSheet(context).then((result) {
-                  if (result == true) {
-                    _loadUserData();
-                  }
-                });
-              }
+              // Paywall is enabled for both free and premium users (premium can manage, restore, or redeem coupon)
+              PaywallScreen.showAsBottomSheet(context).then((result) {
+                if (result == true) {
+                  _loadUserData();
+                }
+              });
             },
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -648,112 +564,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildAchievementsSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Achievements',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryOrange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$_unlockedAchievements / $_totalAchievements',
-                  style: GoogleFonts.poppins(
-                    color: AppColors.primaryOrange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Progress bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: _totalAchievements > 0 
-                  ? _unlockedAchievements / _totalAchievements 
-                  : 0,
-              backgroundColor: Colors.white.withOpacity(0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryOrange),
-              minHeight: 6,
-            ),
-          ),
-          
-          // Recent achievements
-          if (_recentAchievements.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Recent Unlocks',
-              style: GoogleFonts.poppins(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _recentAchievements.map((ua) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _getBadgeColor(ua.achievement?.badgeColor).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: _getBadgeColor(ua.achievement?.badgeColor).withOpacity(0.3),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _getAchievementIcon(ua.achievement?.iconName),
-                        color: _getBadgeColor(ua.achievement?.badgeColor),
-                        size: 14,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        ua.achievement?.title ?? 'Achievement',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ],
-      ),
     );
   }
 
@@ -838,7 +648,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               
               const Divider(color: Colors.white12, height: 1),
-              
+              _buildSettingsTile(
+                icon: Icons.cleaning_services_outlined,
+                title: 'Clear image cache',
+                subtitle: 'Compressed cache (~1024px per image)',
+                trailing: _isClearingCache
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                      )
+                    : const Icon(Icons.chevron_right, color: Colors.white38),
+                onTap: _isClearingCache ? null : _clearImageCache,
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              _buildSettingsTile(
+                icon: Icons.refresh_rounded,
+                title: 'Reset Aangan to Default',
+                subtitle: 'Restore Aangan customization to default',
+                onTap: () async {
+                  await SanctuaryCustomizationService().resetToDefault();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Aangan reset to default'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const Divider(color: Colors.white12, height: 1),
               _buildSettingsTile(
                 icon: Icons.info_outline,
                 title: 'About',
@@ -867,6 +707,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildSettingsTile({
     required IconData icon,
     required String title,
+    String? subtitle,
     VoidCallback? onTap,
     Widget? trailing,
   }) {
@@ -879,12 +720,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Icon(icon, color: Colors.white54, size: 22),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                title,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 15,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             trailing ?? const Icon(Icons.chevron_right, color: Colors.white38),
@@ -956,41 +813,4 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Colors.green;
   }
 
-  Color _getBadgeColor(BadgeColor? badgeColor) {
-    switch (badgeColor) {
-      case BadgeColor.bronze:
-        return const Color(0xFFCD7F32);
-      case BadgeColor.silver:
-        return Colors.grey.shade400;
-      case BadgeColor.gold:
-        return Colors.amber;
-      case BadgeColor.purple:
-        return Colors.purpleAccent;
-      case BadgeColor.diamond:
-        return Colors.cyanAccent;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getAchievementIcon(String? iconName) {
-    switch (iconName) {
-      case 'local_fire_department':
-        return Icons.local_fire_department;
-      case 'check_circle':
-        return Icons.check_circle;
-      case 'menu_book':
-        return Icons.menu_book;
-      case 'self_improvement':
-        return Icons.self_improvement;
-      case 'volunteer_activism':
-        return Icons.volunteer_activism;
-      case 'emoji_events':
-        return Icons.emoji_events;
-      case 'star':
-        return Icons.star;
-      default:
-        return Icons.emoji_events;
-    }
-  }
 }

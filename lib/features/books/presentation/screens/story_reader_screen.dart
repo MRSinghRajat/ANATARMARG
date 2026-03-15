@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../shared/widgets/app_network_image.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/daily_story_model.dart';
 
 class StoryReaderScreen extends StatefulWidget {
@@ -282,12 +283,13 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
       padding: const EdgeInsets.only(bottom: 20),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: CachedNetworkImage(
+        child: AppNetworkImage(
           imageUrl: url,
           height: 180,
           width: double.infinity,
           fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          cacheFailure: true,
+          fallback: const SizedBox.shrink(),
         ),
       ),
     );
@@ -424,9 +426,20 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
 
   Widget _buildEmptyState() {
     return Center(
-      child: Text(
-        'No pages in this story.',
-        style: GoogleFonts.inter(color: Colors.white38),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 160,
+            height: 160,
+            child: AntarmargPlaceholder(compact: true),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No pages in this story.',
+            style: GoogleFonts.inter(color: Colors.white38),
+          ),
+        ],
       ),
     );
   }

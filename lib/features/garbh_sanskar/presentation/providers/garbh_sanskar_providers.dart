@@ -58,6 +58,19 @@ class JourneyNotifier extends StateNotifier<AsyncValue<UserPregnancyJourney?>> {
     return success;
   }
 
+  Future<bool> deleteJourney() async {
+    try {
+      final success = await _repo.deleteJourney();
+      if (success) {
+        state = AsyncValue.data(null);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<void> refresh() => _load();
 }
 

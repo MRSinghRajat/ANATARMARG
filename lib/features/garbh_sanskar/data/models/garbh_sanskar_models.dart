@@ -234,8 +234,35 @@ class UserPregnancyJourney {
         'preferred_language': preferredLanguage,
       };
 
+  bool get isPlanning => mode == 'planning';
   bool get isPrenatal => mode == 'prenatal';
   bool get isPostnatal => mode == 'postnatal';
+
+  String get stageLabel {
+    switch (mode) {
+      case 'planning':
+        return 'Planning';
+      case 'prenatal':
+        return trimesterLabel;
+      case 'postnatal':
+        return babyAgeLabel;
+      default:
+        return '';
+    }
+  }
+
+  String get stageLabelHindi {
+    switch (mode) {
+      case 'planning':
+        return 'गर्भधारण योजना';
+      case 'prenatal':
+        return trimesterLabelHindi;
+      case 'postnatal':
+        return 'जन्म के बाद';
+      default:
+        return '';
+    }
+  }
 
   int get computedCurrentWeek {
     if (currentWeek != null) return currentWeek!;
@@ -292,27 +319,31 @@ class UserPregnancyJourney {
     return '$months month${months == 1 ? '' : 's'} old';
   }
 
+  /// Use [clearDueDate] / [clearBirthDate] to explicitly set the field to null.
   UserPregnancyJourney copyWith({
     DateTime? dueDate,
+    bool clearDueDate = false,
     DateTime? birthDate,
+    bool clearBirthDate = false,
     String? babyName,
     String? babyGender,
     int? currentWeek,
     String? mode,
     String? motherName,
+    bool clearMotherName = false,
     int? totalSessionsCompleted,
     int? totalMinutesListened,
   }) {
     return UserPregnancyJourney(
       id: id,
       userId: userId,
-      dueDate: dueDate ?? this.dueDate,
-      birthDate: birthDate ?? this.birthDate,
+      dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      birthDate: clearBirthDate ? null : (birthDate ?? this.birthDate),
       babyName: babyName ?? this.babyName,
       babyGender: babyGender ?? this.babyGender,
       currentWeek: currentWeek ?? this.currentWeek,
       mode: mode ?? this.mode,
-      motherName: motherName ?? this.motherName,
+      motherName: clearMotherName ? null : (motherName ?? this.motherName),
       preferredLanguage: preferredLanguage,
       totalSessionsCompleted:
           totalSessionsCompleted ?? this.totalSessionsCompleted,
@@ -643,7 +674,14 @@ class WeekDevelopmentInfo {
   });
 
   static WeekDevelopmentInfo forWeek(int week) {
-    return _weekData[week.clamp(1, 40)] ?? _weekData[1]!;
+    final w = week.clamp(1, 40);
+    if (_weekData.containsKey(w)) return _weekData[w]!;
+    final keys = _weekData.keys.toList()..sort();
+    int nearest = keys.first;
+    for (final k in keys) {
+      if ((k - w).abs() < (nearest - w).abs()) nearest = k;
+    }
+    return _weekData[nearest]!;
   }
 
   static final Map<int, WeekDevelopmentInfo> _weekData = {

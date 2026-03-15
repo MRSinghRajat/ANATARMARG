@@ -3,7 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 
 enum ReaderTheme { light, paper, dark }
-enum ReaderFont { serif, sans, rounded, mono, slab }
+enum ReaderFont {
+  serif,
+  sans,
+  rounded,
+  mono,
+  slab,
+  devanagari,
+  merriweather,
+  playfair,
+  lora,
+  notoSerif,
+}
 enum ReaderLayout { scroll, card }
 
 class ReaderSettingsModal extends StatefulWidget {
@@ -30,6 +41,32 @@ class ReaderSettingsModal extends StatefulWidget {
 
   @override
   State<ReaderSettingsModal> createState() => _ReaderSettingsModalState();
+
+  /// Public helper so verse/sacred text readers can apply the selected font.
+  static String? getFontFamily(ReaderFont font) {
+    switch (font) {
+      case ReaderFont.serif:
+        return GoogleFonts.crimsonPro().fontFamily;
+      case ReaderFont.sans:
+        return GoogleFonts.inter().fontFamily;
+      case ReaderFont.rounded:
+        return GoogleFonts.varelaRound().fontFamily;
+      case ReaderFont.mono:
+        return GoogleFonts.jetBrainsMono().fontFamily;
+      case ReaderFont.slab:
+        return GoogleFonts.robotoSlab().fontFamily;
+      case ReaderFont.devanagari:
+        return GoogleFonts.notoSerifDevanagari().fontFamily;
+      case ReaderFont.merriweather:
+        return GoogleFonts.merriweather().fontFamily;
+      case ReaderFont.playfair:
+        return GoogleFonts.playfairDisplay().fontFamily;
+      case ReaderFont.lora:
+        return GoogleFonts.lora().fontFamily;
+      case ReaderFont.notoSerif:
+        return GoogleFonts.notoSerif().fontFamily;
+    }
+  }
 }
 
 class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
@@ -164,6 +201,11 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
               _buildFontOption(ReaderFont.rounded, 'Rounded'),
               _buildFontOption(ReaderFont.mono, 'Mono'),
               _buildFontOption(ReaderFont.slab, 'Slab'),
+              _buildFontOption(ReaderFont.devanagari, 'Devanagari'),
+              _buildFontOption(ReaderFont.merriweather, 'Merriweather'),
+              _buildFontOption(ReaderFont.playfair, 'Playfair'),
+              _buildFontOption(ReaderFont.lora, 'Lora'),
+              _buildFontOption(ReaderFont.notoSerif, 'Noto Serif'),
             ],
           ),
         ),
@@ -202,18 +244,7 @@ class _ReaderSettingsModalState extends State<ReaderSettingsModal> {
   }
 
   String? _getFontFamily(ReaderFont font) {
-    switch (font) {
-      case ReaderFont.serif:
-        return GoogleFonts.crimsonPro().fontFamily;
-      case ReaderFont.sans:
-        return GoogleFonts.inter().fontFamily;
-      case ReaderFont.rounded:
-        return GoogleFonts.varelaRound().fontFamily;
-      case ReaderFont.mono:
-        return GoogleFonts.jetBrainsMono().fontFamily;
-      case ReaderFont.slab:
-        return GoogleFonts.robotoSlab().fontFamily;
-    }
+    return ReaderSettingsModal.getFontFamily(font);
   }
 
   Widget _buildLayoutSection() {

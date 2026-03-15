@@ -81,7 +81,7 @@ class DailyNotificationService {
     try {
       await _plugin.zonedSchedule(
         _dailyTaskNotificationId,
-        'Antar Marg',
+        'Antar मार्ग',
         'Your daily tasks are ready.',
         _nextTime(6, 0),
         const NotificationDetails(
@@ -98,7 +98,7 @@ class DailyNotificationService {
       );
       await _plugin.zonedSchedule(
         _eveningReminderNotificationId,
-        'Antar Marg',
+        'Antar मार्ग',
         'Complete your daily tasks.',
         _nextTime(18, 0),
         const NotificationDetails(
@@ -162,7 +162,7 @@ class DailyNotificationService {
           : 'Your daily tasks are ready. Open Ashram to complete them.';
       await _plugin.zonedSchedule(
         _dailyTaskNotificationId + 2,
-        'Antar Marg',
+        'Antar मार्ग',
         body,
         tz.TZDateTime.now(tz.local).add(const Duration(seconds: 1)),
         const NotificationDetails(
@@ -187,7 +187,7 @@ class DailyNotificationService {
     try {
       await _plugin.zonedSchedule(
         _dailyTaskNotificationId + 1,
-        'Antar Marg',
+        'Antar मार्ग',
         'Your daily tasks are ready.',
         tz.TZDateTime.now(tz.local).add(const Duration(seconds: 3)),
         const NotificationDetails(

@@ -83,4 +83,38 @@ class AppColors {
   static const Color primaryOrange = Color(0xFFF59E0B);
   static const Color cardDark = Color(0xFF1A1D23);
   static const Color deepPurple = Color(0xFF7C3AED);
+
+  // Journey tab (from design: primary, gold, deep-purple, background-dark)
+  static const Color journeyPrimary = Color(0xFFFF9933);
+  static const Color journeyGold = Color(0xFFD4AF37);
+  static const Color journeyDeepPurple = Color(0xFF2D1B4D);
+  static const Color journeyBackgroundDark = Color(0xFF1A120B);
+  /// Black for black–gold gradient on Journey progress cards
+  static const Color journeyBlack = Color(0xFF0A0A0A);
+
+  // AI Guru (from HTML design)
+  static const Color aiGuruPrimary = Color(0xFFEC5B13);
+  static const Color aiGuruGold = Color(0xFFD4AF37);
+  static const Color aiGuruSaffron = Color(0xFFF4A460);
+  static const Color aiGuruCream = Color(0xFFFFFDF5);
+  static const Color aiGuruBackgroundLight = Color(0xFFFDFAF2);
+  static const Color aiGuruBackgroundDark = Color(0xFF221610);
+
+  // Panchang / Hindu calendar (reference HTML --gold, --saffron, --bg, etc.)
+  static const Color panchangBg = Color(0xFF0C0904);
+  static const Color panchangGold = Color(0xFFD4943A);
+  static const Color panchangGold2 = Color(0xFFF0BA5A);
+  static const Color panchangSaffron2 = Color(0xFFFF7A2B);
+  static const Color panchangCrimson = Color(0xFFB83232);
+  static const Color panchangJade = Color(0xFF2ECC9A);
+  static const Color panchangViolet = Color(0xFF7B5CE5);
+  static const Color panchangIce = Color(0xFFC8E8FF);
+  static const Color panchangText = Color(0xFFF5EDD8);
+  static const Color panchangText2 = Color(0xFFC8B88A);
+  static const Color panchangMuted = Color(0x73F5EDD8); // 0.45
+  static const Color panchangMuted2 = Color(0x38F5EDD8); // 0.22
+  static const Color panchangGlass = Color(0x0AFFDC8C); // 0.04
+  static const Color panchangGlass2 = Color(0x12FFDC8C); // 0.07
+  static const Color panchangBorder = Color(0x1FD4943A); // 0.12
+  static const Color panchangBorder2 = Color(0x38D4943A); // 0.22
 }

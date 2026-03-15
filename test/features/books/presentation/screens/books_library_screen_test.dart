@@ -5,7 +5,7 @@ import 'package:ashrae_playground/features/books/presentation/screens/books_libr
 import 'package:ashrae_playground/features/books/data/repositories/book_repository.dart';
 import 'package:ashrae_playground/features/books/data/models/book_model.dart';
 import 'package:ashrae_playground/features/books/presentation/providers/book_providers.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:ashrae_playground/shared/widgets/app_network_image.dart';
 
 class FakeBookRepository implements BookRepository {
   @override
@@ -29,7 +29,7 @@ class FakeBookRepository implements BookRepository {
 }
 
 void main() {
-  testWidgets('renders CachedNetworkImage for book with image', (WidgetTester tester) async {
+  testWidgets('renders AppNetworkImage for book with image', (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -44,11 +44,11 @@ void main() {
     // Wait for data
     await tester.pumpAndSettle();
 
-    // Verify CachedNetworkImage widget is present
-    expect(find.byType(CachedNetworkImage), findsOneWidget);
+    // Verify AppNetworkImage widget is present
+    expect(find.byType(AppNetworkImage), findsOneWidget);
 
     // Verify properties
-    final imageWidget = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
+    final imageWidget = tester.widget<AppNetworkImage>(find.byType(AppNetworkImage));
     expect(imageWidget.imageUrl, 'https://example.com/image.jpg');
   });
 }

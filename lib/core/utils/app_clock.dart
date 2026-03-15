@@ -28,9 +28,15 @@ class AppClock {
     return clock.now();
   }
 
-  /// Today's date string (YYYY-MM-DD)
+  /// Today's date string (YYYY-MM-DD) in local time (no UTC shift).
   static String todayString() {
-    return now().toIso8601String().split('T')[0];
+    final n = now();
+    return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Local date string for a given DateTime (YYYY-MM-DD).
+  static String localDateString(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   /// Set a debug date override (debug builds only).

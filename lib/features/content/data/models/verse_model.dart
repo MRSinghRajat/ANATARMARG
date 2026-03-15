@@ -12,6 +12,8 @@ class VerseContent {
   final String? devanagariText;
   /// Optional daily insight / sacred action suggestion (e.g. from AI).
   final String? dailyInsight;
+  final String? audioUrl;
+  final String? audioUrlEn;
 
   VerseContent({
     required this.id,
@@ -25,6 +27,8 @@ class VerseContent {
     this.createdAt,
     this.devanagariText,
     this.dailyInsight,
+    this.audioUrl,
+    this.audioUrlEn,
   });
 
   factory VerseContent.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,8 @@ class VerseContent {
           : null,
       devanagariText: json['devanagariText'] as String?,
       dailyInsight: json['dailyInsight'] as String?,
+      audioUrl: json['audio_url'] as String? ?? json['audioUrl'] as String?,
+      audioUrlEn: json['audio_url_en'] as String? ?? json['audioUrlEn'] as String?,
     );
   }
 
@@ -60,6 +66,8 @@ class VerseContent {
       'createdAt': createdAt?.toIso8601String(),
       'devanagariText': devanagariText,
       'dailyInsight': dailyInsight,
+      'audio_url': audioUrl,
+      'audio_url_en': audioUrlEn,
     };
   }
 }

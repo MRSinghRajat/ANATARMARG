@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
@@ -5,7 +7,9 @@ import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../../../../core/services/revenuecat_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/services/premium_service.dart';
 import '../../data/models/subscription_models.dart';
+import 'customer_center_screen.dart';
 
 /// Paywall screen that displays subscription options.
 /// 
@@ -96,17 +100,33 @@ class PaywallScreen extends StatefulWidget {
 
 class _PaywallScreenState extends State<PaywallScreen> {
   final RevenueCatService _revenueCat = RevenueCatService.instance;
-  
+  final PremiumService _premiumService = PremiumService.instance;
+
   List<SubscriptionPlan> _plans = [];
   SubscriptionPlan? _selectedPlan;
   bool _isLoading = true;
   bool _isPurchasing = false;
+  bool _isRedeemingCoupon = false;
+  bool _isPremium = false;
   String? _error;
+  StreamSubscription<bool>? _premiumSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadOfferings();
+    _premiumService.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = _premiumService.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    _premiumSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadOfferings() async {
@@ -152,10 +172,25 @@ class _PaywallScreenState extends State<PaywallScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to load plans: $e';
+        _error = _friendlyOfferingsError(e);
         _isLoading = false;
       });
     }
+  }
+
+  /// User-friendly message when offerings fail (e.g. RevenueCat/App Store config not ready).
+  static String _friendlyOfferingsError(Object e) {
+    final s = e.toString();
+    if (s.contains('CONFIGURATION_ERROR') ||
+        s.contains('configuration') && s.contains('could not be fetched') ||
+        s.contains('None of the products')) {
+      return 'Subscription plans are not available right now. '
+          'You can try "Restore" if you already have a subscription, or try again later.';
+    }
+    if (s.contains('network') || s.contains('Connection')) {
+      return 'Unable to load plans. Please check your connection and try again.';
+    }
+    return 'We couldn\'t load subscription options. Try "Restore" if you already subscribed, or try again later.';
   }
 
   Future<void> _purchase() async {
@@ -171,7 +206,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Welcome to Antar Marg Pro! 🎉'),
+              content: Text('Welcome to Antar मार्ग Pro! 🎉'),
               backgroundColor: Colors.green,
             ),
           );
@@ -236,6 +271,37 @@ class _PaywallScreenState extends State<PaywallScreen> {
     );
   }
 
+  Future<void> _redeemCoupon() async {
+    setState(() => _isRedeemingCoupon = true);
+    try {
+      await _revenueCat.presentCodeRedemptionSheet();
+      await _premiumService.refreshPremiumStatus();
+      final isNowPremium = await _premiumService.isPremium;
+      if (mounted) {
+        if (isNowPremium) {
+          widget.onSubscriptionSuccess?.call();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Offer code applied! Welcome to Pro 🎉'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('If you redeemed a code, your subscription may take a moment to appear. Try Restore if needed.'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) _showError('Could not open redeem: $e');
+    } finally {
+      if (mounted) setState(() => _isRedeemingCoupon = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -278,9 +344,19 @@ class _PaywallScreenState extends State<PaywallScreen> {
             const SizedBox(width: 48),
           const Spacer(),
           TextButton(
-            onPressed: _isPurchasing ? null : _restore,
+            onPressed: (_isPurchasing || _isRedeemingCoupon) ? null : _redeemCoupon,
             child: Text(
-              'Restore Purchases',
+              'Redeem Code',
+              style: GoogleFonts.poppins(
+                color: AppColors.primaryOrange,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: (_isPurchasing || _isRedeemingCoupon) ? null : _restore,
+            child: Text(
+              'Restore',
               style: GoogleFonts.poppins(
                 color: AppColors.primaryOrange,
                 fontSize: 14,
@@ -332,6 +408,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          // Premium member banner (paywall enabled for premium users too)
+          if (_isPremium) _buildPremiumBanner(),
+          if (_isPremium) const SizedBox(height: 16),
           // Title and subtitle
           _buildTitle(),
           const SizedBox(height: 24),
@@ -347,7 +426,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
           // Purchase button
           _buildPurchaseButton(),
           const SizedBox(height: 16),
-          
+          // Coupon / offer code
+          _buildCouponSection(),
+          const SizedBox(height: 16),
           // Terms
           _buildTerms(),
           const SizedBox(height: 32),
@@ -645,6 +726,83 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumBanner() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const CustomerCenterScreen(),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber.withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.star, color: Colors.amber, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You\'re a Pro member',
+                    style: GoogleFonts.poppins(
+                      color: Colors.amber,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Tap to manage subscription',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.amber),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCouponSection() {
+    return OutlinedButton.icon(
+      onPressed: (_isPurchasing || _isRedeemingCoupon)
+          ? null
+          : _redeemCoupon,
+      icon: _isRedeemingCoupon
+          ? SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+              ),
+            )
+          : const Icon(Icons.card_giftcard_outlined, size: 20),
+      label: Text(
+        _isRedeemingCoupon ? 'Redeeming…' : 'Have a coupon? Redeem offer code',
+        style: GoogleFonts.poppins(fontSize: 14),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white70,
+        side: BorderSide(color: Colors.white24),
+        padding: const EdgeInsets.symmetric(vertical: 12),
       ),
     );
   }

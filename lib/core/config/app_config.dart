@@ -1,9 +1,15 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
-  static const String appName = 'Antar Marg';
+  static const String appName = 'Antar मार्ग';
+  /// Display name for UI (logo text): Antar मार्ग
+  static const String appDisplayName = 'Antar मार्ग';
   static const String appTagline = 'The Inner Path';
   static const String appVersion = '1.0.0';
+
+  /// Splash / branding assets (optional)
+  static const String splashGifPath = 'assets/animations/splash.gif';
+  static const String appLogoPath = 'assets/images/app_logo.png';
 
   // GPT API Configuration (loaded from .env)
   static const String gptApiBaseUrl = 'https://api.openai.com/v1';

@@ -9,6 +9,9 @@ class BookModel {
   final String? coverImageUrl;
   final String category;
   final String language;
+  final bool isPremium;
+  final String? audioUrl;
+  final String? audioUrlEn;
   final DateTime? lastReadAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -24,6 +27,9 @@ class BookModel {
     this.coverImageUrl,
     this.category = 'scripture',
     this.language = 'en',
+    this.isPremium = false,
+    this.audioUrl,
+    this.audioUrlEn,
     this.lastReadAt,
     this.createdAt,
     this.updatedAt,
@@ -48,6 +54,9 @@ class BookModel {
           json['coverImageUrl'] as String?,
       category: json['category'] as String? ?? 'scripture',
       language: json['language'] as String? ?? 'en',
+      isPremium: json['is_premium'] as bool? ?? false,
+      audioUrl: json['audio_url'] as String?,
+      audioUrlEn: json['audio_url_en'] as String?,
       lastReadAt: json['last_read_at'] != null
           ? DateTime.parse(json['last_read_at'] as String)
           : json['lastReadAt'] != null
@@ -73,6 +82,9 @@ class BookModel {
       'cover_image_url': coverImageUrl ?? coverImagePath,
       'category': category,
       'language': language,
+      'is_premium': isPremium,
+      'audio_url': audioUrl,
+      'audio_url_en': audioUrlEn,
       'last_read_at': lastReadAt?.toIso8601String(),
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),

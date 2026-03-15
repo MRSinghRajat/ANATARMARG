@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../../../shared/services/avatar_growth_service.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../../shared/widgets/coin_earned_overlay.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../../../core/utils/coin_calculator.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
@@ -20,10 +22,8 @@ import '../../data/datasources/supabase_verse_datasource.dart'
     show VerseWithTranslations;
 import '../../data/services/verse_notes_service.dart';
 import '../../data/services/reader_preferences_service.dart';
-import '../../../content/data/datasources/gpt_api_service.dart';
 import '../../../content/data/models/chapter_model.dart' show ChapterContent;
 import '../widgets/books_chapters_modal.dart';
-import 'book_chat_screen.dart';
 import '../widgets/reader_settings_modal.dart';
 
 /// Shlok Reader dark theme colors (from HTML design)
@@ -58,7 +58,6 @@ class BookChapterScreen extends ConsumerStatefulWidget {
 
 class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     with SingleTickerProviderStateMixin {
-  final GPTApiService _gptService = GPTApiService();
   final VerseRepository _verseRepository = VerseRepository();
   final ChapterRepository _chapterRepository = ChapterRepository();
   final VerseNotesService _notesService = VerseNotesService();
@@ -87,6 +86,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   final GlobalKey _completeButtonKey = GlobalKey();
   late AnimationController _glowController;
   bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
   String get _chapterId =>
       widget.chapter?.id ?? 'bg_chapter_${widget.chapterNumber ?? 1}';
@@ -145,6 +145,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     )..repeat(reverse: true);
     GuideAnimationService().setState(GuideState.speaking);
     PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
       if (mounted) setState(() => _isPremium = v);
     });
     _loadPreferences();
@@ -231,6 +234,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _glowController.dispose();
@@ -251,34 +255,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     try {
       // Load chapters for prev/next navigation (in parallel with verses)
       if (_chapters.isEmpty) await _loadChapters();
-      // Load verses FIRST (fast, from Supabase) - don't block on GPT
+      // Load verses from Supabase only (no API calls)
       await _loadVerses();
       setState(() => _isLoading = false);
-
-      // Load chapter summary in background (DB or GPT) - for Notes/empty state
-      _gptService
-          .getChapterSummary(
-        book: widget.book.name,
-        chapterId: _chapterId,
-      )
-          .then((chapter) {
-        if (mounted) {
-          setState(() => _chapterContent = chapter);
-        }
-      }).catchError((e) {
-        if (mounted) {
-          setState(() => _chapterContent = ChapterContent(
-                id: _chapterId,
-                book: widget.book.name,
-                chapterId: _chapterId,
-                chapterNumber: _chapterNum.toString(),
-                title: _chapterDisplayName,
-                summary: '',
-                estimatedReadingMinutes: 2,
-                createdAt: DateTime.now(),
-              ));
-        }
-      });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -447,7 +426,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                   label: 'Share',
                   onTap: () {
                     Navigator.pop(ctx);
-                    final shareText = '${widget.book.name} - $_chapterDisplayName, Verse $shlokaNum\n\n$verseText\n\n— via AntarMarg';
+                    final shareText = '${widget.book.name} - $_chapterDisplayName, Verse $shlokaNum\n\n$verseText\n\n— via Antar मार्ग';
                     Share.share(shareText);
                   },
                 ),
@@ -463,22 +442,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                         backgroundColor: const Color(0xFF1A1A1A),
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    );
-                  },
-                ),
-                _buildContextAction(
-                  icon: Icons.chat_rounded,
-                  label: 'Explain',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => BookChatScreen(
-                          book: widget.book,
-                          verseContext: verseText,
-                        ),
                       ),
                     );
                   },
@@ -1058,9 +1021,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       children: [
         _buildVerseProgressBar(context),
         Expanded(
-          child: _readerLayout == ReaderLayout.card
-              ? _buildCardLayout()
-              : _buildScrollLayout(),
+          child: InteractiveViewer(
+            minScale: 0.6,
+            maxScale: 3.5,
+            child: _readerLayout == ReaderLayout.card
+                ? _buildCardLayout()
+                : _buildScrollLayout(),
+          ),
         ),
       ],
     );
@@ -1216,6 +1183,158 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         '';
   }
 
+  /// Get Hindi AI commentary text (language_code: hi-commentary)
+  String _getHindiCommentary(VerseWithTranslations v) {
+    return v.hindiCommentary?.text ?? '';
+  }
+
+  /// Get English AI commentary text (language_code: en-commentary)
+  String _getEnglishCommentary(VerseWithTranslations v) {
+    return v.englishCommentary?.text ?? '';
+  }
+
+  /// Build commentary section with AI symbol; shows Hindi and/or English commentary if present.
+  /// Free users see a teaser prompt; premium users see full commentary.
+  Widget _buildCommentarySection(VerseWithTranslations v) {
+    final hindiCommentary = _getHindiCommentary(v);
+    final englishCommentary = _getEnglishCommentary(v);
+    if (hindiCommentary.isEmpty && englishCommentary.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildOrnamentalDivider(compact: true),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.auto_awesome,
+                size: 14,
+                color: _goldAccent.withValues(alpha: 0.7),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'AI Commentary',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: _goldAccent.withValues(alpha: 0.6),
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          if (!_isPremium)
+            _buildCommentaryPremiumPrompt()
+          else ...[
+            if (hindiCommentary.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  hindiCommentary,
+                  style: TextStyle(
+                    fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
+                    fontSize: _fontSize - 2,
+                    height: 1.65,
+                    color: _verseTextColor.withValues(alpha: 0.85),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            if (englishCommentary.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  englishCommentary,
+                  style: TextStyle(
+                    fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
+                    fontSize: _fontSize - 4,
+                    height: 1.65,
+                    color: _translationColor,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentaryPremiumPrompt() {
+    return GestureDetector(
+      onTap: () => PaywallScreen.showAsBottomSheet(context),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFD4AF37).withValues(alpha: 0.12),
+              const Color(0xFFD4AF37).withValues(alpha: 0.04),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFD4AF37).withValues(alpha: 0.25),
+          ),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.lock_outline,
+              color: Color(0xFFD4AF37),
+              size: 24,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Buy Premium for Detailed\nAI Commentary',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.crimsonPro(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFD4AF37),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Get in-depth explanations of every verse',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4AF37),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Upgrade to Pro',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Build a single verse section with ancient scroll styling (Scroll layout)
   Widget _buildVerseSection(BuildContext context, int index) {
     final v = _verses[index];
@@ -1285,7 +1404,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   englishText,
-                  style: GoogleFonts.crimsonPro(
+                  style: TextStyle(
+                    fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
                     fontSize: _fontSize - 3,
                     height: 1.7,
                     color: _translationColor,
@@ -1295,6 +1415,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                 ),
               ),
             ],
+
+            // AI Commentary (Hindi + English if present in verse_translations)
+            _buildCommentarySection(v),
 
             // Read indicator
             if (isRead)
@@ -1459,7 +1582,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Text(
                       englishText,
-                      style: GoogleFonts.crimsonPro(
+                      style: TextStyle(
+                        fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
                         fontSize: _fontSize - 3,
                         height: 1.7,
                         color: _translationColor,
@@ -1469,6 +1593,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                     ),
                   ),
                 ],
+                // AI Commentary (Hindi + English if present)
+                _buildCommentarySection(v),
               ],
             ),
           ),
@@ -1484,6 +1610,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     final firstChar = text.substring(0, 1);
     final restText = text.substring(1);
     final dropCapSize = _fontSize + 18;
+    final verseFontFamily = ReaderSettingsModal.getFontFamily(_readerFont);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1493,7 +1620,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           children: [
             TextSpan(
               text: firstChar,
-              style: GoogleFonts.cormorantGaramond(
+              style: TextStyle(
+                fontFamily: verseFontFamily ?? GoogleFonts.cormorantGaramond().fontFamily,
                 fontSize: dropCapSize,
                 fontWeight: FontWeight.bold,
                 color: _goldAccent.withValues(alpha: 0.8),
@@ -1502,7 +1630,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             ),
             TextSpan(
               text: restText,
-              style: GoogleFonts.crimsonPro(
+              style: TextStyle(
+                fontFamily: verseFontFamily ?? GoogleFonts.crimsonPro().fontFamily,
                 fontSize: _fontSize + 2,
                 height: 1.85,
                 color: _verseTextColor,

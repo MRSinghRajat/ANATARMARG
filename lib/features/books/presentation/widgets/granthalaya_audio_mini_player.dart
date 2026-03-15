@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../providers/now_playing_provider.dart';
 import '../screens/full_audio_player_screen.dart';
 import 'glass_shimmer_box.dart';
@@ -56,12 +57,12 @@ class GranthalayaAudioMiniPlayer extends ConsumerWidget {
                     width: 36,
                     height: 36,
                     child: state.coverUrl != null && state.coverUrl!.isNotEmpty
-                        ? CachedNetworkImage(
+                        ? AppNetworkImage(
                             imageUrl: state.coverUrl!,
                             fit: BoxFit.cover,
                             color: Colors.white.withOpacity(0.9),
                             colorBlendMode: BlendMode.modulate,
-                            errorWidget: (_, __, ___) => _placeholder(),
+                            errorBuilder: (_, __, ___) => _placeholder(),
                           )
                         : _placeholder(),
                   ),
@@ -158,10 +159,7 @@ class GranthalayaAudioMiniPlayer extends ConsumerWidget {
   }
 
   Widget _placeholder() {
-    return Container(
-      color: AppColors.charcoalDark,
-      child: const Icon(Icons.music_note_rounded, color: AppColors.matteGold, size: 18),
-    );
+    return const AntarmargPlaceholder(compact: true);
   }
 }
 

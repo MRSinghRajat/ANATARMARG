@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/models/granthalaya_models.dart';
+import '../../data/services/granthalaya_bookmarks_service.dart';
+import '../../data/services/granthalaya_recent_service.dart';
+import '../../data/services/reader_preferences_service.dart';
+import '../widgets/reader_settings_modal.dart';
 
 class SacredTextReaderScreen extends StatefulWidget {
   final SacredTextModel sacredText;
@@ -17,6 +21,14 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
   late AnimationController _decorController;
   bool _showHindi = true;
   bool _showBenefits = false;
+  bool _isBookmarked = false;
+  final GranthalayaBookmarksService _bookmarksService =
+      GranthalayaBookmarksService();
+  final ReaderPreferencesService _readerPrefs = ReaderPreferencesService();
+  double _fontSize = 18.0;
+  ReaderFont _readerFont = ReaderFont.serif;
+  ReaderTheme _readerTheme = ReaderTheme.paper;
+  ReaderLayout _readerLayout = ReaderLayout.scroll;
 
   static const _bg1 = Color(0xFF0D0B08);
   static const _bg2 = Color(0xFF1A1510);
@@ -27,6 +39,20 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
   @override
   void initState() {
     super.initState();
+    GranthalayaRecentService().recordSacredTextOpened(widget.sacredText.id);
+    _loadBookmarkState();
+    _readerPrefs.loadFontSize().then((v) {
+      if (mounted) setState(() => _fontSize = v);
+    });
+    _readerPrefs.loadFont().then((v) {
+      if (mounted) setState(() => _readerFont = v);
+    });
+    _readerPrefs.loadTheme().then((v) {
+      if (mounted) setState(() => _readerTheme = v);
+    });
+    _readerPrefs.loadLayout().then((v) {
+      if (mounted) setState(() => _readerLayout = v);
+    });
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -35,6 +61,16 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..forward();
+  }
+
+  Future<void> _loadBookmarkState() async {
+    final b = await _bookmarksService.isSacredTextBookmarked(widget.sacredText.id);
+    if (mounted) setState(() => _isBookmarked = b);
+  }
+
+  Future<void> _toggleBookmark() async {
+    await _bookmarksService.toggleSacredTextBookmark(widget.sacredText.id);
+    if (mounted) setState(() => _isBookmarked = !_isBookmarked);
   }
 
   @override
@@ -67,39 +103,43 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                     parent: _fadeController,
                     curve: Curves.easeIn,
                   ),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 16),
-                        FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _decorController,
-                            curve: Curves.easeInOut,
+                  child: InteractiveViewer(
+                    minScale: 0.6,
+                    maxScale: 3.5,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 16),
+                          FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _decorController,
+                              curve: Curves.easeInOut,
+                            ),
+                            child: _buildOrnament(),
                           ),
-                          child: _buildOrnament(),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTypeAndInfo(t),
-                        const SizedBox(height: 20),
-                        _buildMainText(t),
-                        const SizedBox(height: 24),
-                        if (t.benefits != null || t.whenToRecite != null) ...[
-                          _buildDivider(),
                           const SizedBox(height: 20),
-                          _buildBenefitsToggle(t),
+                          _buildTypeAndInfo(t),
                           const SizedBox(height: 20),
+                          _buildMainText(t),
+                          const SizedBox(height: 24),
+                          if (t.benefits != null || t.whenToRecite != null) ...[
+                            _buildDivider(),
+                            const SizedBox(height: 20),
+                            _buildBenefitsToggle(t),
+                            const SizedBox(height: 20),
+                          ],
+                          FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _decorController,
+                              curve: Curves.easeInOut,
+                            ),
+                            child: _buildOrnament(),
+                          ),
+                          const SizedBox(height: 80),
                         ],
-                        FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _decorController,
-                            curve: Curves.easeInOut,
-                          ),
-                          child: _buildOrnament(),
-                        ),
-                        const SizedBox(height: 80),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -148,6 +188,18 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                   ],
                 ),
               ),
+              IconButton(
+                icon: Icon(
+                  _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  color: _gold,
+                  size: 24,
+                ),
+                onPressed: _toggleBookmark,
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, color: _gold, size: 22),
+                onPressed: () => _showReaderSettings(context),
+              ),
               _buildLanguageToggle(),
             ],
           ),
@@ -170,6 +222,36 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
           _buildLangButton('HI', _showHindi),
           _buildLangButton('EN', !_showHindi),
         ],
+      ),
+    );
+  }
+
+  void _showReaderSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => ReaderSettingsModal(
+        currentFontSize: _fontSize,
+        currentTheme: _readerTheme,
+        currentFont: _readerFont,
+        currentLayout: _readerLayout,
+        onFontSizeChanged: (v) {
+          setState(() => _fontSize = v);
+          _readerPrefs.saveFontSize(v);
+        },
+        onThemeChanged: (v) {
+          setState(() => _readerTheme = v);
+          _readerPrefs.saveTheme(v);
+        },
+        onFontChanged: (v) {
+          setState(() => _readerFont = v);
+          _readerPrefs.saveFont(v);
+        },
+        onLayoutChanged: (v) {
+          setState(() => _readerLayout = v);
+          _readerPrefs.saveLayout(v);
+        },
       ),
     );
   }
@@ -300,8 +382,9 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
       ),
       child: SelectableText(
         text,
-        style: GoogleFonts.crimsonPro(
-          fontSize: _showHindi ? 18 : 16,
+        style: TextStyle(
+          fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
+          fontSize: _showHindi ? _fontSize + 1 : _fontSize - 1,
           height: _showHindi ? 2.0 : 1.8,
           color: const Color(0xFFE8E0D4),
           letterSpacing: 0.3,
@@ -401,8 +484,9 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                     const SizedBox(height: 8),
                     Text(
                       t.benefits!,
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
+                        fontSize: _fontSize - 2,
                         color: _goldLight.withValues(alpha: 0.8),
                         height: 1.6,
                       ),
@@ -422,8 +506,9 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                     const SizedBox(height: 8),
                     Text(
                       t.whenToRecite!,
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontFamily: ReaderSettingsModal.getFontFamily(_readerFont) ?? GoogleFonts.crimsonPro().fontFamily,
+                        fontSize: _fontSize - 2,
                         color: _goldLight.withValues(alpha: 0.8),
                         height: 1.6,
                       ),

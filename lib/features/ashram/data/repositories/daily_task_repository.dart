@@ -48,12 +48,12 @@ class DailyTaskRepository {
     }
   }
 
-  /// Get user's tasks for a specific date
+  /// Get user's tasks for a specific date (uses local date so today matches user's day).
   Future<List<UserDailyTask>> getUserTasksForDate(DateTime date) async {
     if (_userId == null) return [];
 
     try {
-      final dateStr = date.toIso8601String().split('T')[0];
+      final dateStr = AppClock.localDateString(date);
       
       // Get user tasks with template info
       final response = await _supabase
@@ -90,7 +90,7 @@ class DailyTaskRepository {
 
     try {
       final today = AppClock.now();
-      final dateStr = today.toIso8601String().split('T')[0];
+      final dateStr = AppClock.todayString();
       final weekday = today.weekday % 7; // 0 = Sunday
 
       // Check if tasks already exist for today
@@ -327,6 +327,95 @@ class DailyTaskRepository {
     } catch (e) {
       print('Error getting task history: $e');
       return {};
+    }
+  }
+
+  /// Activity count per day for the last [days] days (for heatmap).
+  /// Returns date -> number of completed tasks that day.
+  Future<Map<DateTime, int>> getActivityHeatmap(int days) async {
+    if (_userId == null) return {};
+
+    try {
+      final endDate = AppClock.now();
+      final startDate = endDate.subtract(Duration(days: days));
+      final response = await _supabase
+          .from('user_daily_tasks')
+          .select('task_date')
+          .eq('user_id', _userId!)
+          .eq('status', 'completed')
+          .gte('task_date', startDate.toIso8601String().split('T')[0])
+          .lte('task_date', endDate.toIso8601String().split('T')[0]);
+
+      final Map<DateTime, int> counts = {};
+      for (final row in response as List) {
+        final dateStr = row['task_date'] as String?;
+        if (dateStr == null) continue;
+        final d = DateTime.parse(dateStr);
+        final key = DateTime(d.year, d.month, d.day);
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      return counts;
+    } catch (e) {
+      print('Error getting activity heatmap: $e');
+      return {};
+    }
+  }
+
+  /// Total completed japa sessions (tasks with slug japa_108) for practice stats.
+  Future<int> getTotalJapaCompletions() async {
+    if (_userId == null) return 0;
+    try {
+      final templates = await _supabase
+          .from('daily_task_templates')
+          .select('id, slug')
+          .eq('is_active', true);
+      final japaIds = <String>[];
+      for (final t in templates as List) {
+        final slug = t['slug'] as String? ?? '';
+        if (slug == 'japa_108' || slug.contains('japa')) {
+          japaIds.add(t['id'] as String);
+        }
+      }
+      if (japaIds.isEmpty) return 0;
+      final response = await _supabase
+          .from('user_daily_tasks')
+          .select('id')
+          .eq('user_id', _userId!)
+          .eq('status', 'completed')
+          .inFilter('template_id', japaIds);
+      return (response as List).length;
+    } catch (e) {
+      print('Error getting japa completions: $e');
+      return 0;
+    }
+  }
+
+  /// Count completed gratitude / reflection practice sessions for My Growth.
+  Future<int> getGratitudeCompletionsCount() async {
+    if (_userId == null) return 0;
+    try {
+      final templates = await _supabase
+          .from('daily_task_templates')
+          .select('id, slug')
+          .eq('is_active', true);
+      final ids = <String>[];
+      for (final t in templates as List) {
+        final slug = t['slug'] as String? ?? '';
+        if (slug.contains('gratitude') || slug.contains('reflection')) {
+          ids.add(t['id'] as String);
+        }
+      }
+      if (ids.isEmpty) return 0;
+      final response = await _supabase
+          .from('user_daily_tasks')
+          .select('id')
+          .eq('user_id', _userId!)
+          .eq('status', 'completed')
+          .inFilter('template_id', ids);
+      return (response as List).length;
+    } catch (e) {
+      print('Error getting gratitude completions: $e');
+      return 0;
     }
   }
 }

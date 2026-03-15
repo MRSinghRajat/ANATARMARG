@@ -1,6 +1,10 @@
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/config/supabase_config.dart';
 import '../models/granthalaya_models.dart';
+import '../models/book_model.dart';
+import '../models/chapter_model.dart';
+import '../models/meditation_guide_model.dart';
+import '../../../../features/content/data/models/verse_model.dart';
 
 class SupabaseGranthalayaDataSource {
   final SupabaseService _supabase = SupabaseService();
@@ -206,6 +210,36 @@ class SupabaseGranthalayaDataSource {
     }
   }
 
+  /// Fetch YouTube videos for Granthalaya Video section (from granthalaya_videos table).
+  Future<List<GranthalayaVideoModel>> getVideos() async {
+    if (!_supabase.isInitialized) return [];
+
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.granthalayaVideosTable)
+          .select()
+          .eq('is_active', true)
+          .order('display_order', ascending: true);
+
+      final list = _toList(response);
+      final videos = <GranthalayaVideoModel>[];
+      for (final item in list) {
+        try {
+          final map = item as Map<String, dynamic>;
+          final videoId = (map['video_id']?.toString() ?? '').trim();
+          if (videoId.isEmpty) continue;
+          videos.add(GranthalayaVideoModel.fromJson(map));
+        } catch (_) {
+          // skip malformed rows
+        }
+      }
+      return videos;
+    } catch (e) {
+      print('Error fetching granthalaya videos: $e');
+      return [];
+    }
+  }
+
   /// Fetch user's audio in-progress items (dynamic from user DB).
   Future<List<UserAudioProgressModel>> getUserAudioProgress() async {
     if (!_supabase.isInitialized) return [];
@@ -285,7 +319,8 @@ class SupabaseGranthalayaDataSource {
     }
   }
 
-  /// Fetch all sacred stories, optionally filtered by deity
+  /// Fetch all sacred stories, optionally filtered by deity.
+  /// Uses story_pages table for pages when present; falls back to sacred_stories.pages (JSONB) for legacy.
   Future<List<SacredStoryModel>> getSacredStories({String? deitySlug}) async {
     if (!_supabase.isInitialized) return [];
     try {
@@ -298,10 +333,45 @@ class SupabaseGranthalayaDataSource {
       }
       final response = await query.order('order_index', ascending: true);
       final list = _toList(response);
+      if (list.isEmpty) return [];
+
+      final storyIds = list
+          .map((r) => (r as Map<String, dynamic>)['id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      final Map<String, List<SacredStoryPage>> pagesByStoryId = {};
+      if (storyIds.isNotEmpty) {
+        try {
+          final pagesResponse = await _supabase.client!
+              .from('story_pages')
+              .select()
+              .inFilter('story_id', storyIds)
+              .order('page_number', ascending: true);
+          final pagesList = _toList(pagesResponse);
+          for (final row in pagesList) {
+            final map = row as Map<String, dynamic>;
+            final storyId = map['story_id']?.toString();
+            if (storyId == null) continue;
+            pagesByStoryId.putIfAbsent(storyId, () => []).add(SacredStoryPage.fromJson(map));
+          }
+        } catch (_) {
+          // story_pages table may not exist yet; fall back to legacy pages in sacred_stories
+        }
+      }
+
       final results = <SacredStoryModel>[];
       for (int i = 0; i < list.length; i++) {
         try {
-          results.add(SacredStoryModel.fromJson(list[i] as Map<String, dynamic>));
+          final row = list[i] as Map<String, dynamic>;
+          final id = row['id']?.toString();
+          final pages = id != null ? pagesByStoryId[id] : null;
+          final story = SacredStoryModel.fromJson(row, pages: pages);
+          if (story.isPremium) {
+            print('[SacredStories] "${story.title}" has is_premium=true in DB');
+          }
+          results.add(story);
         } catch (e) {
           print('[SacredStories] Parse error at row $i: $e');
         }
@@ -347,6 +417,127 @@ class SupabaseGranthalayaDataSource {
       return _toList(response).cast<Map<String, dynamic>>();
     } catch (e) {
       print('Error fetching books by deity: $e');
+      return [];
+    }
+  }
+
+  /// Fetch sacred texts that have audio (audio_url is not null/empty)
+  Future<List<SacredTextModel>> getSacredTextsWithAudio() async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from('sacred_texts')
+          .select()
+          .eq('is_active', true)
+          .not('audio_url', 'is', null)
+          .order('order_index', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => SacredTextModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching sacred texts with audio: $e');
+      return [];
+    }
+  }
+
+  /// Fetch books that have audio (audio_url is not null/empty)
+  Future<List<BookModel>> getBooksWithAudio() async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.booksTable)
+          .select()
+          .not('audio_url', 'is', null)
+          .order('name', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => BookModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching books with audio: $e');
+      return [];
+    }
+  }
+
+  /// Fetch sacred stories that have audio_url set on the story itself.
+  Future<List<SacredStoryModel>> getStoriesWithAudio() async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from('sacred_stories')
+          .select()
+          .eq('is_active', true)
+          .not('audio_url', 'is', null)
+          .order('order_index', ascending: true);
+      final list = _toList(response);
+      if (list.isEmpty) return [];
+
+      return list.map((raw) {
+        final row = raw as Map<String, dynamic>;
+        return SacredStoryModel.fromJson(row);
+      }).toList();
+    } catch (e) {
+      print('Error fetching stories with audio: $e');
+      return [];
+    }
+  }
+
+  /// Fetch meditation guides
+  Future<List<MeditationGuideModel>> getMeditationGuides() async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from('meditation_guides')
+          .select()
+          .eq('is_active', true)
+          .order('order_index', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => MeditationGuideModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching meditation guides: $e');
+      return [];
+    }
+  }
+
+  /// Fetch chapters with audio for a book
+  Future<List<ChapterModel>> getChaptersWithAudio(String bookId) async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.chaptersTable)
+          .select()
+          .eq('book_id', bookId)
+          .not('audio_url', 'is', null)
+          .order('order_index', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => ChapterModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching chapters with audio: $e');
+      return [];
+    }
+  }
+
+  /// Fetch verses with audio for a chapter
+  Future<List<VerseContent>> getVersesWithAudio(String chapterId) async {
+    if (!_supabase.isInitialized) return [];
+    try {
+      final response = await _supabase.client!
+          .from(SupabaseConfig.versesTable)
+          .select()
+          .eq('chapter', chapterId)
+          .not('audio_url', 'is', null)
+          .order('verseNumber', ascending: true);
+      final list = _toList(response);
+      return list
+          .map((j) => VerseContent.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching verses with audio: $e');
       return [];
     }
   }

@@ -72,13 +72,13 @@ class ChatMessageBubble extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.ashramSaffron.withOpacity(0.3),
-            AppColors.ashramSaffron.withOpacity(0.1),
+            AppColors.primaryOrange.withValues(alpha: 0.3),
+            AppColors.deepPurple.withValues(alpha: 0.2),
           ],
         ),
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppColors.ashramSaffron.withOpacity(0.3),
+          color: Colors.white.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -93,10 +93,10 @@ class ChatMessageBubble extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: AppColors.earthBrown.withOpacity(0.3),
+        color: AppColors.earthBrown.withValues(alpha:0.3),
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppColors.earthBrown.withOpacity(0.3),
+          color: AppColors.earthBrown.withValues(alpha:0.3),
           width: 1,
         ),
       ),
@@ -120,8 +120,8 @@ class ChatMessageBubble extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.earthBrown.withOpacity(0.4),
-                  AppColors.earthBrown.withOpacity(0.2),
+                  AppColors.earthBrown.withValues(alpha:0.4),
+                  AppColors.earthBrown.withValues(alpha:0.2),
                 ],
               )
             : message.isReading
@@ -129,30 +129,30 @@ class ChatMessageBubble extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      AppColors.ashramSaffron.withOpacity(0.15),
-                      AppColors.ashramSaffron.withOpacity(0.05),
+                      AppColors.primaryOrange.withValues(alpha: 0.2),
+                      AppColors.deepPurple.withValues(alpha: 0.15),
                     ],
                   )
                 : LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withOpacity(0.1),
-                      Colors.white.withOpacity(0.05),
+                      AppColors.primaryOrange.withValues(alpha: 0.12),
+                      AppColors.deepPurple.withValues(alpha: 0.08),
                     ],
                   ),
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(16),
-          topRight: const Radius.circular(16),
-          bottomLeft: isUser ? const Radius.circular(16) : const Radius.circular(4),
-          bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
+          topLeft: const Radius.circular(20),
+          topRight: const Radius.circular(20),
+          bottomLeft: isUser ? const Radius.circular(20) : const Radius.circular(6),
+          bottomRight: isUser ? const Radius.circular(6) : const Radius.circular(20),
         ),
         border: Border.all(
           color: isUser
-              ? AppColors.earthBrown.withOpacity(0.2)
+              ? AppColors.earthBrown.withValues(alpha: 0.2)
               : message.isReading
-                  ? AppColors.ashramSaffron.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppColors.primaryOrange.withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -166,7 +166,7 @@ class ChatMessageBubble extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.auto_awesome,
-                    color: AppColors.ashramAccentGold,
+                    color: AppColors.primaryOrange,
                     size: 16,
                   ),
                   const SizedBox(width: 6),
@@ -175,7 +175,7 @@ class ChatMessageBubble extends StatelessWidget {
                     style: GoogleFonts.cormorantGaramond(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ashramAccentGold,
+                      color: AppColors.primaryOrange,
                     ),
                   ),
                 ],
@@ -189,7 +189,7 @@ class ChatMessageBubble extends StatelessWidget {
               message.content,
               style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 height: 1.5,
               ),
             ),
@@ -200,7 +200,7 @@ class ChatMessageBubble extends StatelessWidget {
               timeFormat.format(message.createdAt),
               style: GoogleFonts.outfit(
                 fontSize: 10,
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
               ),
             ),
           ),
@@ -224,7 +224,7 @@ class ChatMessageBubble extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: AppColors.ashramSaffron.withOpacity(0.3),
+                  color: AppColors.primaryOrange.withValues(alpha: 0.3),
                   width: 1,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -238,7 +238,7 @@ class ChatMessageBubble extends StatelessWidget {
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
                         height: 100,
-                        color: Colors.grey.withOpacity(0.2),
+                        color: Colors.grey.withValues(alpha: 0.2),
                         child: const Center(
                           child: Icon(Icons.broken_image, color: Colors.white54),
                         ),
@@ -251,7 +251,7 @@ class ChatMessageBubble extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha:0.6),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -259,7 +259,7 @@ class ChatMessageBubble extends StatelessWidget {
                         children: [
                           const Icon(
                             Icons.back_hand_outlined,
-                            color: AppColors.ashramAccentGold,
+                            color: AppColors.primaryOrange,
                             size: 14,
                           ),
                           const SizedBox(width: 4),
@@ -267,7 +267,7 @@ class ChatMessageBubble extends StatelessWidget {
                             'Palm Image',
                             style: GoogleFonts.outfit(
                               fontSize: 10,
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                             ),
                           ),
                         ],
@@ -285,7 +285,7 @@ class ChatMessageBubble extends StatelessWidget {
         height: 80,
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.2),
+          color: Colors.grey.withValues(alpha:0.2),
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(
@@ -322,7 +322,7 @@ class ChatMessageBubble extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha:0.6),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -361,13 +361,13 @@ class _QuickReplyChip extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppColors.ashramSaffron.withOpacity(0.2),
-                AppColors.ashramSaffron.withOpacity(0.1),
+                AppColors.primaryOrange.withValues(alpha: 0.2),
+                AppColors.deepPurple.withValues(alpha: 0.15),
               ],
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: AppColors.ashramSaffron.withOpacity(0.4),
+              color: Colors.white.withValues(alpha: 0.15),
               width: 1,
             ),
           ),
@@ -376,7 +376,7 @@ class _QuickReplyChip extends StatelessWidget {
             style: GoogleFonts.outfit(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: AppColors.ashramAccentGold,
+              color: AppColors.primaryOrange,
             ),
           ),
         ),

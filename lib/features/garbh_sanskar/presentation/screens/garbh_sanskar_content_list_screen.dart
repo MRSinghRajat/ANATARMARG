@@ -3,6 +3,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../data/models/garbh_sanskar_models.dart';
 import '../../data/repositories/garbh_sanskar_repository.dart';
 import '../providers/garbh_sanskar_providers.dart';
@@ -95,15 +97,27 @@ class GarbhSanskarContentListScreen extends ConsumerWidget {
                 content: item,
                 color: color,
                 isCompleted: isCompleted,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GarbhSanskarContentDetailScreen(
-                      content: item,
-                      color: color,
-                    ),
-                  ),
-                ),
+                onTap: () async {
+                  if (item.isPremium) {
+                    final isPremium =
+                        await PremiumService.instance.isPremium;
+                    if (!isPremium && context.mounted) {
+                      PaywallScreen.showAsBottomSheet(context);
+                      return;
+                    }
+                  }
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => GarbhSanskarContentDetailScreen(
+                          content: item,
+                          color: color,
+                        ),
+                      ),
+                    );
+                  }
+                },
               );
             },
           );
@@ -226,6 +240,8 @@ class _ContentListTile extends StatelessWidget {
             ),
             if (isCompleted)
               Icon(Icons.check_circle, color: color, size: 22)
+            else if (content.isPremium)
+              const Icon(Icons.lock, color: Color(0xFFD4AF37), size: 22)
             else
               Icon(Icons.play_circle_outline,
                   color: color.withOpacity(0.6), size: 22),

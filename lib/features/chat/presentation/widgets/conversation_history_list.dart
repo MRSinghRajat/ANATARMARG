@@ -43,7 +43,7 @@ class ConversationHistoryList extends StatelessWidget {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ashramSaffron,
+                backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -62,7 +62,7 @@ class ConversationHistoryList extends StatelessWidget {
               Icon(
                 Icons.history,
                 size: 16,
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha:0.5),
               ),
               const SizedBox(width: 8),
               Text(
@@ -70,7 +70,7 @@ class ConversationHistoryList extends StatelessWidget {
                 style: GoogleFonts.outfit(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha:0.5),
                   letterSpacing: 0.5,
                 ),
               ),
@@ -106,7 +106,7 @@ class ConversationHistoryList extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.ashramSaffron.withOpacity(0.1),
+              color: AppColors.primaryOrange.withValues(alpha:0.1),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -128,7 +128,7 @@ class ConversationHistoryList extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha:0.6),
               height: 1.5,
             ),
           ),
@@ -138,7 +138,7 @@ class ConversationHistoryList extends StatelessWidget {
             icon: const Icon(Icons.auto_awesome),
             label: const Text('Start Consultation'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.ashramSaffron,
+              backgroundColor: AppColors.primaryOrange,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(
@@ -176,10 +176,10 @@ class _ConversationCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha:0.05),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha:0.1),
               ),
             ),
             child: Row(
@@ -189,7 +189,7 @@ class _ConversationCard extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.ashramSaffron.withOpacity(0.15),
+                    color: AppColors.primaryOrange.withValues(alpha:0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
@@ -222,7 +222,7 @@ class _ConversationCard extends StatelessWidget {
                             conversation.formattedDate,
                             style: GoogleFonts.outfit(
                               fontSize: 11,
-                              color: Colors.white.withOpacity(0.4),
+                              color: Colors.white.withValues(alpha:0.4),
                             ),
                           ),
                         ],
@@ -234,7 +234,7 @@ class _ConversationCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           fontSize: 13,
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha:0.6),
                           height: 1.4,
                         ),
                       ),
@@ -248,7 +248,7 @@ class _ConversationCard extends StatelessWidget {
                   onPressed: onDelete,
                   icon: Icon(
                     Icons.delete_outline,
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha:0.3),
                     size: 20,
                   ),
                   tooltip: 'Delete',

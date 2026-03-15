@@ -1,7 +1,7 @@
 name: ashrae_playground
 description: Ashrae Playground - A copy of the original project.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -15,9 +15,6 @@ dependencies:
 
   # State Management
   flutter_riverpod: ^2.4.0
-  
-  # Animation
-  rive: ^0.11.17  # Updated for better compatibility
   
   # Authentication
   google_sign_in: ^6.1.0
@@ -38,8 +35,9 @@ dependencies:
   # Audio
   audioplayers: ^5.2.0
   
-  # UI
+  # UI – cached images stored compressed (max 1024px) with bounded cache
   cached_network_image: ^3.3.0
+  flutter_cache_manager: ^3.3.1
   intl: ^0.18.0
   fl_chart: ^0.65.0
   
@@ -76,22 +74,26 @@ dependencies:
   timezone: ^0.9.4
   flutter_timezone: ^3.0.1
 
+  # Location for day/night (Aangan sky)
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   
   assets:
     - assets/images/
+    - assets/images/deities/
     - assets/animations/
     - assets/sounds/
-    - assets/rive/
     - assets/fonts/
-    - assets/html/
-    - assets/models/
+    - assets/html/   # includes temple.glb for 3D Mandir (~64 MB)
     - .env
 
   fonts:
@@ -136,3 +138,9 @@ flutter:
           weight: 600
         - asset: assets/fonts/PlusJakartaSans-Bold.ttf
           weight: 700
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon.png"
+  min_sdk_android: 21

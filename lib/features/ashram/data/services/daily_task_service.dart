@@ -108,7 +108,7 @@ class DailyTaskService {
       karmaEarned: task.karmaReward,
       experienceEarned: _calculateExperience(task),
       newStreak: _currentProgress?.currentStreak ?? 0,
-      message: 'Task completed! +${task.coinReward} coins',
+      message: 'Task completed! +${task.coinReward} Karma',
     );
   }
 

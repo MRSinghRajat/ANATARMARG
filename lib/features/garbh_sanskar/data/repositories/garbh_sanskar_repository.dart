@@ -51,6 +51,21 @@ class GarbhSanskarRepository {
     }
   }
 
+  /// Delete the current user's pregnancy journey
+  Future<bool> deleteJourney() async {
+    if (_userId == null) return false;
+    try {
+      await _supabase
+          .from('user_pregnancy_journey')
+          .delete()
+          .eq('user_id', _userId!);
+      return true;
+    } catch (e) {
+      print('GarbhSanskarRepository.deleteJourney error: $e');
+      return false;
+    }
+  }
+
   /// Switch to postnatal mode after birth
   Future<bool> switchToPostnatal(DateTime birthDate, {String? babyName}) async {
     if (_userId == null) return false;

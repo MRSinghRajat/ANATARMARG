@@ -14,6 +14,7 @@ import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 import '../../../sanctuary/presentation/widgets/customizable_om_sanctuary.dart';
 import '../../../sanctuary/presentation/widgets/sanctuary_shop_sheet.dart';
 import '../../data/services/asset_server.dart';
+import '../../../../core/services/day_night_service.dart';
 
 /// Redesigned Aangan Screen with Customizable Om Sanctuary
 /// Features:
@@ -22,10 +23,13 @@ import '../../data/services/asset_server.dart';
 /// - One-way sync to Ashram screen
 class AanganScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBeginTap;
+  /// When true, this tab is visible; used to refetch notifications when user returns to Aangan.
+  final bool isActive;
 
   const AanganScreen({
     super.key,
     this.onBeginTap,
+    this.isActive = true,
   });
 
   @override
@@ -50,7 +54,7 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   // Loading state
   bool _customizationLoaded = false;
 
-  // Aatma (sanctuary) vs Mandir (3D) tab: 0 = Aatma, 1 = Mandir
+  // Aatma (sanctuary) vs Mandir (3D): 0 = Aatma, 1 = Mandir
   int _aanganTabIndex = 0;
 
   // Asset server + WebView for Mandir 3D (lazy-started on first Mandir tap)
@@ -58,18 +62,15 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   WebViewController? _mandirWebViewController;
   bool _mandirServerStarted = false;
 
-  // Aatma sheet
-  final DraggableScrollableController _aatmaSheetController =
-      DraggableScrollableController();
-  bool _isAatmaSheetMinimized = false;
+  /// Night at user location => stars + dark sky; day => normal sky, no stars.
+  bool? _isNight;
 
-  // Mandir sheet
-  final DraggableScrollableController _mandirSheetController =
-      DraggableScrollableController();
-  bool _isMandirSheetMinimized = false;
+  // Sheet minimized state (no controller to avoid "already attached" when rebuilt)
+  bool _isAatmaSheetMinimized = true;
+  bool _isMandirSheetMinimized = true;
 
   static const double _sheetMinSize = 0.065;
-  static const double _sheetMidSize = 0.40;
+  static const double _sheetMidSize = 0.45;
 
   SanctuaryCustomization get _displayCustomization =>
       _previewCustomization ??
@@ -79,82 +80,70 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   @override
   void initState() {
     super.initState();
-    _initializeServices();
+    _customizationLoaded = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeServices();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant AanganScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive && mounted) {
+      setState(() {
+        _isAatmaSheetMinimized = true;
+        _isMandirSheetMinimized = true;
+      });
+    }
   }
 
   @override
   void dispose() {
     _customizationSubscription?.cancel();
-    _aatmaSheetController.dispose();
-    _mandirSheetController.dispose();
     if (_mandirServerStarted && !kIsWeb) _assetServer.stop();
     super.dispose();
   }
 
   void _minimizeAatmaSheet() {
-    _aatmaSheetController.animateTo(
-      _sheetMinSize,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
     if (mounted) setState(() => _isAatmaSheetMinimized = true);
   }
 
   void _expandAatmaSheet() {
-    _aatmaSheetController.animateTo(
-      _sheetMidSize,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
     if (mounted) setState(() => _isAatmaSheetMinimized = false);
   }
 
   void _minimizeMandirSheet() {
-    _mandirSheetController.animateTo(
-      _sheetMinSize,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
     if (mounted) setState(() => _isMandirSheetMinimized = true);
   }
 
   void _expandMandirSheet() {
-    _mandirSheetController.animateTo(
-      _sheetMidSize,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
     if (mounted) setState(() => _isMandirSheetMinimized = false);
   }
 
   Future<void> _initializeServices() async {
-    await _coinService.initialize();
+    _coinService.initialize();
 
-    // Cancel any existing subscription
-    await _customizationSubscription?.cancel();
-
-    // Subscribe to customization changes BEFORE initializing
+    _customizationSubscription?.cancel();
     _customizationSubscription =
         _customizationService.customizationStream.listen((customization) {
       if (mounted) {
         setState(() {
           _appliedCustomization = customization;
           _customizationLoaded = true;
-          // Clear preview when a new customization is applied
           _previewCustomization = null;
           _isPreviewMode = false;
         });
       }
     });
 
-    // Wait for service to fully initialize (loads from Supabase)
     await _customizationService.ensureInitialized();
 
-    // Set initial customization immediately
+    final isNight = await DayNightService.instance.isNightTime();
     if (mounted) {
       setState(() {
         _appliedCustomization = _customizationService.currentCustomization;
         _customizationLoaded = true;
+        _isNight = isNight;
       });
     }
   }
@@ -188,16 +177,28 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   void _ensureMandirServer() {
     if (_mandirServerStarted || kIsWeb) return;
     _mandirServerStarted = true;
-    _assetServer.start().then((_) {
+    _assetServer.start().then((_) async {
       if (!mounted) return;
       final port = _assetServer.port;
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(const Color(0xFF0B1623))
-        ..loadRequest(Uri.parse('http://localhost:$port/'));
-      setState(() {
-        _mandirWebViewController = controller;
-      });
+      final controller = WebViewController();
+      controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      controller.setBackgroundColor(const Color(0xFF0B1623));
+      controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) async {
+            await _customizationService.ensureInitialized();
+            final ground = _customizationService.templeGroundType;
+            controller.runJavaScript("setFloor('${ground.name}',null)");
+            controller.runJavaScript("mood('midday',null)");
+          },
+        ),
+      );
+      controller.loadRequest(Uri.parse('http://localhost:$port/'));
+      if (mounted) {
+        setState(() {
+          _mandirWebViewController = controller;
+        });
+      }
     });
   }
 
@@ -217,13 +218,20 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   }
 
   Widget _buildAatmaLayout(double topHeight) {
+    // Run animations when Aangan (Aatma) tab is active; pause when user switches to another main tab.
+    final animationsEnabled = widget.isActive;
     return Stack(
       fit: StackFit.expand,
       children: [
-        const Positioned.fill(child: _AuroraBackground()),
-        const Positioned.fill(child: _AnimatedGeometryOverlay()),
-        const Positioned.fill(child: _AmbientParticles()),
-        const Positioned.fill(child: _FloatingLotusPetals()),
+        Positioned.fill(
+            child: _AuroraBackground(isNight: _isNight ?? true, animate: animationsEnabled)),
+        if (_isNight != false) ...[
+          Positioned.fill(child: _AnimatedGeometryOverlay(animate: animationsEnabled)),
+          Positioned.fill(child: _ShiningStars(animate: animationsEnabled)),
+          Positioned.fill(child: _FallingStars(animate: animationsEnabled)),
+        ],
+        Positioned.fill(child: _AmbientParticles(animate: animationsEnabled)),
+        Positioned.fill(child: _FloatingLotusPetals(animate: animationsEnabled)),
 
         Positioned(
           top: 0, left: 0, right: 0, height: topHeight,
@@ -237,16 +245,26 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
               const SizedBox(height: 16),
               Expanded(
                 child: _TouchRippleLayer(
+                  onTap: _minimizeAatmaSheet,
                   child: Stack(
-                    alignment: Alignment.center,
+                    fit: StackFit.expand,
                     children: [
-                      const _GodRays(),
-                      const _EnergyPulseWaves(),
-                      if (_customizationLoaded)
-                        CustomizableOmSanctuary(
-                          size: 280,
-                          customization: _displayCustomization,
+                      // Fill entire area so tap/ripple never shifts layout; content centered
+                      Positioned.fill(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            _GodRays(animate: animationsEnabled),
+                            _EnergyPulseWaves(animate: animationsEnabled),
+                            if (_customizationLoaded)
+                              CustomizableOmSanctuary(
+                                size: 280,
+                                customization: _displayCustomization,
+                                animate: animationsEnabled,
+                              ),
+                          ],
                         ),
+                      ),
                       if (_isPreviewMode)
                         Positioned(
                           top: 0,
@@ -298,12 +316,12 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
               return false;
             },
             child: DraggableScrollableSheet(
-              controller: _aatmaSheetController,
+              key: const ValueKey('aatma_sheet'),
               initialChildSize: _isAatmaSheetMinimized ? _sheetMinSize : _sheetMidSize,
               minChildSize: _sheetMinSize,
               maxChildSize: 0.95,
               snap: true,
-              snapSizes: const [0.065, 0.12, 0.40, 0.65, 0.95],
+              snapSizes: const [0.065, 0.12, 0.45, 0.65, 0.95],
               builder: (context, scrollController) {
                 return SanctuaryShopSheet(
                   scrollController: scrollController,
@@ -354,6 +372,11 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
           child: _buildAatmaMandirTabBar(),
         ),
 
+        // Tap on 3D area minimizes options sheet (translucent so WebView also receives events)
+        Positioned.fill(
+          child: _MandirTapToMinimizeOverlay(onMinimize: _minimizeMandirSheet),
+        ),
+
         // Mandir shop sheet
         Positioned.fill(
           child: NotificationListener<DraggableScrollableNotification>(
@@ -367,12 +390,12 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
               return false;
             },
             child: DraggableScrollableSheet(
-              controller: _mandirSheetController,
+              key: const ValueKey('mandir_sheet'),
               initialChildSize: _isMandirSheetMinimized ? _sheetMinSize : _sheetMidSize,
               minChildSize: _sheetMinSize,
               maxChildSize: 0.95,
               snap: true,
-              snapSizes: const [0.065, 0.12, 0.40, 0.65, 0.95],
+              snapSizes: const [0.065, 0.12, 0.45, 0.65, 0.95],
               builder: (context, scrollController) {
                 return SanctuaryShopSheet(
                   scrollController: scrollController,
@@ -381,6 +404,7 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
                   onMinimizeTap: _minimizeMandirSheet,
                   onExpandTap: _expandMandirSheet,
                   onMandirAction: _onMandirAction,
+                  onGroundTypeChange: (_) {},
                 );
               },
             ),
@@ -413,11 +437,56 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
             onTap: () {
               _ensureMandirServer();
               setState(() => _aanganTabIndex = 1);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Future.delayed(const Duration(milliseconds: 350), () {
+                  _onMandirAction("if(typeof mandirEntryZoom==='function')mandirEntryZoom();");
+                });
+              });
             },
           ),
         ],
       ),
     ));
+  }
+}
+
+/// Overlay that minimizes Mandir sheet on tap only; translucent so WebView still receives drags.
+class _MandirTapToMinimizeOverlay extends StatefulWidget {
+  final VoidCallback onMinimize;
+
+  const _MandirTapToMinimizeOverlay({required this.onMinimize});
+
+  @override
+  State<_MandirTapToMinimizeOverlay> createState() =>
+      _MandirTapToMinimizeOverlayState();
+}
+
+class _MandirTapToMinimizeOverlayState extends State<_MandirTapToMinimizeOverlay> {
+  Offset? _downPosition;
+  DateTime? _downTime;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (e) {
+        _downPosition = e.localPosition;
+        _downTime = DateTime.now();
+      },
+      onPointerUp: (e) {
+        if (_downPosition == null || _downTime == null) return;
+        final dist = (e.localPosition - _downPosition!).distance;
+        final elapsed = DateTime.now().difference(_downTime!).inMilliseconds;
+        if (dist < 18 && elapsed < 400) widget.onMinimize();
+        _downPosition = null;
+        _downTime = null;
+      },
+      onPointerCancel: (_) {
+        _downPosition = null;
+        _downTime = null;
+      },
+      child: const SizedBox.expand(),
+    );
   }
 }
 
@@ -486,7 +555,10 @@ class _TabBarTab extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AuroraBackground extends StatefulWidget {
-  const _AuroraBackground();
+  final bool isNight;
+  final bool animate;
+
+  const _AuroraBackground({this.isNight = true, this.animate = true});
 
   @override
   State<_AuroraBackground> createState() => _AuroraBackgroundState();
@@ -501,8 +573,25 @@ class _AuroraBackgroundState extends State<_AuroraBackground>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 20),
-    )..repeat();
+      duration: const Duration(seconds: 30),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _AuroraBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -518,7 +607,10 @@ class _AuroraBackgroundState extends State<_AuroraBackground>
         animation: _ctrl,
         builder: (context, _) {
           return CustomPaint(
-            painter: _AuroraPainter(progress: _ctrl.value),
+            painter: _AuroraPainter(
+              progress: _ctrl.value,
+              isNight: widget.isNight,
+            ),
           );
         },
       ),
@@ -528,10 +620,15 @@ class _AuroraBackgroundState extends State<_AuroraBackground>
 
 class _AuroraPainter extends CustomPainter {
   final double progress;
-  _AuroraPainter({required this.progress});
+  final bool isNight;
+  _AuroraPainter({required this.progress, this.isNight = true});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (!isNight) {
+      _paintDaySky(canvas, size);
+      return;
+    }
     final cx = size.width / 2;
     final cy = size.height * 0.35;
     final t = progress * 2 * pi;
@@ -542,8 +639,8 @@ class _AuroraPainter extends CustomPainter {
       offset1,
       size.width * 0.55,
       [
-        const Color(0xFF1B0A3C).withOpacity(0.6),
-        const Color(0xFF0D1B2A).withOpacity(0.0),
+        const Color(0xFF1B0A3C).withValues(alpha: 0.6),
+        const Color(0xFF0D1B2A).withValues(alpha: 0.0),
       ],
     );
     canvas.drawRect(
@@ -558,33 +655,281 @@ class _AuroraPainter extends CustomPainter {
       offset2,
       size.width * 0.4,
       [
-        const Color(0xFFD4AF37).withOpacity(0.06),
-        const Color(0xFF0B1623).withOpacity(0.0),
+        const Color(0xFFD4AF37).withValues(alpha: 0.06),
+        const Color(0xFF0B1623).withValues(alpha: 0.0),
       ],
     );
     canvas.drawRect(
         Rect.fromLTWH(0, 0, size.width, size.height), Paint()..shader = gradient2);
+  }
 
-    // Nebula cloud 3 — subtle teal accent, opposite motion
-    final offset3 =
-        Offset(cx + cos(t * 0.8 + 2) * 80, cy + sin(t * 0.6 + 1) * 50);
-    final gradient3 = ui.Gradient.radial(
-      offset3,
-      size.width * 0.35,
-      [
-        const Color(0xFF0A4D68).withOpacity(0.15),
-        const Color(0xFF0B1623).withOpacity(0.0),
-      ],
-    );
+  /// Day/morning: black background (same as night) so UI is consistent and text stays visible.
+  void _paintDaySky(Canvas canvas, Size size) {
     canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        Paint()
-          ..shader = gradient3
-          ..blendMode = BlendMode.screen);
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = const Color(0xFF0B1623),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _AuroraPainter old) => old.progress != progress;
+  bool shouldRepaint(covariant _AuroraPainter old) =>
+      old.progress != progress || old.isNight != isNight;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAYER: SHINING STARS — Twinkling starfield (Aatma section)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ShiningStars extends StatefulWidget {
+  final bool animate;
+
+  const _ShiningStars({this.animate = true});
+
+  @override
+  State<_ShiningStars> createState() => _ShiningStarsState();
+}
+
+class _ShiningStarsState extends State<_ShiningStars>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late List<_Star> _stars;
+  final _rng = Random(123);
+
+  @override
+  void initState() {
+    super.initState();
+    _stars = List.generate(55, (_) => _Star(_rng));
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShiningStars oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _ShiningStarsPainter(
+              stars: _stars,
+              time: _ctrl.value,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Star {
+  final double x;
+  final double y;
+  final double size;
+  final double phase;
+  final double twinkleSpeed;
+
+  _Star(Random rng)
+      : x = rng.nextDouble(),
+        y = rng.nextDouble() * 0.65,
+        size = 0.8 + rng.nextDouble() * 1.8,
+        phase = rng.nextDouble() * 2 * pi,
+        twinkleSpeed = 2 + rng.nextDouble() * 4;
+}
+
+class _ShiningStarsPainter extends CustomPainter {
+  final List<_Star> stars;
+  final double time;
+
+  _ShiningStarsPainter({required this.stars, required this.time});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final s in stars) {
+      final t = time * 2 * pi;
+      final twinkle = (sin(t * s.twinkleSpeed + s.phase) + 1) / 2;
+      final opacity = 0.2 + 0.6 * twinkle;
+      final paint = Paint()
+        ..color = Color.fromRGBO(255, 252, 240, opacity.clamp(0.0, 1.0));
+      canvas.drawCircle(
+        Offset(s.x * size.width, s.y * size.height),
+        s.size,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShiningStarsPainter old) => old.time != time;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAYER: FALLING STARS — Occasional shooting stars (Aatma section)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _FallingStars extends StatefulWidget {
+  final bool animate;
+
+  const _FallingStars({this.animate = true});
+
+  @override
+  State<_FallingStars> createState() => _FallingStarsState();
+}
+
+class _FallingStarsState extends State<_FallingStars>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late List<_ShootingStar> _shooters;
+  final _rng = Random(456);
+
+  @override
+  void initState() {
+    super.initState();
+    _shooters = List.generate(5, (_) => _ShootingStar(_rng));
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 18),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _FallingStars oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _FallingStarsPainter(
+              shooters: _shooters,
+              time: _ctrl.value,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ShootingStar {
+  final double startX;
+  final double startY;
+  final double angle; // direction of fall (radians)
+  final double length;
+  final double durationPhase; // 0..1 offset so not all fire at once
+  final double speed;
+
+  _ShootingStar(Random rng)
+      : startX = rng.nextDouble(),
+        startY = rng.nextDouble() * 0.35,
+        angle = pi / 2 + (rng.nextDouble() - 0.5) * 0.5,
+        length = 40 + rng.nextDouble() * 50,
+        durationPhase = rng.nextDouble(),
+        speed = 0.15 + rng.nextDouble() * 0.12;
+}
+
+class _FallingStarsPainter extends CustomPainter {
+  final List<_ShootingStar> shooters;
+  final double time;
+
+  _FallingStarsPainter({required this.shooters, required this.time});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxTravel = size.width + size.height;
+    const segments = 12;
+    for (final s in shooters) {
+      final cycle = (time + s.durationPhase) % 1.0;
+      if (cycle > 0.78) continue;
+      final t = cycle / 0.78;
+      final headX = (s.startX * size.width + cos(s.angle) * t * maxTravel);
+      final headY = (s.startY * size.height + sin(s.angle) * t * maxTravel);
+      final head = Offset(headX, headY);
+      final tail = Offset(
+        head.dx - cos(s.angle) * s.length,
+        head.dy - sin(s.angle) * s.length,
+      );
+      final fade = t < 0.08 ? t / 0.08 : (t > 0.92 ? (1 - t) / 0.08 : 1.0);
+      final opacity = (0.95 * fade).clamp(0.0, 1.0);
+      final glowOpacity = (0.4 * fade).clamp(0.0, 1.0);
+      for (int i = 0; i < segments; i++) {
+        final u0 = i / segments;
+        final u1 = (i + 1) / segments;
+        final p0 = Offset(
+          tail.dx + (head.dx - tail.dx) * u0,
+          tail.dy + (head.dy - tail.dy) * u0,
+        );
+        final p1 = Offset(
+          tail.dx + (head.dx - tail.dx) * u1,
+          tail.dy + (head.dy - tail.dy) * u1,
+        );
+        final w = 0.15 + 1.35 * u1;
+        final glowW = w + 4;
+        final paint = Paint()
+          ..color = Color.fromRGBO(255, 252, 245, opacity)
+          ..strokeWidth = w
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+        canvas.drawLine(p0, p1, paint);
+        final glowPaint = Paint()
+          ..color = Color.fromRGBO(255, 252, 245, glowOpacity * 0.5)
+          ..strokeWidth = glowW
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+        canvas.drawLine(p0, p1, glowPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FallingStarsPainter old) => old.time != time;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -592,7 +937,9 @@ class _AuroraPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AnimatedGeometryOverlay extends StatefulWidget {
-  const _AnimatedGeometryOverlay();
+  final bool animate;
+
+  const _AnimatedGeometryOverlay({this.animate = true});
 
   @override
   State<_AnimatedGeometryOverlay> createState() =>
@@ -609,7 +956,24 @@ class _AnimatedGeometryOverlayState extends State<_AnimatedGeometryOverlay>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 120), // Very slow rotation
-    )..repeat();
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedGeometryOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -652,10 +1016,10 @@ class _AnimatedGeometryPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5;
 
-    for (var i = 0; i < 4; i++) {
-      final radius = 100.0 + i * 50 + pulse * 8;
+    for (var i = 0; i < 3; i++) {
+      final radius = 100.0 + i * 55 + pulse * 6;
       circlePaint.color =
-          Color.fromRGBO(212, 175, 55, 0.04 - i * 0.008);
+          Color.fromRGBO(212, 175, 55, 0.04 - i * 0.01);
       canvas.drawCircle(Offset(cx, cy), radius, circlePaint);
     }
   }
@@ -670,7 +1034,9 @@ class _AnimatedGeometryPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AmbientParticles extends StatefulWidget {
-  const _AmbientParticles();
+  final bool animate;
+
+  const _AmbientParticles({this.animate = true});
 
   @override
   State<_AmbientParticles> createState() => _AmbientParticlesState();
@@ -685,11 +1051,28 @@ class _AmbientParticlesState extends State<_AmbientParticles>
   @override
   void initState() {
     super.initState();
-    _particles = List.generate(35, (_) => _DustParticle(_rng));
+    _particles = List.generate(14, (_) => _DustParticle(_rng));
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat();
+      duration: const Duration(seconds: 14),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _AmbientParticles oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -758,17 +1141,6 @@ class _AmbientParticlePainter extends CustomPainter {
         p.size,
         paint,
       );
-
-      // Tiny glow around larger particles
-      if (p.size > 2) {
-        paint.color = Color.fromRGBO(212, 175, 55, (alpha * 0.3).clamp(0.0, 1.0));
-        paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-        canvas.drawCircle(
-          Offset(px * size.width, py * size.height),
-          p.size * 1.5,
-          paint,
-        );
-      }
     }
   }
 
@@ -782,7 +1154,9 @@ class _AmbientParticlePainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _FloatingLotusPetals extends StatefulWidget {
-  const _FloatingLotusPetals();
+  final bool animate;
+
+  const _FloatingLotusPetals({this.animate = true});
 
   @override
   State<_FloatingLotusPetals> createState() => _FloatingLotusPetalsState();
@@ -797,11 +1171,28 @@ class _FloatingLotusPetalsState extends State<_FloatingLotusPetals>
   @override
   void initState() {
     super.initState();
-    _petals = List.generate(8, (_) => _LotusPetal(_rng));
+    _petals = List.generate(4, (_) => _LotusPetal(_rng));
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 15),
-    )..repeat();
+      duration: const Duration(seconds: 18),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _FloatingLotusPetals oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -903,7 +1294,9 @@ class _LotusPetalPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _GodRays extends StatefulWidget {
-  const _GodRays();
+  final bool animate;
+
+  const _GodRays({this.animate = true});
 
   @override
   State<_GodRays> createState() => _GodRaysState();
@@ -918,8 +1311,25 @@ class _GodRaysState extends State<_GodRays>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 8),
-    )..repeat();
+      duration: const Duration(seconds: 12),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _GodRays oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -954,9 +1364,9 @@ class _GodRaysPainter extends CustomPainter {
     final t = time * 2 * pi;
     final maxRadius = size.width * 0.8;
 
-    // Draw 12 light rays rotating slowly
-    for (var i = 0; i < 12; i++) {
-      final angle = (i / 12) * 2 * pi + t * 0.2;
+    // Draw 6 light rays (reduced for performance)
+    for (var i = 0; i < 6; i++) {
+      final angle = (i / 6) * 2 * pi + t * 0.2;
       final rayOpacity = 0.025 + 0.015 * sin(t * 2 + i * 0.8);
       final rayWidth = 0.08 + 0.03 * sin(t + i * 1.2);
 
@@ -1009,7 +1419,9 @@ class _GodRaysPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _EnergyPulseWaves extends StatefulWidget {
-  const _EnergyPulseWaves();
+  final bool animate;
+
+  const _EnergyPulseWaves({this.animate = true});
 
   @override
   State<_EnergyPulseWaves> createState() => _EnergyPulseWavesState();
@@ -1024,8 +1436,25 @@ class _EnergyPulseWavesState extends State<_EnergyPulseWaves>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 6),
-    )..repeat();
+      duration: const Duration(seconds: 8),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) {
+        _ctrl.repeat();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _EnergyPulseWaves oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      if (widget.animate) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -1086,7 +1515,9 @@ class _EnergyPulsePainter extends CustomPainter {
 
 class _TouchRippleLayer extends StatefulWidget {
   final Widget child;
-  const _TouchRippleLayer({required this.child});
+  final VoidCallback? onTap;
+
+  const _TouchRippleLayer({required this.child, this.onTap});
 
   @override
   State<_TouchRippleLayer> createState() => _TouchRippleLayerState();
@@ -1095,8 +1526,11 @@ class _TouchRippleLayer extends StatefulWidget {
 class _TouchRippleLayerState extends State<_TouchRippleLayer>
     with TickerProviderStateMixin {
   final List<_RippleData> _ripples = [];
+  final List<Offset> _trailPoints = [];
+  static const int _maxTrailPoints = 40;
 
   void _addRipple(Offset position) {
+    widget.onTap?.call();
     HapticFeedback.lightImpact();
     final ctrl = AnimationController(
       vsync: this,
@@ -1116,6 +1550,17 @@ class _TouchRippleLayerState extends State<_TouchRippleLayer>
     });
   }
 
+  void _addTrailPoint(Offset position) {
+    setState(() {
+      _trailPoints.add(position);
+      if (_trailPoints.length > _maxTrailPoints) _trailPoints.removeAt(0);
+    });
+  }
+
+  void _clearTrail() {
+    setState(() => _trailPoints.clear());
+  }
+
   @override
   void dispose() {
     for (final r in _ripples) {
@@ -1126,30 +1571,92 @@ class _TouchRippleLayerState extends State<_TouchRippleLayer>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTapDown: (details) => _addRipple(details.localPosition),
-      child: Stack(
-        children: [
-          widget.child,
-          if (_ripples.isNotEmpty)
-            Positioned.fill(
-              child: RepaintBoundary(
-                child: AnimatedBuilder(
-                  animation: Listenable.merge(
-                      _ripples.map((r) => r.controller).toList()),
-                  builder: (context, _) {
-                    return CustomPaint(
-                      painter: _TouchRipplePainter(ripples: _ripples),
-                    );
-                  },
+    return Listener(
+      onPointerDown: (e) {
+        _addRipple(e.localPosition);
+        _clearTrail();
+      },
+      onPointerMove: (e) => _addTrailPoint(e.localPosition),
+      onPointerUp: (_) => _clearTrail(),
+      onPointerCancel: (_) => _clearTrail(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTapDown: (details) => _addRipple(details.localPosition),
+        child: Stack(
+          children: [
+            widget.child,
+            if (_trailPoints.length > 1)
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _LightningTrailPainter(points: _trailPoints),
+                  ),
                 ),
               ),
-            ),
-        ],
+            if (_ripples.isNotEmpty)
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge(
+                        _ripples.map((r) => r.controller).toList()),
+                    builder: (context, _) {
+                      return CustomPaint(
+                        painter: _TouchRipplePainter(ripples: _ripples),
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _LightningTrailPainter extends CustomPainter {
+  final List<Offset> points;
+
+  _LightningTrailPainter({required this.points});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    const coreColor = Color(0xFFE8D48A);
+    const glowColor = Color(0xFFFFE066);
+    final n = points.length;
+
+    for (var i = 0; i < n - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final opacity = ((i + 1) / n).clamp(0.2, 1.0);
+      final strokeWidth = 1.5 + (opacity * 2.5);
+      final glowWidth = strokeWidth + 5;
+
+      canvas.drawLine(
+        p0,
+        p1,
+        Paint()
+          ..color = glowColor.withValues(alpha: opacity * 0.4)
+          ..strokeWidth = glowWidth
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke,
+      );
+      canvas.drawLine(
+        p0,
+        p1,
+        Paint()
+          ..color = coreColor.withValues(alpha: opacity * 0.95)
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LightningTrailPainter old) =>
+      old.points.length != points.length;
 }
 
 class _RippleData {

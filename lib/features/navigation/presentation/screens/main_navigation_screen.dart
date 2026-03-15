@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/daily_streak_service.dart';
+import '../../../../core/services/supabase_service.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
 import '../../../home/presentation/screens/aangan_screen.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
@@ -9,6 +11,11 @@ import '../../../ashram/presentation/screens/ashram_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../chat/presentation/screens/spiritual_chat_screen.dart';
 import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
+import '../../../streak/presentation/screens/day1_streak_screen.dart';
+import '../../../streak/presentation/screens/missed_you_streak_screen.dart';
+import '../../../streak/presentation/screens/commitment_streak_screen.dart';
+import '../../../streak/presentation/widgets/streak_count_dialog.dart';
+import '../../../../shared/services/coin_service.dart';
 
 class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
@@ -28,10 +35,74 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   /// Tracks which tabs have been visited so we build them lazily.
   final Set<int> _initializedTabs = {0};
 
+  /// Incremented each time user switches to AI Guru tab so animations replay.
+  int _chatTabAnimationSeed = 0;
+
   @override
   void initState() {
     super.initState();
     _customizationService.initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkDailyStreak());
+  }
+
+  Future<void> _checkDailyStreak() async {
+    if (!mounted) return;
+    final userId = SupabaseService().currentUserId;
+    await DailyStreakService.instance.init();
+    DailyStreakService.instance.setUserId(userId);
+    await CoinService().initialize();
+    final result = await DailyStreakService.instance.recordVisitAndGetPrompt();
+
+    if (!mounted) return;
+    switch (result.prompt) {
+      case DailyStreakPrompt.day1:
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => Day1StreakScreen(
+              onLetsGo: () => Navigator.of(context).pop(),
+              onSetGoal: result.showCommitmentAfter
+                  ? () => _openCommitmentThenPop(context)
+                  : null,
+            ),
+          ),
+        );
+        break;
+      case DailyStreakPrompt.missedYou:
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => MissedYouStreakScreen(
+              previousStreak: result.previousStreak,
+              onStartToday: () async {
+                await DailyStreakService.instance.restartStreakToday();
+                if (context.mounted) Navigator.of(context).pop();
+              },
+            ),
+          ),
+        );
+        break;
+      case DailyStreakPrompt.streakCount:
+        if (result.showStreakCelebration && result.currentStreak > 1) {
+          await StreakCountDialog.show(context, result.currentStreak);
+        }
+        break;
+      case DailyStreakPrompt.none:
+      case DailyStreakPrompt.commitment:
+        break;
+    }
+  }
+
+  Future<void> _openCommitmentThenPop(BuildContext context) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) => CommitmentStreakScreen(
+          onCommitted: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    );
+    if (context.mounted) Navigator.of(context).pop();
   }
 
   void _navigateTo(NavItem item) {
@@ -46,6 +117,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       _currentItem = item;
       _currentIndex = newIndex;
       _initializedTabs.add(newIndex);
+      if (newIndex == 1) _chatTabAnimationSeed++;
     });
   }
 
@@ -58,11 +130,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       case 0:
         child = AanganScreen(
           key: const ValueKey('aangan'),
+          isActive: _currentIndex == 0,
           onBeginTap: () => _navigateTo(NavItem.chat),
         );
         break;
       case 1:
-        child = const SpiritualChatScreen(key: ValueKey('chat'));
+        child = SpiritualChatScreen(
+          key: const ValueKey('chat'),
+          animationSeed: _chatTabAnimationSeed,
+        );
         break;
       case 2:
         child = const AshramScreen(key: ValueKey('ashram'));

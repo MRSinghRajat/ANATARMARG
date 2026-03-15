@@ -28,7 +28,7 @@ class ChatInputBar extends StatelessWidget {
         color: AppColors.ashramBackgroundDark,
         border: Border(
           top: BorderSide(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -38,10 +38,10 @@ class ChatInputBar extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.ashramBackgroundDark.withOpacity(0.8),
+                color: AppColors.ashramBackgroundDark.withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: AppColors.ashramSaffron.withOpacity(0.3),
+                  color: AppColors.primaryOrange.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -52,7 +52,7 @@ class ChatInputBar extends StatelessWidget {
                   fontSize: 14,
                   color: Colors.white,
                 ),
-                cursorColor: AppColors.ashramSaffron,
+                cursorColor: AppColors.primaryOrange,
                 cursorWidth: 2,
                 maxLines: 4,
                 minLines: 1,
@@ -61,7 +61,7 @@ class ChatInputBar extends StatelessWidget {
                   hintText: isLoading ? 'Please wait...' : 'Ask your question...',
                   hintStyle: GoogleFonts.outfit(
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.4),
+                    color: Colors.white.withValues(alpha: 0.4),
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
@@ -111,12 +111,12 @@ class _SendButton extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: isLoading
                   ? [
-                      Colors.grey.withOpacity(0.3),
-                      Colors.grey.withOpacity(0.2),
+                      Colors.grey.withValues(alpha: 0.3),
+                      Colors.grey.withValues(alpha: 0.2),
                     ]
                   : [
-                      AppColors.ashramSaffron,
-                      AppColors.ashramSaffron.withOpacity(0.8),
+                      AppColors.primaryOrange,
+                      AppColors.deepPurple.withValues(alpha: 0.6),
                     ],
             ),
             shape: BoxShape.circle,
@@ -124,7 +124,7 @@ class _SendButton extends StatelessWidget {
                 ? null
                 : [
                     BoxShadow(
-                      color: AppColors.ashramSaffron.withOpacity(0.3),
+                      color: AppColors.primaryOrange.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -138,7 +138,7 @@ class _SendButton extends StatelessWidget {
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.white.withOpacity(0.6),
+                        Colors.white.withValues(alpha: 0.6),
                       ),
                     ),
                   )

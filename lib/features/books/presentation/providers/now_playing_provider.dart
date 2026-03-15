@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -68,11 +70,17 @@ class NowPlayingNotifier extends StateNotifier<NowPlayingState?> {
 
   AudioPlayer? _player;
   bool _sourceLoaded = false;
+  VoidCallback? _onCompleteCallback;
 
   void _disposePlayer() {
     _player?.dispose();
     _player = null;
     _sourceLoaded = false;
+  }
+
+  /// Register a callback that fires when the current track finishes.
+  void setOnComplete(VoidCallback? callback) {
+    _onCompleteCallback = callback;
   }
 
   void _setupListeners(AudioPlayer player) {
@@ -94,6 +102,7 @@ class NowPlayingNotifier extends StateNotifier<NowPlayingState?> {
           isLoading: false,
         );
       }
+      _onCompleteCallback?.call();
     });
   }
 

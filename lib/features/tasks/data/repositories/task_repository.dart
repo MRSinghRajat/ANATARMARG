@@ -2,15 +2,12 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/daily_task_model.dart';
-import '../../../content/data/datasources/gpt_api_service.dart';
 import '../../../../core/constants/app_constants.dart';
 
 class TaskRepository {
   static final TaskRepository _instance = TaskRepository._internal();
   factory TaskRepository() => _instance;
   TaskRepository._internal();
-
-  final GPTApiService _gptService = GPTApiService();
   final _tasksController = StreamController<List<DailyTaskModel>>.broadcast();
 
   Stream<List<DailyTaskModel>> get tasksStream => _tasksController.stream;
@@ -57,29 +54,8 @@ class TaskRepository {
   }
 
   Future<DailyTaskModel> loadTaskVerse(DailyTaskModel task) async {
-    if (task.verse != null) {
-      return task;
-    }
-
-    // Generate verse from GPT
-    final verse = await _gptService.getVerse(
-      book: task.book ?? AppConstants.availableBooks[0],
-      chapter: null,
-      character: task.character,
-      random: true,
-    );
-
-    final updatedTask = task.copyWith(verse: verse);
-    
-    // Save updated task
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now();
-    final todayKey = 'tasks_${today.year}_${today.month}_${today.day}';
-    final tasks = await getDailyTasks();
-    final updatedTasks = tasks.map((t) => t.id == task.id ? updatedTask : t).toList();
-    await _saveTasks(updatedTasks, todayKey);
-
-    return updatedTask;
+    // No API: verse stays null for now; UI can show task without verse
+    return task;
   }
 
   Future<void> completeTask(String taskId) async {

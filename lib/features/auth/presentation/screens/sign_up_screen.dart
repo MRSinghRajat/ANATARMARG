@@ -67,7 +67,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
+      backgroundColor: AppColors.secondaryBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -82,16 +82,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   style: GoogleFonts.libreBaskerville(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.primaryText,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sign up with email',
+                  'Sign in or sign up with email (magic link)',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
-                    color: Colors.grey.shade400,
+                    color: AppColors.secondaryText,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -108,7 +108,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.primaryText,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -117,7 +117,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     'We sent a sign-in link to ${_emailController.text}. Open the link to sign in to your account.',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
-                      color: Colors.grey.shade300,
+                      color: AppColors.secondaryText,
                       height: 1.5,
                     ),
                     textAlign: TextAlign.center,
@@ -139,25 +139,25 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     decoration: InputDecoration(
                       labelText: 'Name',
                       hintText: 'Your name',
-                      prefixIcon: const Icon(Icons.person_outline, color: Colors.grey),
+                      prefixIcon: const Icon(Icons.person_outline, color: AppColors.secondaryText),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.06),
+                      fillColor: AppColors.cardBackground,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade700),
+                        borderSide: const BorderSide(color: AppColors.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade700),
+                        borderSide: const BorderSide(color: AppColors.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(color: AppColors.warmOrange, width: 2),
                       ),
-                      labelStyle: TextStyle(color: Colors.grey.shade400),
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                      labelStyle: const TextStyle(color: AppColors.secondaryText),
+                      hintStyle: const TextStyle(color: AppColors.tertiaryText),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppColors.primaryText),
                     textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 20),
@@ -168,25 +168,25 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     decoration: InputDecoration(
                       labelText: 'Email',
                       hintText: 'you@example.com',
-                      prefixIcon: const Icon(Icons.email_outlined, color: Colors.grey),
+                      prefixIcon: const Icon(Icons.email_outlined, color: AppColors.secondaryText),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.06),
+                      fillColor: AppColors.cardBackground,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade700),
+                        borderSide: const BorderSide(color: AppColors.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade700),
+                        borderSide: const BorderSide(color: AppColors.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(color: AppColors.warmOrange, width: 2),
                       ),
-                      labelStyle: TextStyle(color: Colors.grey.shade400),
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                      labelStyle: const TextStyle(color: AppColors.secondaryText),
+                      hintStyle: const TextStyle(color: AppColors.tertiaryText),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppColors.primaryText),
                     validator: (v) {
                       final s = v?.trim() ?? '';
                       if (s.isEmpty) return 'Enter your email';
@@ -232,10 +232,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: Text(
-                      'Back to login',
+                      'Already have an account? Sign in',
                       style: GoogleFonts.plusJakartaSans(
-                        color: Colors.grey.shade400,
-                        fontWeight: FontWeight.w500,
+                        color: AppColors.warmOrange,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),

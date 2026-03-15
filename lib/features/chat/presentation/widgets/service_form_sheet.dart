@@ -78,6 +78,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
   }
 
   Future<void> _pickImage(ServiceFormField field, ImageSource source) async {
+    if (!mounted) return;
     try {
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
@@ -86,13 +87,33 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         imageQuality: 85,
         requestFullMetadata: false,
       );
-      
-      if (pickedFile != null) {
-        final bytes = await pickedFile.readAsBytes();
-        final base64Image = base64Encode(bytes);
-        
+
+      if (pickedFile == null || !mounted) return;
+
+      List<int> bytes;
+      try {
+        bytes = await pickedFile.readAsBytes();
+      } catch (e) {
+        debugPrint('Error reading picked file: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not read image. Try another photo.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      final base64Image = base64Encode(bytes);
+
+      if (mounted) {
         setState(() {
-          _imageFiles[field] = File(pickedFile.path);
+          try {
+            _imageFiles[field] = File(pickedFile.path);
+          } catch (_) {
+            _imageFiles[field] = null;
+          }
           _imageBase64[field] = base64Image;
         });
       }
@@ -102,27 +123,34 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
 
       final errStr = e.toString();
       String errorMsg;
-      
-      if (errStr.contains('photo_access_denied') || errStr.contains('camera_access_denied')) {
-        errorMsg = 'Permission denied. Please enable camera access in Settings > Privacy > Camera.';
-      } else if (errStr.contains('channel-error') || errStr.contains('PlatformException')) {
+
+      if (errStr.contains('photo_access_denied') ||
+          errStr.contains('camera_access_denied')) {
+        errorMsg =
+            'Permission denied. Please enable camera access in Settings.';
+      } else if (errStr.contains('channel-error') ||
+          errStr.contains('PlatformException') ||
+          errStr.contains('Permission')) {
         if (source == ImageSource.camera) {
-          errorMsg = 'Camera not available. Try uploading from gallery instead.';
-          _pickImage(field, ImageSource.gallery);
+          errorMsg = 'Camera not available. Try gallery instead.';
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) await _pickImage(field, ImageSource.gallery);
           return;
         }
-        errorMsg = 'Could not access photos. Check permissions in Settings.';
+        errorMsg = 'Could not access photos. Check app permissions in Settings.';
       } else {
         errorMsg = 'Failed to pick image. Please try again.';
       }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(label: 'OK', onPressed: () {}),
-        ),
-      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(label: 'OK', onPressed: () {}),
+          ),
+        );
+      }
     }
   }
 
@@ -144,7 +172,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.ashramAccentGold,
+                  color: AppColors.primaryOrange,
                 ),
               ),
               const SizedBox(height: 8),
@@ -152,7 +180,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                 'For best results, take a clear photo of your open palm in good lighting',
                 style: GoogleFonts.outfit(
                   fontSize: 13,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha:0.6),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -165,7 +193,9 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                       label: 'Camera',
                       onTap: () {
                         Navigator.pop(context);
-                        _pickImage(field, ImageSource.camera);
+                        Future.delayed(const Duration(milliseconds: 350), () {
+                          if (mounted) _pickImage(field, ImageSource.camera);
+                        });
                       },
                     ),
                   ),
@@ -176,7 +206,9 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                       label: 'Gallery',
                       onTap: () {
                         Navigator.pop(context);
-                        _pickImage(field, ImageSource.gallery);
+                        Future.delayed(const Duration(milliseconds: 350), () {
+                          if (mounted) _pickImage(field, ImageSource.gallery);
+                        });
                       },
                     ),
                   ),
@@ -202,7 +234,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppColors.ashramSaffron,
+              primary: AppColors.primaryOrange,
               surface: AppColors.ashramBackgroundDark,
             ),
           ),
@@ -229,7 +261,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppColors.ashramSaffron,
+              primary: AppColors.primaryOrange,
               surface: AppColors.ashramBackgroundDark,
             ),
           ),
@@ -258,13 +290,18 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        color: AppColors.ashramBackgroundDark,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryOrange.withValues(alpha: 0.2),
+            AppColors.deepPurple.withValues(alpha: 0.2),
+          ],
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(
-          top: BorderSide(
-            color: AppColors.ashramSaffron.withOpacity(0.3),
-            width: 1,
-          ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
         ),
       ),
       child: Padding(
@@ -278,7 +315,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
               width: 48,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha:0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -297,7 +334,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                     style: GoogleFonts.cormorantGaramond(
                       fontSize: 24,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ashramAccentGold,
+                      color: AppColors.primaryOrange,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -305,7 +342,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                     'For your ${widget.service.title} reading',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
-                      color: Colors.white.withOpacity(0.6),
+                      color: Colors.white.withValues(alpha:0.6),
                     ),
                   ),
                 ],
@@ -332,7 +369,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                         child: ElevatedButton(
                           onPressed: _submitForm,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.ashramSaffron,
+                            backgroundColor: AppColors.primaryOrange,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -395,7 +432,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
           field.label,
           style: GoogleFonts.outfit(
             fontSize: 14,
-            color: AppColors.ashramAccentGold.withOpacity(0.8),
+            color: AppColors.primaryOrange.withValues(alpha:0.8),
           ),
         ),
         const SizedBox(height: 8),
@@ -405,12 +442,12 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
             height: 180,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha:0.05),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: hasImage 
-                    ? AppColors.ashramSaffron.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.1),
+                    ? AppColors.primaryOrange.withValues(alpha:0.5)
+                    : Colors.white.withValues(alpha:0.1),
                 width: hasImage ? 2 : 1,
               ),
             ),
@@ -434,7 +471,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
+                              color: Colors.black.withValues(alpha:0.6),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -452,7 +489,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.8),
+                            color: Colors.green.withValues(alpha:0.8),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -480,12 +517,12 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.ashramSaffron.withOpacity(0.1),
+                          color: AppColors.primaryOrange.withValues(alpha:0.1),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.back_hand_outlined,
-                          color: AppColors.ashramSaffron,
+                          color: AppColors.primaryOrange,
                           size: 40,
                         ),
                       ),
@@ -494,7 +531,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                         'Tap to upload palm image',
                         style: GoogleFonts.outfit(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha:0.7),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -502,7 +539,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                         field.hint,
                         style: GoogleFonts.outfit(
                           fontSize: 12,
-                          color: Colors.white.withOpacity(0.4),
+                          color: Colors.white.withValues(alpha:0.4),
                         ),
                       ),
                     ],
@@ -520,7 +557,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         fontSize: 14,
         color: Colors.white,
       ),
-      cursorColor: AppColors.ashramSaffron,
+      cursorColor: AppColors.primaryOrange,
       decoration: _inputDecoration(field),
       validator: (value) {
         if (value == null || value.isEmpty) {
@@ -538,7 +575,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         fontSize: 14,
         color: Colors.white,
       ),
-      cursorColor: AppColors.ashramSaffron,
+      cursorColor: AppColors.primaryOrange,
       maxLines: 4,
       minLines: 3,
       decoration: _inputDecoration(field),
@@ -558,13 +595,13 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         fontSize: 14,
         color: Colors.white,
       ),
-      cursorColor: AppColors.ashramSaffron,
+      cursorColor: AppColors.primaryOrange,
       readOnly: true,
       onTap: () => _selectDate(field),
       decoration: _inputDecoration(field).copyWith(
         suffixIcon: Icon(
           Icons.calendar_today,
-          color: AppColors.ashramSaffron.withOpacity(0.7),
+          color: AppColors.primaryOrange.withValues(alpha:0.7),
           size: 20,
         ),
       ),
@@ -584,13 +621,13 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         fontSize: 14,
         color: Colors.white,
       ),
-      cursorColor: AppColors.ashramSaffron,
+      cursorColor: AppColors.primaryOrange,
       readOnly: true,
       onTap: () => _selectTime(field),
       decoration: _inputDecoration(field).copyWith(
         suffixIcon: Icon(
           Icons.access_time,
-          color: AppColors.ashramSaffron.withOpacity(0.7),
+          color: AppColors.primaryOrange.withValues(alpha:0.7),
           size: 20,
         ),
       ),
@@ -609,34 +646,34 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
       hintText: field.hint,
       labelStyle: GoogleFonts.outfit(
         fontSize: 14,
-        color: AppColors.ashramAccentGold.withOpacity(0.9),
+        color: AppColors.primaryOrange.withValues(alpha:0.9),
       ),
       hintStyle: GoogleFonts.outfit(
         fontSize: 13,
-        color: Colors.white.withOpacity(0.4),
+        color: Colors.white.withValues(alpha:0.4),
       ),
       floatingLabelStyle: GoogleFonts.outfit(
         fontSize: 14,
-        color: AppColors.ashramSaffron,
+        color: AppColors.primaryOrange,
       ),
       filled: true,
-      fillColor: AppColors.ashramBackgroundDark.withOpacity(0.8),
+      fillColor: AppColors.ashramBackgroundDark.withValues(alpha:0.8),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha:0.1),
         ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha:0.1),
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: AppColors.ashramSaffron.withOpacity(0.5),
+          color: AppColors.primaryOrange.withValues(alpha:0.5),
           width: 2,
         ),
       ),
@@ -677,17 +714,17 @@ class _ImageSourceButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha:0.05),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppColors.ashramSaffron.withOpacity(0.3),
+            color: AppColors.primaryOrange.withValues(alpha:0.3),
           ),
         ),
         child: Column(
           children: [
             Icon(
               icon,
-              color: AppColors.ashramSaffron,
+              color: AppColors.primaryOrange,
               size: 32,
             ),
             const SizedBox(height: 8),
@@ -695,7 +732,7 @@ class _ImageSourceButton extends StatelessWidget {
               label,
               style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha:0.8),
               ),
             ),
           ],

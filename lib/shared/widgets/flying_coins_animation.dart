@@ -8,7 +8,8 @@ class FlyingCoinsAnimation {
   /// GlobalKey for the coin counter widget at the top of the screen
   static GlobalKey? coinCounterKey;
 
-  /// Show flying coins animation from a source position to the coin counter
+  /// Show flying coins animation from a source position to the coin counter.
+  /// Uses overlay reference so it stays safe after route pop (no deactivated context lookup).
   static Future<void> show(
     BuildContext context, {
     required int amount,
@@ -50,10 +51,10 @@ class FlyingCoinsAnimation {
       endOffset = Offset(mediaQuery.size.width - 60, topPadding + 50);
     }
 
-    // Create overlay entries for multiple coins
+    // Create overlay entries for multiple coins (pass overlay ref so callback doesn't use context)
     final entries = <OverlayEntry>[];
     final numberOfCoins = min(amount, 8); // Max 8 coins for performance
-    
+
     for (int i = 0; i < numberOfCoins; i++) {
       late OverlayEntry entry;
       entry = OverlayEntry(
@@ -66,10 +67,10 @@ class FlyingCoinsAnimation {
           onComplete: () {
             entry.remove();
             entries.remove(entry);
-            
-            // When last coin arrives, show merge effect and call completion
+
+            // When last coin arrives, show merge effect using overlay ref (not context)
             if (entries.isEmpty) {
-              _showMergeEffect(context, endOffset, amount);
+              _showMergeEffect(overlay, endOffset, amount);
               onComplete?.call();
             }
           },
@@ -91,11 +92,10 @@ class FlyingCoinsAnimation {
     overlay.insert(amountEntry);
   }
 
-  /// Show merge/burst effect at the coin counter
-  static void _showMergeEffect(BuildContext context, Offset position, int amount) {
+  /// Show merge/burst effect at the coin counter. Uses overlay ref to avoid deactivated context.
+  static void _showMergeEffect(OverlayState overlay, Offset position, int amount) {
     HapticFeedback.lightImpact();
-    final overlay = Overlay.of(context);
-    
+
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (ctx) => _MergeEffect(

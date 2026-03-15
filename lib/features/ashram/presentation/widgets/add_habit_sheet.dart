@@ -59,19 +59,23 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.cardDark,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.cardDark,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: Form(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,6 +217,7 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
           ),
         ),
       ),
+    ),
     );
   }
 

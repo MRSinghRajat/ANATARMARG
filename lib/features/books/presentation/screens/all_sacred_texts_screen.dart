@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../providers/book_providers.dart';
 import 'sacred_text_reader_screen.dart';
@@ -115,9 +117,18 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.charcoalDark,
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(sacredTextsProvider);
+          ref.invalidate(featuredSacredTextsProvider);
+        },
+        color: AppColors.matteGold,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
+          slivers: [
           _buildAppBar(),
           SliverToBoxAdapter(child: _buildSearchBar()),
           SliverToBoxAdapter(child: _buildFilterChips(types, deities)),
@@ -133,9 +144,11 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.menu_book,
-                        size: 56,
-                        color: AppColors.matteGold.withOpacity(0.3)),
+                    SizedBox(
+                      width: 160,
+                      height: 160,
+                      child: const AntarmargPlaceholder(compact: true),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No texts match your filters',
@@ -175,6 +188,7 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
+        ),
       ),
     );
   }
@@ -502,13 +516,13 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Cover image or deity gradient background
+                // Cover image or deity gradient background (cached for fast tab switching)
                 if (hasCoverImage)
-                  Image.network(
-                    coverUrl,
+                  AppNetworkImage(
+                    imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        _buildDeityGradientCover(deityName, deityColors),
+                    cacheFailure: true,
+                    fallback: _buildDeityGradientCover(deityName, deityColors),
                   )
                 else
                   _buildDeityGradientCover(deityName, deityColors),
@@ -621,8 +635,9 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
     );
   }
 
-  /// Deity gradient background with Om watermark and deity name
+  /// Deity gradient background with Om watermark and deity name. Shows "Antar मार्ग" when empty.
   Widget _buildDeityGradientCover(String deityName, List<Color> colors) {
+    final displayName = deityName.isEmpty ? 'Antar मार्ग' : deityName;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -679,7 +694,7 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
                   ],
                 ).createShader(bounds),
                 child: Text(
-                  deityName,
+                  displayName,
                   style: GoogleFonts.crimsonPro(
                     fontSize: 30,
                     fontWeight: FontWeight.w900,

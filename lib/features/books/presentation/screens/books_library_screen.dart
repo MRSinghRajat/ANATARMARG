@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/book_model.dart';
 import '../providers/book_providers.dart';
 import '../providers/now_playing_provider.dart';
@@ -17,6 +20,14 @@ import 'sacred_text_reader_screen.dart';
 import 'sacred_story_reader_screen.dart';
 import 'all_sacred_stories_screen.dart';
 import 'all_sacred_texts_screen.dart';
+import '../../data/services/granthalaya_recent_service.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../../shared/widgets/upgrade_pro_banner.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/app_router.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
+import '../../../journey/data/models/journey_models.dart';
+import '../../../journey/presentation/providers/journey_providers.dart';
 
 /// Granthalaya - Academic Dashboard. Sacred Texts on top, Foundation & Concepts, Study Resources.
 class BooksLibraryScreen extends ConsumerStatefulWidget {
@@ -30,7 +41,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   final ScrollController _scrollController = ScrollController();
   List<BookModel> _books = [];
   bool _isLoading = true;
-  bool _readMode = true;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
+  /// 0 = Read, 1 = Listen, 2 = Journey, 3 = Video
+  int _granthalayaTabIndex = 0;
   int _sacredLibraryCategoryIndex = 0;
   // Audio (Listen mode) - mini player driven by nowPlayingProvider
 
@@ -85,13 +99,21 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   void initState() {
     super.initState();
     _loadBooks();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(granthalayaReadModeProvider.notifier).state = _readMode;
+      ref.read(granthalayaReadModeProvider.notifier).state =
+          _granthalayaTabIndex == 0;
     });
   }
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -106,6 +128,25 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       if (mounted) setState(() => _books = repo.allBooks);
     }
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  /// Pull-to-refresh: reload books and invalidate all Granthalaya providers so every section refetches.
+  Future<void> _onGranthalayaRefresh() async {
+    await _loadBooks();
+    if (!mounted) return;
+    ref.invalidate(sacredTextsProvider);
+    ref.invalidate(featuredSacredTextsProvider);
+    ref.invalidate(sacredStoriesCollectionProvider);
+    ref.invalidate(sacredStoryCategoriesProvider);
+    ref.invalidate(deitiesProvider);
+    ref.invalidate(chantsProvider);
+    ref.invalidate(resourceCardsProvider);
+    ref.invalidate(deepDiveProvider);
+    ref.invalidate(audioCategoriesProvider);
+    ref.invalidate(audioInProgressProvider);
+    ref.invalidate(userAudioProgressProvider);
+    ref.invalidate(audioWisdomCardsProvider);
+    ref.invalidate(granthalayaVideosProvider);
   }
 
   String _getBookTag(BookModel book) {
@@ -134,7 +175,13 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepAsh,
       body: SafeArea(
-        child: _readMode ? _buildReadContent() : _buildListenContent(),
+        child: _granthalayaTabIndex == 0
+            ? _buildReadContent()
+            : _granthalayaTabIndex == 1
+                ? _buildListenContent()
+                : _granthalayaTabIndex == 2
+                    ? _buildJourneyContent()
+                    : _buildVideoContent(),
       ),
     );
   }
@@ -148,7 +195,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   Widget _buildReadContent() {
     return RefreshIndicator(
-      onRefresh: _loadBooks,
+      onRefresh: _onGranthalayaRefresh,
       color: AppColors.matteGold,
       child: CustomScrollView(
         controller: _scrollController,
@@ -158,11 +205,16 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         slivers: [
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
           SliverToBoxAdapter(child: _buildModeToggle()),
-          SliverToBoxAdapter(child: _buildInProgressSection()),
+          if (!_isPremium)
+            const SliverToBoxAdapter(
+              child: UpgradeProBanner(
+                message: 'Read all chapters, stories & audio',
+              ),
+            ),
+          SliverToBoxAdapter(child: _buildLastViewedSection()),
           SliverToBoxAdapter(child: _buildSacredTextsSection()),
           SliverToBoxAdapter(child: _buildSacredLibrarySection()),
           SliverToBoxAdapter(child: _buildSacredStoriesSection()),
-          SliverToBoxAdapter(child: _buildChantsSection()),
           SliverToBoxAdapter(child: _buildExploreDeitiesSection()),
           SliverToBoxAdapter(child: _buildResourceLibrarySection()),
           SliverToBoxAdapter(child: _buildDeepDiveSection()),
@@ -187,87 +239,1087 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             Expanded(
               child: GestureDetector(
                 onTap: () {
-                  setState(() => _readMode = false);
-                  ref.read(granthalayaReadModeProvider.notifier).state = false;
+                  setState(() => _granthalayaTabIndex = 0);
+                  ref.read(granthalayaReadModeProvider.notifier).state = true;
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _readMode
-                        ? Colors.transparent
-                        : AppColors.matteGold.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: !_readMode
-                        ? Border.all(
-                            color: AppColors.matteGold.withOpacity(0.2))
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.headphones,
-                          size: 18,
-                          color: _readMode
-                              ? AppColors.zinc500
-                              : AppColors.matteGold),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Listen',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight:
-                              _readMode ? FontWeight.w500 : FontWeight.bold,
-                          color: _readMode
-                              ? AppColors.zinc500
-                              : AppColors.matteGold,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _buildModeToggleSegment(
+                  index: 0,
+                  icon: Icons.auto_stories,
+                  label: 'Read',
                 ),
               ),
             ),
             Expanded(
               child: GestureDetector(
                 onTap: () {
-                  setState(() => _readMode = true);
-                  ref.read(granthalayaReadModeProvider.notifier).state = true;
+                  setState(() => _granthalayaTabIndex = 1);
+                  ref.read(granthalayaReadModeProvider.notifier).state = false;
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _readMode
-                        ? AppColors.matteGold.withOpacity(0.1)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    border: _readMode
-                        ? Border.all(
-                            color: AppColors.matteGold.withOpacity(0.2))
-                        : null,
+                child: _buildModeToggleSegment(
+                  index: 1,
+                  icon: Icons.headphones,
+                  label: 'Listen',
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _granthalayaTabIndex = 2),
+                child: _buildModeToggleSegment(
+                  index: 2,
+                  icon: Icons.route,
+                  label: 'Journey',
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _granthalayaTabIndex = 3),
+                child: _buildModeToggleSegment(
+                  index: 3,
+                  icon: Icons.video_library,
+                  label: 'Video',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeToggleSegment({
+    required int index,
+    required IconData icon,
+    required String label,
+  }) {
+    final selected = _granthalayaTabIndex == index;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.matteGold.withOpacity(0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: selected
+            ? Border.all(color: AppColors.matteGold.withOpacity(0.2))
+            : null,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: selected ? AppColors.matteGold : AppColors.zinc500),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+              color: selected ? AppColors.matteGold : AppColors.zinc500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJourneyContent() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(activeJourneyProvider);
+        ref.invalidate(allUserJourneysProvider);
+        ref.invalidate(journeyTypesProvider);
+        ref.invalidate(journeyTypeMemberCountsProvider);
+      },
+      color: AppColors.journeyGold,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        slivers: [
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          SliverToBoxAdapter(child: _buildModeToggle()),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Our Spiritual Circle',
+                    style: GoogleFonts.cormorantGaramond(
+                      fontSize: 28,
+                      color: const Color(0xFFF5F0E8),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.auto_stories,
-                          size: 18,
-                          color: _readMode
-                              ? AppColors.matteGold
-                              : AppColors.zinc500),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Read Mode',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight:
-                              _readMode ? FontWeight.bold : FontWeight.w500,
-                          color: _readMode
-                              ? AppColors.matteGold
-                              : AppColors.zinc500,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sacred journeys for every stage of life',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.zinc500,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          Consumer(
+            builder: (context, ref, _) {
+              final allJourneysAsync = ref.watch(allUserJourneysProvider);
+              final typesAsync = ref.watch(journeyTypesProvider);
+              final countsAsync = ref.watch(journeyTypeMemberCountsProvider);
+              if (typesAsync.isLoading && allJourneysAsync.isLoading) {
+                return SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.journeyGold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Loading your journeys…',
+                          style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              if (typesAsync.hasError) {
+                return SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.cloud_off_rounded, size: 48, color: AppColors.zinc500.withValues(alpha: 0.8)),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Could not load journeys',
+                          style: GoogleFonts.inter(color: AppColors.zinc400, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: () {
+                            ref.invalidate(journeyTypesProvider);
+                            ref.invalidate(allUserJourneysProvider);
+                            ref.invalidate(journeyTypeMemberCountsProvider);
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Retry'),
+                          style: TextButton.styleFrom(foregroundColor: AppColors.journeyGold),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final allJourneys = ref.watch(allUserJourneysProvider).valueOrNull ?? [];
+              final activeJourneys = allJourneys.where((j) => j.isActive).toList();
+              final types = typesAsync.valueOrNull ?? [];
+              final memberCounts = countsAsync.valueOrNull ?? {};
+              final pausedJourneys = allJourneys.where((j) => j.isPaused).toList();
+              final startTypes = types.where((t) => !t.isComingSoon).toList();
+              final comingSoonTypes = types.where((t) => t.isComingSoon).toList();
+              final allUserJourneysForProgress = [...activeJourneys, ...pausedJourneys];
+              return SliverList(
+                delegate: SliverChildListDelegate([
+                  if (allUserJourneysForProgress.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'CONTINUING TOGETHER',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.zinc500,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Text(
+                            'Global Progress',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.journeyPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 280,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: allUserJourneysForProgress.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final uj = allUserJourneysForProgress[index];
+                          return SizedBox(
+                            width: 300,
+                            child: uj.isActive
+                                ? _buildJourneyContinuingCard(ref, uj, types, memberCounts, compact: true)
+                                : _buildJourneyPausedCard(ref, uj, types, compact: true),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'POPULAR IN YOUR CIRCLE',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.zinc400,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ...startTypes.asMap().entries.map((e) => _buildJourneyPopularCard(ref, e.value, memberCounts, isTrending: e.key == 0, showPill: e.key == 1)),
+                  ...comingSoonTypes.map((t) => _buildJourneyPopularCard(ref, t, memberCounts, isComingSoon: true)),
+                  if (types.isEmpty && !typesAsync.isLoading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 48),
+                      child: Center(
+                        child: Text(
+                          'No journeys available yet',
+                          style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 14),
                         ),
                       ),
+                    ),
+                  const SizedBox(height: 120),
+                ]),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Video tab: YouTube videos from your channel (curated in Supabase granthalaya_videos).
+  Widget _buildVideoContent() {
+    return Container(
+      color: AppColors.deepAsh,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          _buildModeToggle(),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Video',
+                  style: GoogleFonts.cormorantGaramond(
+                    fontSize: 28,
+                    color: AppColors.zinc100,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Videos from our YouTube channel',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: AppColors.zinc500,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final videosAsync = ref.watch(granthalayaVideosProvider);
+                return videosAsync.when(
+                  data: (videos) {
+                    if (videos.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.video_library_outlined, size: 64, color: AppColors.zinc500),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No videos yet',
+                                style: GoogleFonts.inter(color: AppColors.zinc400, fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Add videos in Supabase granthalaya_videos table to show them here.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        ref.invalidate(granthalayaVideosProvider);
+                      },
+                      color: AppColors.matteGold,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                        itemCount: videos.length,
+                        itemBuilder: (context, index) {
+                          final video = videos[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _buildVideoCard(video),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  loading: () => Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.matteGold),
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Loading videos…', style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  error: (err, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline, size: 48, color: AppColors.zinc500),
+                          const SizedBox(height: 12),
+                          Text('Could not load videos', style: GoogleFonts.inter(color: AppColors.zinc400, fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Full-width vertical list card: thumbnail on left, title and duration on right.
+  /// Fixed height (102) so list item has definite size and avoids SliverMultiBoxAdaptor layout errors.
+  Widget _buildVideoCard(GranthalayaVideoModel video) {
+    const cardHeight = 102.0;
+    return SizedBox(
+      height: cardHeight,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            final url = video.youtubeWatchUrl;
+            if (url.isEmpty) return;
+            final uri = Uri.tryParse(url);
+            if (uri != null && await url_launcher.canLaunchUrl(uri)) {
+              await url_launcher.launchUrl(uri, mode: url_launcher.LaunchMode.externalApplication);
+            }
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: AppColors.manuscriptDark.withOpacity(0.6),
+              border: Border.all(color: AppColors.matteGold.withOpacity(0.2)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
+                  child: SizedBox(
+                    width: 180,
+                    height: cardHeight,
+                    child: AppNetworkImage(
+                      imageUrl: video.effectiveThumbnailUrl,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          video.title.isNotEmpty ? video.title : 'Video',
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.zinc100,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (video.durationFormatted.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(Icons.access_time, size: 14, color: AppColors.zinc500),
+                              const SizedBox(width: 6),
+                              Text(
+                                video.durationFormatted,
+                                style: GoogleFonts.inter(fontSize: 13, color: AppColors.zinc500),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Icon(Icons.play_circle_outline, size: 32, color: AppColors.matteGold.withOpacity(0.8)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Big "Continuing Together" card: active journey with Joined by X, progress, Continue CTA.
+  /// [compact] when true uses tighter padding for horizontal list to avoid overflow.
+  Widget _buildJourneyContinuingCard(WidgetRef ref, UserJourney active, List<JourneyType> types, Map<String, int> memberCounts, {bool compact = false}) {
+    final typeList = types.where((t) => t.id == active.journeyTypeId).toList();
+    final journeyType = typeList.isNotEmpty ? typeList.first : (types.isNotEmpty ? types.first : null);
+    final phaseAsync = ref.watch(currentPhaseProvider(active.id));
+    final tasksAsync = ref.watch(todaysJourneyTasksProvider(active.id));
+    final tasks = tasksAsync.valueOrNull ?? [];
+    final done = tasks.where((t) => t.isCompleted).length;
+    final total = tasks.length > 0 ? tasks.length : 1;
+    final label = _journeyContextLabel(active, phaseAsync.valueOrNull);
+    final memberCount = memberCounts[active.journeyTypeId] ?? 0;
+    final joinedText = memberCount >= 1000
+        ? 'Joined by ${(memberCount / 1000).toStringAsFixed(1)}k+'
+        : memberCount > 0
+            ? 'Joined by $memberCount'
+            : null;
+    // Black–gold gradient theme for Journey progress cards
+    const gradientStart = AppColors.journeyBlack;
+    const gradientEnd = AppColors.journeyGold;
+    final outerPadding = compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20);
+    final innerPadding = compact ? const EdgeInsets.all(12) : const EdgeInsets.all(20);
+    return Padding(
+      padding: outerPadding,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.of(context).pushNamed(AppRouter.journeyHome, arguments: {'userJourneyId': active.id}),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: const LinearGradient(
+                colors: [
+                  AppColors.journeyBlack,
+                  Color(0xFF1A1510),
+                  AppColors.journeyGold,
+                ],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.35), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: innerPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.4), width: 2),
+                            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                          ),
+                          child: _journeyCardImageOrPlaceholder(
+                            imageUrl: journeyType?.cardImageUrl,
+                            placeholder: _journeyPlaceholderCircleSmall(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                journeyType?.title ?? 'Journey',
+                                style: GoogleFonts.inter(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (joinedText != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  joinedText,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.journeyGold.withValues(alpha: 0.95),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'Community Milestone: ${(total > 0 ? (done / total * 100).round() : 0)}% Complete',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (label != null) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    label.split(' · ').first,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.journeyGold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: Container(
+                              height: 8,
+                              decoration: BoxDecoration(
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.journeyGold.withValues(alpha: 0.5),
+                                    blurRadius: 12,
+                                    spreadRadius: 0,
+                                  ),
+                                ],
+                              ),
+                              child: LinearProgressIndicator(
+                                value: total > 0 ? (done / total) : 0,
+                                minHeight: 8,
+                                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.journeyGold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _buildAvatarStack(const ['JD', 'MK', 'AS'], overflow: 42),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  memberCount > 0
+                                      ? '${(memberCount / 1000).toStringAsFixed(1)}k+ people active now'
+                                      : '$done of $total done today',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.journeyGold,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.journeyGold.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Continue Journey',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.journeyBlack,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_rounded, size: 20, color: AppColors.journeyBlack),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Map journey type icon name to Material icon for parity with design (child_care, face, book, etc.).
+  static final Map<String, IconData> _journeyIconMap = {
+    'child_care': Icons.child_care,
+    'face': Icons.face,
+    'face_2': Icons.face_2,
+    'menu_book': Icons.menu_book,
+    'book': Icons.menu_book,
+    'auto_stories': Icons.auto_stories,
+    'self_improvement': Icons.self_improvement,
+    'psychology': Icons.psychology,
+    'eco': Icons.eco,
+    'spa': Icons.spa,
+  };
+
+  Widget _journeyIconWidget(JourneyType t, {double size = 24, Color? color}) {
+    final name = (t.icon ?? '').toString().trim().toLowerCase();
+    final iconData = name.isNotEmpty ? _journeyIconMap[name] : null;
+    if (iconData != null) {
+      return Icon(iconData, size: size, color: color ?? AppColors.journeyPrimary);
+    }
+    return Text(t.icon ?? '🛤️', style: TextStyle(fontSize: size));
+  }
+
+  /// Avatar stack like HTML: overlapping circles with initials, optional +N overflow.
+  /// Uses Stack + Positioned to overlap (SizedBox with negative width is invalid in Flutter).
+  Widget _buildAvatarStack(List<String> initials, {int? overflow}) {
+    const size = 20.0;
+    const overlap = 6.0;
+    const step = size - overlap;
+    const colors = [
+      Color(0xFF60A5FA),
+      Color(0xFFF472B6),
+      Color(0xFF34D399),
+      Color(0xFFFF9933),
+    ];
+    final count = initials.length + (overflow != null ? 1 : 0);
+    final totalWidth = size + (count - 1) * step;
+    return SizedBox(
+      width: totalWidth,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (int i = 0; i < initials.length; i++)
+            Positioned(
+              left: i * step,
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors[i % colors.length],
+                  border: Border.all(color: AppColors.journeyBackgroundDark, width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initials[i],
+                  style: GoogleFonts.inter(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          if (overflow != null)
+            Positioned(
+              left: initials.length * step,
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.journeyPrimary,
+                  border: Border.all(color: AppColors.journeyBackgroundDark, width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '+$overflow',
+                  style: GoogleFonts.inter(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _journeyPlaceholderCircleSmall() {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.journeyGold.withValues(alpha: 0.2),
+        border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.4)),
+      ),
+      child: Icon(Icons.eco_rounded, size: 28, color: AppColors.journeyGold.withValues(alpha: 0.8)),
+    );
+  }
+
+  /// Null-safe: show network image only when [imageUrl] is non-null and non-empty.
+  Widget _journeyCardImageOrPlaceholder({String? imageUrl, required Widget placeholder}) {
+    if (imageUrl == null || imageUrl.isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: Image.network(
+        imageUrl,
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder,
+      ),
+    );
+  }
+
+  Widget _journeyPlaceholderCircle() {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.journeyGold.withValues(alpha: 0.12),
+        border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.25)),
+      ),
+      child: Icon(
+        Icons.eco_rounded,
+        size: 36,
+        color: AppColors.journeyGold.withValues(alpha: 0.7),
+      ),
+    );
+  }
+
+  /// [compact] when true uses tighter padding and min height for horizontal list to avoid overflow.
+  Widget _buildJourneyPausedCard(WidgetRef ref, UserJourney uj, List<JourneyType> types, {bool compact = false}) {
+    final typeList = types.where((t) => t.id == uj.journeyTypeId).toList();
+    final journeyType = typeList.isNotEmpty ? typeList.first : null;
+    final repo = ref.read(journeyRepositoryProvider);
+    final cardPadding = compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20, vertical: 6);
+    return Padding(
+      padding: cardPadding,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            try {
+              await repo.resumeJourney(uj.id);
+              ref.invalidate(activeJourneyProvider);
+              ref.invalidate(allUserJourneysProvider);
+              ref.invalidate(todaysJourneyTasksProvider(uj.id));
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${journeyType?.title ?? 'Journey'} resumed — tasks are back in Ashram'),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: AppColors.journeyGold.withValues(alpha: 0.9),
+                  ),
+                );
+                Navigator.of(context).pushNamed(AppRouter.journeyHome, arguments: {'userJourneyId': uj.id});
+              }
+            } catch (_) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not resume. Try again.'), behavior: SnackBarBehavior.floating),
+                );
+              }
+            }
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: compact ? 100 : 88),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.journeyBlack,
+                      const Color(0xFF1A1510),
+                      AppColors.journeyGold.withValues(alpha: 0.15),
                     ],
+                    stops: const [0.0, 0.6, 1.0],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.journeyGold.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildJourneyCardLeftImageStrip(
+                    imageUrl: journeyType?.cardImageUrl ?? journeyType?.bannerUrl,
+                    mergeGradientEnd: AppColors.journeyBlack,
+                    placeholder: Container(
+                      color: AppColors.journeyBlack,
+                      child: Center(
+                        child: journeyType != null
+                            ? _journeyIconWidget(journeyType!, size: 32, color: AppColors.journeyGold)
+                            : Icon(Icons.pause_rounded, size: 32, color: AppColors.journeyGold),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16, vertical: compact ? 12 : 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  journeyType?.title ?? 'Journey',
+                                  style: GoogleFonts.inter(
+                                    fontSize: compact ? 15 : 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Paused — tap to resume',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: AppColors.journeyGold.withValues(alpha: 0.9),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14, vertical: compact ? 6 : 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.journeyGold.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Resume',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.journeyGold,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(Icons.play_arrow_rounded, size: 22, color: AppColors.journeyGold),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        ),
+      ),
+    );
+  }
+
+  String? _journeyContextLabel(UserJourney uj, JourneyPhase? phase) {
+    final meta = uj.metadata;
+    if (meta.containsKey('due_date')) {
+      final due = DateTime.tryParse(meta['due_date'] as String? ?? '');
+      if (due != null) {
+        final week = (40 - due.difference(DateTime.now()).inDays / 7).ceil().clamp(1, 42);
+        return 'Week $week${phase != null ? ' · ${phase.title}' : ''}';
+      }
+    }
+    if (meta.containsKey('child_dob')) {
+      final dob = DateTime.tryParse(meta['child_dob'] as String? ?? '');
+      final name = meta['child_name'] as String? ?? 'Baby';
+      if (dob != null) {
+        final days = DateTime.now().difference(dob).inDays;
+        final y = days ~/ 365;
+        final m = (days % 365) ~/ 30;
+        final ageStr = y > 0 ? '${y}y ${m}m' : '${m}m';
+        return '$name · $ageStr${phase != null ? ' · ${phase.title}' : ''}';
+      }
+    }
+    if (uj.startDate != null) {
+      final day = DateTime.now().difference(uj.startDate!).inDays;
+      return 'Day $day${phase != null ? ' · ${phase.title}' : ''}';
+    }
+    return phase?.title;
+  }
+
+  Color? _parseColor(String hex) {
+    final h = hex.replaceFirst('#', '');
+    if (h.length == 6 || h.length == 8) {
+      final v = int.tryParse('FF$h', radix: 16);
+      if (v != null) return Color(v);
+    }
+    return null;
+  }
+
+  /// Left-side image strip for Paused/Popular cards: rectangular, ~90% of image visible, 10% clipped behind card edge, gradient merged into card.
+  static const double _journeyCardImageStripWidth = 96.0;
+
+  Widget _buildJourneyCardLeftImageStrip({
+    required String? imageUrl,
+    required Color mergeGradientEnd,
+    Widget? placeholder,
+  }) {
+    return SizedBox(
+      width: _journeyCardImageStripWidth,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              Positioned(
+                left: -_journeyCardImageStripWidth * 0.1,
+                top: 0,
+                bottom: 0,
+                width: _journeyCardImageStripWidth * 1.1,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder ?? _journeyCardImagePlaceholder(mergeGradientEnd),
+                ),
+              )
+            else
+              placeholder ?? _journeyCardImagePlaceholder(mergeGradientEnd),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              right: 0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, mergeGradientEnd],
+                    stops: const [0.5, 1.0],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
                 ),
               ),
@@ -278,9 +1330,671 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _buildInProgressSection() {
-    final books = _currentlyReadingBooks;
-    if (books.isEmpty) return const SizedBox.shrink();
+  Widget _journeyCardImagePlaceholder(Color mergeGradientEnd) {
+    return Container(
+      color: mergeGradientEnd,
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Image.asset(
+            AppConfig.appLogoPath,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Icon(Icons.auto_stories_rounded, size: 36, color: AppColors.journeyGold.withValues(alpha: 0.5)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Single row card in "Popular in your Circle": icon, title, subtitle, Joined by X, lock/chevron. Matches HTML layout.
+  Widget _buildJourneyPopularCard(WidgetRef ref, JourneyType t, Map<String, int> memberCounts, {bool isTrending = false, bool isComingSoon = false, bool showPill = false}) {
+    final memberCount = memberCounts[t.id] ?? 0;
+    final startedText = memberCount >= 1000
+        ? '${(memberCount / 1000).toStringAsFixed(1)}k people started this week'
+        : memberCount > 0
+            ? '$memberCount people started this week'
+            : null;
+    final isPremiumLocked = t.isPremium && !_isPremium;
+
+    // Coming-soon with image background: use separate layout
+    final hasImage = (t.cardImageUrl ?? '').isNotEmpty || (t.bannerUrl ?? '').isNotEmpty;
+    if (isComingSoon && hasImage) {
+      return _buildJourneyComingSoonImageCard(t, memberCount);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            if (isComingSoon) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coming soon')));
+              return;
+            }
+            if (isPremiumLocked) {
+              PaywallScreen.showAsBottomSheet(context);
+              return;
+            }
+            Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            height: 116,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF252528),
+                      const Color(0xFF1E1D21),
+                      const Color(0xFF282520),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: AppColors.journeyPrimary.withValues(alpha: 0.2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (isTrending)
+                      Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.journeyPrimary,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(20),
+                            bottomLeft: Radius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'TRENDING',
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildJourneyCardLeftImageStrip(
+                          imageUrl: t.cardImageUrl ?? t.bannerUrl,
+                          mergeGradientEnd: const Color(0xFF252528),
+                          placeholder: Container(
+                            color: const Color(0xFF252528),
+                            child: Center(
+                              child: _journeyIconWidget(t, size: 32, color: AppColors.journeyPrimary),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  physics: const ClampingScrollPhysics(),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        t.title,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                          letterSpacing: 0.2,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      if (isTrending && (t.subtitle ?? '').isNotEmpty)
+                                        Text(
+                                          t.subtitle ?? '',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: AppColors.zinc400,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      if (isTrending && (t.subtitle ?? '').isNotEmpty) const SizedBox(height: 4),
+                                      if (startedText != null) ...[
+                                        Row(
+                                          children: [
+                                            Icon(Icons.group_outlined, size: 12, color: AppColors.journeyPrimary.withValues(alpha: 0.9)),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                startedText,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: AppColors.zinc400,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ] else if (showPill && memberCount > 0) ...[
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            _buildAvatarStack(const ['P', 'R'], overflow: null),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                memberCount >= 1000
+                                                    ? '${(memberCount / 1000).toStringAsFixed(1)}k people are here'
+                                                    : '$memberCount people are here',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.journeyPrimary,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ] else if (isComingSoon)
+                                        Text(
+                                          t.subtitle ?? 'Coming soon',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: AppColors.zinc400,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        )
+                                      else if ((t.subtitle ?? '').isNotEmpty)
+                                        Text(
+                                          t.subtitle ?? '',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: AppColors.zinc400,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (isComingSoon)
+                                Icon(Icons.lock_outline_rounded, size: 22, color: AppColors.zinc500)
+                              else if (!isPremiumLocked)
+                                Icon(Icons.chevron_right_rounded, size: 24, color: AppColors.journeyPrimary)
+                              else
+                                Icon(Icons.lock_outline_rounded, size: 22, color: AppColors.zinc500),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+
+  /// Coming-soon card with full-bleed background image (matches HTML 21-Day Gita / 40-Day Hanuman).
+  Widget _buildJourneyComingSoonImageCard(JourneyType t, int memberCount) {
+    final imageUrl = t.cardImageUrl ?? t.bannerUrl ?? '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coming soon'))),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            height: 88,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.journeyPrimary.withValues(alpha: 0.25)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              image: DecorationImage(
+                image: NetworkImage(imageUrl),
+                fit: BoxFit.cover,
+                onError: (_, __) {},
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withValues(alpha: 0.9),
+                          Colors.black.withValues(alpha: 0.7),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: AppColors.journeyPrimary.withValues(alpha: 0.25),
+                            border: Border.all(color: AppColors.journeyPrimary.withValues(alpha: 0.3)),
+                          ),
+                          child: Center(
+                            child: _journeyIconWidget(t, size: 28, color: AppColors.journeyPrimary),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      t.title,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                        letterSpacing: 0.2,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.journeyPrimary,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'COMING SOON',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                t.subtitle ?? 'Unlock wisdom with others',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.zinc400,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (memberCount > 0) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      height: 16,
+                                      child: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Positioned(
+                                            left: 0,
+                                            child: Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: Colors.white.withValues(alpha: 0.2),
+                                                border: Border.all(color: Colors.black.withValues(alpha: 0.5)),
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            left: 12,
+                                            child: Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: Colors.white.withValues(alpha: 0.3),
+                                                border: Border.all(color: Colors.black.withValues(alpha: 0.5)),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      memberCount >= 1000
+                                          ? '${(memberCount / 1000).toStringAsFixed(1)}k people on the waitlist'
+                                          : '$memberCount people on the waitlist',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.zinc400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.lock_outline_rounded, size: 22, color: AppColors.journeyPrimary),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJourneyTypeGrid(WidgetRef ref, List<JourneyType> list, {required bool isComingSoon}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 14,
+          childAspectRatio: 0.88,
+        ),
+        itemCount: list.length,
+        itemBuilder: (context, index) {
+          final t = list[index];
+          final isPremiumLocked = t.isPremium && !_isPremium;
+          final color = _parseColor(t.colorPrimary ?? '') ?? AppColors.journeyGold;
+          if (isComingSoon) {
+            return _buildComingSoonCard(t);
+          }
+          return _buildStartJourneyCard(t, isPremiumLocked, color);
+        },
+      ),
+    );
+  }
+
+  Widget _buildStartJourneyCard(JourneyType t, bool isPremiumLocked, Color color) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (isPremiumLocked) {
+            PaywallScreen.showAsBottomSheet(context);
+            return;
+          }
+          Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF252028).withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: color.withValues(alpha: 0.15),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        t.icon ?? '🛤️',
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    t.title,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.cormorantGaramond(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFF5F0E8),
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    t.subtitle ?? 'Begin your path',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.zinc500,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+              if (isPremiumLocked)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Icon(Icons.lock_rounded, size: 18, color: AppColors.zinc500),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComingSoonCard(JourneyType t) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coming soon')));
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1B22).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.12)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.schedule_rounded,
+                size: 32,
+                color: AppColors.journeyGold.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                t.title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cormorantGaramond(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFFB8B2A8),
+                  height: 1.2,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Coming soon',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.zinc600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastViewedSection() {
+    return Consumer(
+      builder: (context, ref, _) {
+        final textsAsync = ref.watch(sacredTextsProvider(null));
+        final storiesAsync = ref.watch(sacredStoriesCollectionProvider(null));
+        final deitiesAsync = ref.watch(deitiesProvider);
+        final allTexts = textsAsync.valueOrNull ?? [];
+        final allStories = storiesAsync.valueOrNull ?? [];
+        final allDeities = deitiesAsync.valueOrNull ?? [];
+
+        return FutureBuilder<_LastViewedData>(
+          future: _loadLastViewedData(allTexts, allStories, allDeities),
+          builder: (context, snapshot) {
+            final data = snapshot.data;
+            final recentBooks = data?.books ?? [];
+            final recentTexts = data?.texts ?? [];
+            final recentStories = data?.stories ?? [];
+            final recentDeities = data?.deities ?? [];
+            return _buildLastViewedSectionContent(
+              recentBooks: recentBooks,
+              recentTexts: recentTexts,
+              recentStories: recentStories,
+              recentDeities: recentDeities,
+              isLoading: !snapshot.hasData &&
+                  snapshot.connectionState == ConnectionState.waiting,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<_LastViewedData> _loadLastViewedData(
+    List<SacredTextModel> allTexts,
+    List<SacredStoryModel> allStories,
+    List<DeityModel> allDeities,
+  ) async {
+    final recent = GranthalayaRecentService();
+    final bookIds = await recent.getRecentBookIds();
+    final textIds = await recent.getRecentSacredTextIds();
+    final storyIds = await recent.getRecentSacredStoryIds();
+    final deitySlugs = await recent.getRecentDeitySlugs();
+    final books = <BookModel>[];
+    for (final id in bookIds) {
+      final b = _books.where((b) => b.id == id).toList();
+      if (b.isNotEmpty) books.add(b.first);
+    }
+    final texts = <SacredTextModel>[];
+    for (final id in textIds) {
+      final t = allTexts.where((t) => t.id == id).toList();
+      if (t.isNotEmpty) texts.add(t.first);
+    }
+    final stories = <SacredStoryModel>[];
+    for (final id in storyIds) {
+      final s = allStories.where((s) => s.id == id).toList();
+      if (s.isNotEmpty) stories.add(s.first);
+    }
+    final deities = <DeityModel>[];
+    for (final slug in deitySlugs) {
+      final d = allDeities.where((d) => d.slug == slug).toList();
+      if (d.isNotEmpty) deities.add(d.first);
+    }
+    return _LastViewedData(
+      books: books,
+      texts: texts,
+      stories: stories,
+      deities: deities,
+    );
+  }
+
+  Widget _buildLastViewedSectionContent({
+    required List<BookModel> recentBooks,
+    required List<SacredTextModel> recentTexts,
+    required List<SacredStoryModel> recentStories,
+    required List<DeityModel> recentDeities,
+    bool isLoading = false,
+  }) {
+    final hasAny = recentBooks.isNotEmpty ||
+        recentTexts.isNotEmpty ||
+        recentStories.isNotEmpty ||
+        recentDeities.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 48),
@@ -295,7 +2009,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  'In Progress',
+                  'Last Viewed',
                   style: GoogleFonts.crimsonPro(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -303,7 +2017,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                 ),
                 Text(
-                  'Resuming Your Path',
+                  'Books, texts, stories & more',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -317,16 +2031,367 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           const SizedBox(height: 20),
           SizedBox(
             height: 320,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              physics: const ClampingScrollPhysics(),
-              itemCount: books.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (_, i) => _buildInProgressCard(books[i]),
-            ),
+            child: isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: AppColors.matteGold,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                  )
+                : hasAny
+                    ? ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        children: [
+                          ...recentBooks.map((b) => Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _buildInProgressCard(b),
+                              )),
+                          ...recentTexts.map((t) => Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _buildInProgressSacredTextCard(t),
+                              )),
+                          ...recentStories.map((s) => Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _buildInProgressStoryCard(s),
+                              )),
+                          ...recentDeities.map((d) => Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _buildInProgressDeityCard(d),
+                              )),
+                        ],
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 32),
+                          decoration: BoxDecoration(
+                            color: AppColors.charcoalCard.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.matteGold.withOpacity(0.15),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.auto_stories_outlined,
+                                size: 48,
+                                color: AppColors.matteGold.withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Nothing viewed yet',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Open a book, sacred text or story, or explore a deity—they’ll show up here.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.zinc500,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInProgressSacredTextCard(SacredTextModel text) {
+    final deityColors = _getTextDeityGradient(text.deitySlug);
+    final godName = _capitalize(text.deitySlug ?? '');
+    final coverUrl = text.coverImageUrl;
+    final hasCoverImage = coverUrl != null && coverUrl.isNotEmpty;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SacredTextReaderScreen(sacredText: text),
+          ),
+        ),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 160,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: deityColors[0].withOpacity(0.15)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasCoverImage)
+                  AppNetworkImage(
+                    imageUrl: coverUrl,
+                    fit: BoxFit.cover,
+                    cacheFailure: true,
+                    fallback: AntarmargPlaceholder(
+                        compact: true, godName: godName.isEmpty ? null : godName),
+                  )
+                else
+                  AntarmargPlaceholder(
+                      compact: true, godName: godName.isEmpty ? null : godName),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                      ],
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          text.typeLabel,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.matteGold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          text.title,
+                          style: GoogleFonts.crimsonPro(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInProgressStoryCard(SacredStoryModel story) {
+    final gradientColors = _getStoryGradient(story.category);
+    final godName = _capitalize(story.deitySlug ?? '');
+    final coverUrl = story.coverImageUrl;
+    final hasImage = coverUrl != null && coverUrl.isNotEmpty;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SacredStoryReaderScreen(story: story),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 160,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: gradientColors[0].withOpacity(0.15)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasImage)
+                  AppNetworkImage(
+                    imageUrl: coverUrl!,
+                    fit: BoxFit.cover,
+                    cacheFailure: true,
+                    fallback: AntarmargPlaceholder(
+                        compact: true, godName: godName.isEmpty ? null : godName),
+                  )
+                else
+                  AntarmargPlaceholder(
+                      compact: true, godName: godName.isEmpty ? null : godName),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                      ],
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          story.category.toUpperCase(),
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.matteGold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          story.title,
+                          style: GoogleFonts.crimsonPro(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInProgressDeityCard(DeityModel deity) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DeityDetailScreen(deity: deity),
+          ),
+        ),
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          width: 120,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _getDeityGradient(deity.slug)[0].withOpacity(0.8),
+                      _getDeityGradient(deity.slug)[1].withOpacity(0.3),
+                    ],
+                  ),
+                ),
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.manuscriptDark,
+                  ),
+                  child: ClipOval(
+                    child: deity.imageUrl != null && deity.imageUrl!.isNotEmpty
+                        ? AppNetworkImage(
+                            imageUrl: deity.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(
+                                Icons.person,
+                                color: AppColors.matteGold,
+                                size: 32,
+                              ),
+                          )
+                        : Icon(
+                            Icons.person,
+                            color: AppColors.matteGold,
+                            size: 32,
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                deity.name,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.matteGold.withOpacity(0.9),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -339,14 +2404,18 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     final percent = (progress * 100).round();
     final tag = _getBookTag(book);
     final subtitle = _getInProgressSubtitle(book);
+    final isLocked = book.isPremium && !_isPremium;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => BookDetailScreen(book: book)),
-        ).then((_) => _loadBooks()),
+        onTap: isLocked
+            ? () => PaywallScreen.showAsBottomSheet(context)
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => BookDetailScreen(book: book)),
+                ).then((_) => _loadBooks()),
         borderRadius: BorderRadius.circular(24),
         child: Container(
           width: 260,
@@ -368,13 +2437,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               fit: StackFit.expand,
               children: [
                 if (coverUrl != null && coverUrl.isNotEmpty)
-                  CachedNetworkImage(
+                  AppNetworkImage(
                     imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _placeholderCover(),
+                    cacheFailure: true,
+                    fallback: const AntarmargPlaceholder(),
                   )
                 else
-                  _placeholderCover(),
+                  const AntarmargPlaceholder(),
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -610,82 +2680,46 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             Expanded(
               child: GestureDetector(
                 onTap: () {
-                  setState(() => _readMode = false);
-                  ref.read(granthalayaReadModeProvider.notifier).state = false;
+                  setState(() => _granthalayaTabIndex = 0);
+                  ref.read(granthalayaReadModeProvider.notifier).state = true;
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: !_readMode
-                        ? AppColors.matteGold.withOpacity(0.1)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: !_readMode
-                        ? Border.all(
-                            color: AppColors.matteGold.withOpacity(0.2))
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.headphones,
-                          size: 18,
-                          color: !_readMode
-                              ? AppColors.matteGold
-                              : AppColors.zinc500),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Listen',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight:
-                              !_readMode ? FontWeight.w600 : FontWeight.w500,
-                          color: !_readMode
-                              ? AppColors.matteGold
-                              : AppColors.zinc500,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _buildModeToggleSegment(
+                  index: 0,
+                  icon: Icons.auto_stories,
+                  label: 'Read',
                 ),
               ),
             ),
             Expanded(
               child: GestureDetector(
                 onTap: () {
-                  setState(() => _readMode = true);
-                  ref.read(granthalayaReadModeProvider.notifier).state = true;
+                  setState(() => _granthalayaTabIndex = 1);
+                  ref.read(granthalayaReadModeProvider.notifier).state = false;
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _readMode ? Colors.transparent : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.auto_stories,
-                          size: 18,
-                          color: _readMode
-                              ? AppColors.zinc500
-                              : AppColors.matteGold),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Read Mode',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight:
-                              _readMode ? FontWeight.w500 : FontWeight.w600,
-                          color: _readMode
-                              ? AppColors.zinc500
-                              : AppColors.matteGold,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _buildModeToggleSegment(
+                  index: 1,
+                  icon: Icons.headphones,
+                  label: 'Listen',
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _granthalayaTabIndex = 2),
+                child: _buildModeToggleSegment(
+                  index: 2,
+                  icon: Icons.route,
+                  label: 'Journey',
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _granthalayaTabIndex = 3),
+                child: _buildModeToggleSegment(
+                  index: 3,
+                  icon: Icons.video_library,
+                  label: 'Video',
                 ),
               ),
             ),
@@ -1067,20 +3101,25 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     final coverUrl = story.coverImageUrl;
     final hasImage = coverUrl != null && coverUrl.isNotEmpty;
     final pageCount = story.pages.length;
+    final isLocked = story.isPremium && !_isPremium;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SacredStoryReaderScreen(story: story),
-            ),
-          );
-        },
+        onTap: isLocked
+            ? () => PaywallScreen.showAsBottomSheet(context)
+            : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SacredStoryReaderScreen(story: story),
+                  ),
+                );
+              },
         borderRadius: BorderRadius.circular(20),
-        child: Container(
+        child: Opacity(
+          opacity: isLocked ? 0.6 : 1.0,
+          child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppColors.matteGold.withOpacity(0.1)),
@@ -1099,11 +3138,11 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               children: [
                 // Background: cover image or deity name book-cover
                 if (hasImage)
-                  CachedNetworkImage(
+                  AppNetworkImage(
                     imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) =>
-                        _buildDeityNameCover(deityName, deityColors),
+                    cacheFailure: true,
+                    fallback: _buildDeityNameCover(deityName, deityColors),
                   )
                 else
                   _buildDeityNameCover(deityName, deityColors),
@@ -1191,87 +3230,50 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     ],
                   ),
                 ),
+                if (isLocked)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4AF37).withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock,
+                              color: Colors.white, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            'PRO',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
+        ),
         ),
       ),
     );
   }
 
-  /// Book-cover style card with deity name in gradient
+  /// Book-cover style: Antar मार्ग title in gradient golden/black + God name below.
   Widget _buildDeityNameCover(String deityName, List<Color> colors) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colors[0].withOpacity(0.25),
-            colors[1].withOpacity(0.12),
-            AppColors.charcoalDark,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Decorative book-style border
-          Positioned.fill(
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colors[0].withOpacity(0.15),
-                  width: 1,
-                ),
-              ),
-            ),
-          ),
-          // Om symbol watermark
-          Positioned(
-            right: 10,
-            top: 12,
-            child: Text(
-              'ॐ',
-              style: TextStyle(
-                fontSize: 28,
-                color: colors[0].withOpacity(0.12),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          // Deity name centered
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 40),
-              child: ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    colors[0],
-                    colors[1],
-                    Colors.white.withOpacity(0.8),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  deityName,
-                  style: GoogleFonts.crimsonPro(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 2,
-                    height: 1,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return AntarmargPlaceholder(
+      compact: false,
+      godName: deityName.isEmpty ? null : deityName,
     );
   }
 
@@ -1355,10 +3357,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                 child: SizedBox(
                   width: 80,
                   height: 80,
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
+                    errorBuilder: (_, __, ___) => Container(
                       color: AppColors.manuscriptDark,
                       child: const Icon(
                         Icons.music_note,
@@ -1429,74 +3431,113 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         ? book.coverImageUrl
         : _getCoverUrl(book.id);
     final subtitle = _getSacredLibrarySubtitle(book);
+    final isLocked = book.isPremium && !_isPremium;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => BookDetailScreen(book: book)),
-        ).then((_) => _loadBooks()),
+        onTap: isLocked
+            ? () => PaywallScreen.showAsBottomSheet(context)
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => BookDetailScreen(book: book)),
+                ).then((_) => _loadBooks()),
         borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: 200,
-          height: 175,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: Stack(
-                    fit: StackFit.expand,
+        child: Opacity(
+          opacity: isLocked ? 0.6 : 1.0,
+          child: SizedBox(
+            width: 200,
+            height: 175,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (coverUrl != null && coverUrl.isNotEmpty)
+                          AppNetworkImage(
+                            imageUrl: coverUrl,
+                            fit: BoxFit.cover,
+                            cacheFailure: true,
+                            fallback: const AntarmargPlaceholder(),
+                          )
+                        else
+                          const AntarmargPlaceholder(),
+                        Container(color: Colors.black.withOpacity(0.2)),
+                        if (isLocked)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD4AF37)
+                                    .withOpacity(0.85),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.lock,
+                                      color: Colors.white, size: 10),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'PRO',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (coverUrl != null && coverUrl.isNotEmpty)
-                        CachedNetworkImage(
-                          imageUrl: coverUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _placeholderCover(),
-                        )
-                      else
-                        _placeholderCover(),
-                      Container(color: Colors.black.withOpacity(0.2)),
+                      Text(
+                        book.name,
+                        style: GoogleFonts.crimsonPro(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFF1F5F9),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.matteGold.withOpacity(0.5),
+                          letterSpacing: 1.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.name,
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFF1F5F9),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.matteGold.withOpacity(0.5),
-                        letterSpacing: 1.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1653,10 +3694,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   color: AppColors.manuscriptDark,
                 ),
                 child: ClipOval(
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => const Icon(Icons.person,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.person,
                         color: AppColors.matteGold, size: 32),
                   ),
                 ),
@@ -1782,7 +3823,16 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                 )
               else if (texts.isEmpty)
-                const SizedBox.shrink()
+                SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: SizedBox(
+                      width: 160,
+                      height: 180,
+                      child: const AntarmargPlaceholder(compact: true),
+                    ),
+                  ),
+                )
               else
                 SizedBox(
                   height: 200,
@@ -1833,15 +3883,13 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Cover image or deity gradient background
+              // Cover image or deity gradient background (cached for fast tab switching)
               if (hasCoverImage)
-                Image.network(
-                  coverUrl,
+                AppNetworkImage(
+                  imageUrl: coverUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildSacredTextGradientBg(
-                    deityColors,
-                    deityName,
-                  ),
+                  cacheFailure: true,
+                  fallback: _buildSacredTextGradientBg(deityColors, deityName),
                 )
               else
                 _buildSacredTextGradientBg(deityColors, deityName),
@@ -1940,75 +3988,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   Widget _buildSacredTextGradientBg(List<Color> deityColors, String deityName) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            deityColors[0].withOpacity(0.28),
-            deityColors[1].withOpacity(0.14),
-            AppColors.charcoalDark,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Book-style border
-          Positioned.fill(
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: deityColors[0].withOpacity(0.12),
-                  width: 1,
-                ),
-              ),
-            ),
-          ),
-          // Om watermark
-          Positioned(
-            right: 12,
-            top: 14,
-            child: Text(
-              'ॐ',
-              style: TextStyle(
-                fontSize: 24,
-                color: deityColors[0].withOpacity(0.12),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          // Deity name
-          if (deityName.isNotEmpty)
-            Positioned(
-              left: 16,
-              top: 18,
-              child: ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    deityColors[0],
-                    deityColors[1],
-                    Colors.white.withOpacity(0.7),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  deityName,
-                  style: GoogleFonts.crimsonPro(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return AntarmargPlaceholder(
+      compact: true,
+      godName: deityName.isEmpty ? null : deityName,
     );
   }
 
@@ -2315,10 +4297,18 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _placeholderCover() {
-    return Container(
-      color: Colors.black,
-      child: const Icon(Icons.menu_book, size: 48, color: AppColors.matteGold),
-    );
-  }
+}
+
+class _LastViewedData {
+  final List<BookModel> books;
+  final List<SacredTextModel> texts;
+  final List<SacredStoryModel> stories;
+  final List<DeityModel> deities;
+
+  _LastViewedData({
+    required this.books,
+    required this.texts,
+    required this.stories,
+    required this.deities,
+  });
 }

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../../data/models/book_model.dart';
 import '../providers/book_providers.dart';
 import 'sacred_text_reader_screen.dart';
 import 'sacred_story_reader_screen.dart';
 import 'book_detail_screen.dart';
+import '../../data/services/granthalaya_recent_service.dart';
 
 class DeityDetailScreen extends ConsumerStatefulWidget {
   final DeityModel deity;
@@ -37,6 +39,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
   @override
   void initState() {
     super.initState();
+    GranthalayaRecentService().recordDeityOpened(widget.deity.slug);
     _tabController = TabController(length: 4, vsync: this);
     _fadeController = AnimationController(
       vsync: this,
@@ -146,7 +149,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
           fit: StackFit.expand,
           children: [
             if (d.imageUrl != null)
-              CachedNetworkImage(
+              AppNetworkImage(
                 imageUrl: d.imageUrl!,
                 fit: BoxFit.cover,
                 color: Colors.black.withValues(alpha: 0.3),
@@ -662,10 +665,10 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
             fit: StackFit.expand,
             children: [
               if (hasImage)
-                CachedNetworkImage(
+                AppNetworkImage(
                   imageUrl: book.coverImageUrl!,
                   fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) =>
+                  errorBuilder: (_, __, ___) =>
                       _buildBookGradientBg(),
                 )
               else
@@ -732,26 +735,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
   }
 
   Widget _buildBookGradientBg() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            _accent.withValues(alpha: 0.25),
-            _accent.withValues(alpha: 0.08),
-            _parchment,
-          ],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.menu_book_rounded,
-          size: 40,
-          color: _accent.withValues(alpha: 0.2),
-        ),
-      ),
-    );
+    return AntarmargPlaceholder(compact: true);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1319,9 +1303,21 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Center(
-        child: Text(
-          message,
-          style: GoogleFonts.inter(fontSize: 13, color: Colors.white24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 120,
+              height: 120,
+              child: AntarmargPlaceholder(compact: true),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: GoogleFonts.inter(fontSize: 13, color: Colors.white24),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

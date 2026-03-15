@@ -239,6 +239,14 @@ class VerseWithTranslations {
   /// Get English translation
   VerseTranslationModel? get englishTranslation => getTranslation('en');
 
+  /// Get English AI commentary (language_code: en-commentary)
+  VerseTranslationModel? get englishCommentary =>
+      getTranslation('en-commentary');
+
+  /// Get Hindi AI commentary (language_code: hi-commentary or Hi-commentary)
+  VerseTranslationModel? get hindiCommentary =>
+      getTranslation('hi-commentary') ?? getTranslation('Hi-commentary');
+
   /// Get primary translation
   VerseTranslationModel? get primaryTranslation {
     try {

@@ -91,7 +91,7 @@ class GarbhSanskarEntryCard extends ConsumerWidget {
                   ),
                   Text(
                     isSetup
-                        ? 'Begin your sacred pregnancy journey'
+                        ? 'Plan, track & nurture your journey'
                         : 'Continue your Garbh Sanskar practice',
                     style: GoogleFonts.inter(
                       fontSize: 12,
@@ -101,7 +101,7 @@ class GarbhSanskarEntryCard extends ConsumerWidget {
                   const SizedBox(height: 6),
                   Text(
                     isSetup
-                        ? 'Mantras • Meditations • Samskaras • Lullabies'
+                        ? 'Planning • Prenatal • Postnatal • Samskaras'
                         : 'Mantras • Yoga • Rituals • Lullabies',
                     style: GoogleFonts.inter(
                       fontSize: 11,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/sanctuary_customization_model.dart';
@@ -24,7 +25,7 @@ class SanctuaryCustomizationService {
   final _customizationController = StreamController<SanctuaryCustomization>.broadcast();
   SanctuaryCustomization _currentCustomization = SanctuaryCustomization.defaultConfig;
   Set<String> _purchasedItems = {};
-  TempleGroundType _templeGroundType = TempleGroundType.white;
+  TempleGroundType _templeGroundType = TempleGroundType.mud;
   bool _isInitialized = false;
   bool _isLoading = false;
   Completer<void>? _initCompleter;
@@ -151,7 +152,7 @@ class SanctuaryCustomizationService {
         if (groundName != null) {
           _templeGroundType = TempleGroundType.values.firstWhere(
             (e) => e.name == groundName,
-            orElse: () => TempleGroundType.white,
+            orElse: () => TempleGroundType.mud,
           );
         }
 
@@ -194,7 +195,7 @@ class SanctuaryCustomizationService {
       if (groundName != null) {
         _templeGroundType = TempleGroundType.values.firstWhere(
           (e) => e.name == groundName,
-          orElse: () => TempleGroundType.white,
+          orElse: () => TempleGroundType.mud,
         );
       }
     } catch (e) {
@@ -211,7 +212,7 @@ class SanctuaryCustomizationService {
       'ringStyle_${RingStyle.singleRing.name}',
       'ringColor_${RingColor.gold.name}',
       'animationStyle_${SanctuaryAnimationStyle.gentle.name}',
-      'backgroundStyle_${BackgroundStyle.geometricLines.name}',
+      'backgroundStyle_${BackgroundStyle.cosmicGradient.name}',
       'glowColor_${GlowColor.gold.name}',
       'frameStyle_${FrameStyle.none.name}',
       'specialEffect_${SpecialEffect.none.name}',
@@ -272,7 +273,7 @@ class SanctuaryCustomizationService {
       case 'glowColor':
         return _currentCustomization.glowColor.name == itemName;
       case 'deityImage':
-        return _currentCustomization.deityImage?.name == itemName;
+        return _currentCustomization.deityImageId == itemName;
       case 'frameStyle':
         return _currentCustomization.frameStyle.name == itemName;
       case 'specialEffect':
@@ -324,8 +325,10 @@ class SanctuaryCustomizationService {
     SanctuaryAnimationStyle? animationStyle,
     BackgroundStyle? backgroundStyle,
     GlowColor? glowColor,
-    DeityImage? deityImage,
+    String? deityImageId,
     bool clearDeityImage = false,
+    double? deityImageScale,
+    BoxFit? deityImageFit,
     FrameStyle? frameStyle,
     SpecialEffect? specialEffect,
     ParticleStyle? particleStyle,
@@ -338,8 +341,10 @@ class SanctuaryCustomizationService {
       animationStyle: animationStyle,
       backgroundStyle: backgroundStyle,
       glowColor: glowColor,
-      deityImage: deityImage,
+      deityImageId: deityImageId,
       clearDeityImage: clearDeityImage,
+      deityImageScale: deityImageScale,
+      deityImageFit: deityImageFit,
       frameStyle: frameStyle,
       specialEffect: specialEffect,
       particleStyle: particleStyle,
@@ -410,9 +415,9 @@ class SanctuaryCustomizationService {
         total += color.coinCost;
       }
     }
-    for (final deity in DeityImage.values) {
-      if (!isItemPurchased('deityImage', deity.name)) {
-        total += deity.coinCost;
+    for (final deity in deityConfigs) {
+      if (!isItemPurchased('deityImage', deity.id)) {
+        total += ItemRarity.legendary.karmaCost;
       }
     }
     

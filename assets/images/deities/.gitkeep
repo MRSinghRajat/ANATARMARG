@@ -1,0 +1,3 @@
+# Add deity images here: ganesha.png, shiva.png, krishna.png, lakshmi.png,
+# hanuman.png, durga.png, saraswati.png, vishnu.png
+# The app will show these in the Deities section; if missing, emoji fallback is used.

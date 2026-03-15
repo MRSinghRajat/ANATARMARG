@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
+    <!-- Location for day/night sky (Aangan) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- Permissions for image picker -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- For scheduled local notifications (daily "tasks ready") -->
@@ -16,7 +19,7 @@
     <application
         android:label="Antar Marg"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
         <activity
             android:name="com.example.antar_marg.MainActivity"
             android:exported="true"

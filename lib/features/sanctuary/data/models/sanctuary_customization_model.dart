@@ -9,7 +9,12 @@ class SanctuaryCustomization {
   final SanctuaryAnimationStyle animationStyle;
   final BackgroundStyle backgroundStyle;
   final GlowColor glowColor;
-  final DeityImage? deityImage;
+  /// Deity id from [DeityConfig.id]; null = show Om.
+  final String? deityImageId;
+  /// Zoom scale for deity image (1.0 = default).
+  final double deityImageScale;
+  /// Fit mode: null = use scale only; contain/cover = zoom to fit then apply.
+  final BoxFit? deityImageFit;
   final FrameStyle frameStyle;
   final SpecialEffect specialEffect;
   final ParticleStyle particleStyle;
@@ -19,9 +24,11 @@ class SanctuaryCustomization {
     this.ringStyle = RingStyle.singleRing,
     this.ringColor = RingColor.gold,
     this.animationStyle = SanctuaryAnimationStyle.gentle,
-    this.backgroundStyle = BackgroundStyle.geometricLines,
+    this.backgroundStyle = BackgroundStyle.cosmicGradient,
     this.glowColor = GlowColor.gold,
-    this.deityImage,
+    this.deityImageId,
+    this.deityImageScale = 1.0,
+    this.deityImageFit,
     this.frameStyle = FrameStyle.none,
     this.specialEffect = SpecialEffect.none,
     this.particleStyle = ParticleStyle.none,
@@ -37,7 +44,9 @@ class SanctuaryCustomization {
     'animationStyle': animationStyle.name,
     'backgroundStyle': backgroundStyle.name,
     'glowColor': glowColor.name,
-    'deityImage': deityImage?.name,
+    'deityImage': deityImageId,
+    'deityImageScale': deityImageScale,
+    'deityImageFit': deityImageFit == null ? null : deityImageFit == BoxFit.contain ? 'contain' : 'cover',
     'frameStyle': frameStyle.name,
     'specialEffect': specialEffect.name,
     'particleStyle': particleStyle.name,
@@ -63,18 +72,19 @@ class SanctuaryCustomization {
       ),
       backgroundStyle: BackgroundStyle.values.firstWhere(
         (e) => e.name == json['backgroundStyle'],
-        orElse: () => BackgroundStyle.geometricLines,
+        orElse: () => BackgroundStyle.cosmicGradient,
       ),
       glowColor: GlowColor.values.firstWhere(
         (e) => e.name == json['glowColor'],
         orElse: () => GlowColor.gold,
       ),
-      deityImage: json['deityImage'] != null
-          ? DeityImage.values.firstWhere(
-              (e) => e.name == json['deityImage'],
-              orElse: () => DeityImage.ganesha,
-            )
-          : null,
+      deityImageId: json['deityImage'] as String?,
+      deityImageScale: (json['deityImageScale'] as num?)?.toDouble() ?? 1.0,
+      deityImageFit: json['deityImageFit'] == 'contain'
+          ? BoxFit.contain
+          : json['deityImageFit'] == 'cover'
+              ? BoxFit.cover
+              : null,
       frameStyle: FrameStyle.values.firstWhere(
         (e) => e.name == json['frameStyle'],
         orElse: () => FrameStyle.none,
@@ -97,8 +107,10 @@ class SanctuaryCustomization {
     SanctuaryAnimationStyle? animationStyle,
     BackgroundStyle? backgroundStyle,
     GlowColor? glowColor,
-    DeityImage? deityImage,
+    String? deityImageId,
     bool clearDeityImage = false,
+    double? deityImageScale,
+    BoxFit? deityImageFit,
     FrameStyle? frameStyle,
     SpecialEffect? specialEffect,
     ParticleStyle? particleStyle,
@@ -110,7 +122,9 @@ class SanctuaryCustomization {
       animationStyle: animationStyle ?? this.animationStyle,
       backgroundStyle: backgroundStyle ?? this.backgroundStyle,
       glowColor: glowColor ?? this.glowColor,
-      deityImage: clearDeityImage ? null : (deityImage ?? this.deityImage),
+      deityImageId: clearDeityImage ? null : (deityImageId ?? this.deityImageId),
+      deityImageScale: deityImageScale ?? this.deityImageScale,
+      deityImageFit: deityImageFit ?? this.deityImageFit,
       frameStyle: frameStyle ?? this.frameStyle,
       specialEffect: specialEffect ?? this.specialEffect,
       particleStyle: particleStyle ?? this.particleStyle,
@@ -281,7 +295,7 @@ extension OmStyleMeta on OmStyle {
     }
   }
 
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity {
     switch (this) {
@@ -428,7 +442,7 @@ extension RingStyleMeta on RingStyle {
     }
   }
 
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity {
     switch (this) {
@@ -662,7 +676,7 @@ extension RingColorMeta on RingColor {
     return [primaryColor, secondaryColor];
   }
 
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity => ItemRarity.common;
 
@@ -759,7 +773,7 @@ extension SanctuaryAnimationStyleMeta on SanctuaryAnimationStyle {
     }
   }
 
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity {
     switch (this) {
@@ -837,12 +851,11 @@ extension BackgroundStyleMeta on BackgroundStyle {
     }
   }
 
-  // TODO: Add pricing later - all free for now
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity => ItemRarity.common;
 
-  bool get isDefault => this == BackgroundStyle.geometricLines;
+  bool get isDefault => this == BackgroundStyle.cosmicGradient;
 }
 
 /// Glow/aura colors for Om
@@ -889,73 +902,54 @@ extension GlowColorMeta on GlowColor {
     }
   }
 
-  // TODO: Add pricing later - all free for now
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity => ItemRarity.common;
 
   bool get isDefault => this == GlowColor.gold;
 }
 
-/// Indian deity images (premium replacements for Om)
-enum DeityImage {
-  ganesha,
-  shiva,
-  krishna,
-  lakshmi,
-  hanuman,
-  durga,
-  saraswati,
-  vishnu,
+/// Single deity definition. Add new deities here and place image at assets/images/deities/{id}.png.
+class DeityConfig {
+  final String id;
+  final String displayName;
+  final String emoji;
+  final String description;
+
+  const DeityConfig({
+    required this.id,
+    required this.displayName,
+    required this.emoji,
+    required this.description,
+  });
+
+  String get assetPath => 'assets/images/deities/$id.png';
 }
 
-extension DeityImageMeta on DeityImage {
-  String get displayName {
-    switch (this) {
-      case DeityImage.ganesha: return 'Lord Ganesha';
-      case DeityImage.shiva: return 'Lord Shiva';
-      case DeityImage.krishna: return 'Lord Krishna';
-      case DeityImage.lakshmi: return 'Goddess Lakshmi';
-      case DeityImage.hanuman: return 'Lord Hanuman';
-      case DeityImage.durga: return 'Goddess Durga';
-      case DeityImage.saraswati: return 'Goddess Saraswati';
-      case DeityImage.vishnu: return 'Lord Vishnu';
-    }
+/// All available deities. To add more: add PNG to assets/images/deities/{id}.png and one entry here.
+const List<DeityConfig> deityConfigs = [
+  DeityConfig(id: 'ganesha', displayName: 'Lord Ganesha', emoji: '🐘', description: 'Remover of obstacles'),
+  DeityConfig(id: 'shiva', displayName: 'Lord Shiva', emoji: '🔱', description: 'The destroyer and transformer'),
+  DeityConfig(id: 'krishna', displayName: 'Lord Krishna', emoji: '🦚', description: 'The divine playful one'),
+  DeityConfig(id: 'lakshmi', displayName: 'Goddess Lakshmi', emoji: '🪷', description: 'Goddess of wealth and prosperity'),
+  DeityConfig(id: 'hanuman', displayName: 'Lord Hanuman', emoji: '🐒', description: 'Symbol of strength and devotion'),
+  DeityConfig(id: 'durga', displayName: 'Goddess Durga', emoji: '🦁', description: 'The invincible one'),
+  DeityConfig(id: 'saraswati', displayName: 'Goddess Saraswati', emoji: '🎸', description: 'Goddess of knowledge and arts'),
+  DeityConfig(id: 'vishnu', displayName: 'Lord Vishnu', emoji: '🪈', description: 'The preserver'),
+  DeityConfig(id: 'kartikeya', displayName: 'Lord Kartikeya', emoji: '🦚', description: 'God of war and victory'),
+  DeityConfig(id: 'narasimha', displayName: 'Lord Narasimha', emoji: '🦁', description: 'The fierce protector'),
+  DeityConfig(id: 'indra', displayName: 'Lord Indra', emoji: '⚡', description: 'King of the devas'),
+  DeityConfig(id: 'rama', displayName: 'Lord Rama', emoji: '🏹', description: 'Embodiment of righteousness'),
+];
+
+/// Look up deity by id. Returns null if id is null or not found.
+DeityConfig? getDeityById(String? id) {
+  if (id == null || id.isEmpty) return null;
+  try {
+    return deityConfigs.firstWhere((d) => d.id == id);
+  } catch (_) {
+    return null;
   }
-
-  String get emoji {
-    switch (this) {
-      case DeityImage.ganesha: return '🐘';
-      case DeityImage.shiva: return '🔱';
-      case DeityImage.krishna: return '🦚';
-      case DeityImage.lakshmi: return '🪷';
-      case DeityImage.hanuman: return '🐒';
-      case DeityImage.durga: return '🦁';
-      case DeityImage.saraswati: return '🎸';
-      case DeityImage.vishnu: return '🪈';
-    }
-  }
-
-  String get description {
-    switch (this) {
-      case DeityImage.ganesha: return 'Remover of obstacles';
-      case DeityImage.shiva: return 'The destroyer and transformer';
-      case DeityImage.krishna: return 'The divine playful one';
-      case DeityImage.lakshmi: return 'Goddess of wealth and prosperity';
-      case DeityImage.hanuman: return 'Symbol of strength and devotion';
-      case DeityImage.durga: return 'The invincible one';
-      case DeityImage.saraswati: return 'Goddess of knowledge and arts';
-      case DeityImage.vishnu: return 'The preserver';
-    }
-  }
-
-  // TODO: Add pricing later - all free for now
-  int get coinCost => 0;
-
-  // Keep legendary rarity for display purposes
-  ItemRarity get rarity => ItemRarity.legendary;
-
-  bool get isDefault => false;
 }
 
 /// Frame styles - different shapes beyond circles
@@ -1063,7 +1057,7 @@ extension FrameStyleMeta on FrameStyle {
     }
   }
 
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity {
     switch (this) {
@@ -1155,8 +1149,7 @@ extension SpecialEffectMeta on SpecialEffect {
     }
   }
 
-  // TODO: Add pricing later - all free for now
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity => ItemRarity.rare;
 
@@ -1211,8 +1204,7 @@ extension ParticleStyleMeta on ParticleStyle {
     }
   }
 
-  // TODO: Add pricing later - all free for now
-  int get coinCost => 0;
+  int get coinCost => isDefault ? 0 : rarity.karmaCost;
 
   ItemRarity get rarity => ItemRarity.common;
 
@@ -1245,38 +1237,63 @@ extension ItemRarityMeta on ItemRarity {
       case ItemRarity.legendary: return const Color(0xFFFFD700);
     }
   }
+
+  /// Karma points required to unlock (free users). Default/free items use 0.
+  int get karmaCost {
+    switch (this) {
+      case ItemRarity.common: return 25;
+      case ItemRarity.rare: return 75;
+      case ItemRarity.epic: return 200;
+      case ItemRarity.legendary: return 400;
+    }
+  }
+
+  /// High-level items (Legendary) are Pro-only; cannot be bought with karma.
+  bool get isProOnly => this == ItemRarity.legendary;
 }
 
 /// Temple ground type (for 3D temple scene in Aangan)
 enum TempleGroundType {
-  white,
   mud,
-  water,
-  mountain,
+  white,
   sand,
   green,
+  water,
+  mountain,
+  marble,
+  stone,
+  wood,
+  mosaic,
 }
 
 extension TempleGroundTypeMeta on TempleGroundType {
   String get displayName {
     switch (this) {
-      case TempleGroundType.white: return 'White';
       case TempleGroundType.mud: return 'Mud';
-      case TempleGroundType.water: return 'Water';
-      case TempleGroundType.mountain: return 'Mountain';
+      case TempleGroundType.white: return 'White';
       case TempleGroundType.sand: return 'Sand';
       case TempleGroundType.green: return 'Green';
+      case TempleGroundType.water: return 'Water';
+      case TempleGroundType.mountain: return 'Mountain';
+      case TempleGroundType.marble: return 'Marble';
+      case TempleGroundType.stone: return 'Stone';
+      case TempleGroundType.wood: return 'Wood';
+      case TempleGroundType.mosaic: return 'Mosaic';
     }
   }
 
   String get emoji {
     switch (this) {
-      case TempleGroundType.white: return '⬜';
       case TempleGroundType.mud: return '🟫';
-      case TempleGroundType.water: return '💧';
-      case TempleGroundType.mountain: return '🏔️';
+      case TempleGroundType.white: return '⬜';
       case TempleGroundType.sand: return '🟨';
       case TempleGroundType.green: return '🟩';
+      case TempleGroundType.water: return '💧';
+      case TempleGroundType.mountain: return '🏔️';
+      case TempleGroundType.marble: return '⬜';
+      case TempleGroundType.stone: return '🪨';
+      case TempleGroundType.wood: return '🪵';
+      case TempleGroundType.mosaic: return '🔶';
     }
   }
 }
@@ -1289,6 +1306,7 @@ enum MandirCategory {
   fx,
   decor,
   light,
+  ground,
 }
 
 extension MandirCategoryMeta on MandirCategory {
@@ -1297,6 +1315,7 @@ extension MandirCategoryMeta on MandirCategory {
       case MandirCategory.fx: return 'FX';
       case MandirCategory.decor: return 'Decor';
       case MandirCategory.light: return 'Light';
+      case MandirCategory.ground: return 'Ground';
     }
   }
 
@@ -1305,6 +1324,7 @@ extension MandirCategoryMeta on MandirCategory {
       case MandirCategory.fx: return '✨';
       case MandirCategory.decor: return '🏡';
       case MandirCategory.light: return '🕯️';
+      case MandirCategory.ground: return '🏔️';
     }
   }
 }
@@ -1339,6 +1359,7 @@ class MandirItems {
   ];
 
   static const List<MandirItem> ringStyle = [
+    MandirItem(id: 'ring_none', name: 'None', emoji: '∅', jsCall: "setOmRingStyle('none',null)"),
     MandirItem(id: 'ring_chakra', name: 'Chakra', emoji: '☸', jsCall: "setOmRingStyle('chakra',null)"),
     MandirItem(id: 'ring_single', name: 'Single', emoji: '⭕', jsCall: "setOmRingStyle('single',null)"),
     MandirItem(id: 'ring_double', name: 'Double', emoji: '◎', jsCall: "setOmRingStyle('double',null)"),
@@ -1349,7 +1370,6 @@ class MandirItems {
     MandirItem(id: 'ring_galaxy', name: 'Galaxy', emoji: '🌀', jsCall: "setOmRingStyle('galaxy',null)"),
     MandirItem(id: 'ring_fire', name: 'Fire Ring', emoji: '🔥', jsCall: "setOmRingStyle('fire',null)"),
     MandirItem(id: 'ring_ripple', name: 'Ripple', emoji: '🌊', jsCall: "setOmRingStyle('ripple',null)"),
-    MandirItem(id: 'ring_none', name: 'None', emoji: '∅', jsCall: "setOmRingStyle('none',null)"),
   ];
 
   static const List<MandirItem> color = [
@@ -1389,40 +1409,29 @@ class MandirItems {
   ];
 
   static const List<MandirItem> fx = [
+    MandirItem(id: 'fx_none', name: 'None', emoji: '∅', jsCall: "setSpecialFX('none',null)"),
+    MandirItem(id: 'fx_dust', name: 'Golden Dust', emoji: '✨', jsCall: "toggleDust(null)"),
     MandirItem(id: 'fx_aurora', name: 'Aurora BG', emoji: '🌌', jsCall: "toggleAurora(null)"),
     MandirItem(id: 'fx_godrays', name: 'God Rays', emoji: '☀️', jsCall: "toggleGodRays(null)"),
-    MandirItem(id: 'fx_templeglow', name: 'Temple Glow', emoji: '🕯', jsCall: "cycleTempleGlow(null)"),
-    MandirItem(id: 'fx_dust', name: 'Golden Dust', emoji: '✨', jsCall: "toggleDust(null)"),
-    MandirItem(id: 'fx_fireflies', name: 'Fireflies', emoji: '✨', jsCall: "toggleEffect('fireflies',null)"),
     MandirItem(id: 'fx_rain', name: 'Rain', emoji: '🌧️', jsCall: "toggleEffect('rain',null)"),
     MandirItem(id: 'fx_fire_aura', name: 'Fire Aura', emoji: '🔥', jsCall: "setSpecialFX('fire_aura',null)"),
     MandirItem(id: 'fx_water', name: 'Water Ripple', emoji: '🌊', jsCall: "setSpecialFX('water_ripples',null)"),
     MandirItem(id: 'fx_divine', name: 'Divine Light', emoji: '💡', jsCall: "setSpecialFX('divine_light',null)"),
     MandirItem(id: 'fx_cosmic', name: 'Cosmic Swirl', emoji: '🌀', jsCall: "setSpecialFX('cosmic_swirl',null)"),
     MandirItem(id: 'fx_petals', name: 'Petals', emoji: '🌸', jsCall: "setSpecialFX('floating_petals',null)"),
-    MandirItem(id: 'fx_none', name: 'None', emoji: '∅', jsCall: "setSpecialFX('none',null)"),
   ];
 
   static const List<MandirItem> decor = [
     MandirItem(id: 'dec_mandir', name: 'Mandir', emoji: '🛕', jsCall: "toggleObj('mandir')"),
-    MandirItem(id: 'dec_diyas', name: 'Diyas', emoji: '🪔', jsCall: "toggleObj('diyas')"),
-    MandirItem(id: 'dec_peacock', name: 'Peacock', emoji: '🦚', jsCall: "buy('peacock','🦚','Peacock',100)", cost: 100),
-    MandirItem(id: 'dec_cow', name: 'Gau Mata', emoji: '🐄', jsCall: "buy('cow','🐄','Gau Mata',180)", cost: 180),
-    MandirItem(id: 'dec_parrot', name: 'Parrot', emoji: '🦜', jsCall: "buy('parrot','🦜','Parrot',80)", cost: 80),
-    MandirItem(id: 'dec_jhula', name: 'Jhula', emoji: '🪑', jsCall: "buy('jhula','🪑','Jhula',220)", cost: 220),
+    MandirItem(id: 'dec_diyas', name: 'Diya', emoji: '🪔', jsCall: "toggleObj('diyas')"),
     MandirItem(id: 'dec_rangoli', name: 'Rangoli', emoji: '🎨', jsCall: "buy('rangoli','🎨','Rangoli',130)", cost: 130),
-    MandirItem(id: 'dec_agarbatti', name: 'Agarbatti', emoji: '🕯️', jsCall: "buy('agarbatti','🕯️','Agarbatti',60)", cost: 60),
-    MandirItem(id: 'dec_bell', name: 'Ghanta', emoji: '🔔', jsCall: "buy('bell','🔔','Ghanta',90)", cost: 90),
-    MandirItem(id: 'dec_sparrow', name: 'Sparrow', emoji: '🐦', jsCall: "buy('sparrow','🐦','Sparrow',70)", cost: 70),
   ];
 
   static const List<MandirItem> light = [
+    MandirItem(id: 'mood_midday', name: 'Default', emoji: '☀️', jsCall: "mood('midday',null)"),
     MandirItem(id: 'mood_dawn', name: 'Dawn Puja', emoji: '🌅', jsCall: "mood('dawn',null)"),
     MandirItem(id: 'mood_golden', name: 'Golden', emoji: '✨', jsCall: "mood('golden',null)"),
-    MandirItem(id: 'mood_midday', name: 'Midday', emoji: '☀️', jsCall: "mood('midday',null)"),
     MandirItem(id: 'mood_dusk', name: 'Dusk', emoji: '🌆', jsCall: "mood('dusk',null)"),
-    MandirItem(id: 'mood_night', name: 'Night', emoji: '🌙', jsCall: "mood('night',null)"),
-    MandirItem(id: 'mood_deep', name: 'Deep Night', emoji: '🌌', jsCall: "mood('deepnight',null)"),
     MandirItem(id: 'diya_orange', name: 'Orange Flame', emoji: '🪔', jsCall: "setDiya(0xff8c00,0xffcc44,null)"),
     MandirItem(id: 'diya_yellow', name: 'Yellow Flame', emoji: '🪔', jsCall: "setDiya(0xFFCC00,0xFFE066,null)"),
     MandirItem(id: 'diya_red', name: 'Red Flame', emoji: '🪔', jsCall: "setDiya(0xcc2200,0xff4422,null)"),
@@ -1431,11 +1440,25 @@ class MandirItems {
     MandirItem(id: 'diya_green', name: 'Green Flame', emoji: '🪔', jsCall: "setDiya(0x22aa44,0xaaffaa,null)"),
   ];
 
+  static const List<MandirItem> ground = [
+    MandirItem(id: 'ground_mud', name: 'Mud', emoji: '🟫', jsCall: "setFloor('mud',null)"),
+    MandirItem(id: 'ground_white', name: 'White', emoji: '⬜', jsCall: "setFloor('white',null)"),
+    MandirItem(id: 'ground_sand', name: 'Sand', emoji: '🟨', jsCall: "setFloor('sand',null)"),
+    MandirItem(id: 'ground_green', name: 'Green', emoji: '🟩', jsCall: "setFloor('green',null)"),
+    MandirItem(id: 'ground_water', name: 'Water', emoji: '💧', jsCall: "setFloor('water',null)"),
+    MandirItem(id: 'ground_mountain', name: 'Mountain', emoji: '🏔️', jsCall: "setFloor('mountain',null)"),
+    MandirItem(id: 'ground_marble', name: 'Marble', emoji: '⬜', jsCall: "setFloor('marble',null)"),
+    MandirItem(id: 'ground_stone', name: 'Stone', emoji: '🪨', jsCall: "setFloor('stone',null)"),
+    MandirItem(id: 'ground_wood', name: 'Wood', emoji: '🪵', jsCall: "setFloor('wood',null)"),
+    MandirItem(id: 'ground_mosaic', name: 'Mosaic', emoji: '🔶', jsCall: "setFloor('mosaic',null)"),
+  ];
+
   static List<MandirItem> getItemsForCategory(MandirCategory category) {
     switch (category) {
       case MandirCategory.fx: return fx;
       case MandirCategory.decor: return decor;
       case MandirCategory.light: return light;
+      case MandirCategory.ground: return ground;
     }
   }
 }

@@ -55,7 +55,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Not enough coins!'),
+            content: Text('Not enough Karma!'),
             backgroundColor: AppColors.errorColor,
           ),
         );

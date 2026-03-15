@@ -194,33 +194,38 @@ class PremiumFeatures {
   static const List<PremiumFeature> features = [
     PremiumFeature(
       icon: '📚',
-      title: 'Unlimited Access',
-      description: 'Access all books, chapters, and verses',
+      title: 'Premium Books & Stories',
+      description: 'Unlock exclusive books, sacred stories, and skip-ahead chapter access',
     ),
     PremiumFeature(
-      icon: '🧘',
-      title: 'Ad-Free Experience',
-      description: 'Enjoy uninterrupted spiritual practice',
+      icon: '✨',
+      title: 'AI Commentary on Every Verse',
+      description: 'Get detailed AI-powered explanations of every shloka and verse',
     ),
     PremiumFeature(
       icon: '💬',
-      title: 'Unlimited AI Chat',
-      description: 'Ask unlimited questions to spiritual AI',
+      title: 'Unlimited AI Consultations',
+      description: 'Unlimited numerology, kundli, palmistry, and mantra guidance',
+    ),
+    PremiumFeature(
+      icon: '🎵',
+      title: 'Full Audio Library',
+      description: 'Stream every chant, audio book, and guided meditation',
     ),
     PremiumFeature(
       icon: '🎨',
       title: 'Exclusive Customizations',
-      description: 'Unlock all sanctuary themes and items',
+      description: 'Unlock rare, epic, and legendary sanctuary themes & deity images',
     ),
     PremiumFeature(
-      icon: '📖',
-      title: 'Offline Reading',
-      description: 'Download content for offline access',
+      icon: '🧘',
+      title: 'Advanced Practices',
+      description: 'Manifestation, unlimited custom habits, and all chants',
     ),
     PremiumFeature(
-      icon: '🔔',
-      title: 'Priority Support',
-      description: 'Get faster responses from our team',
+      icon: '⚔️',
+      title: 'All Quests & Garbh Sanskar',
+      description: 'Access all 18 parvas and premium Garbh Sanskar content',
     ),
   ];
 }

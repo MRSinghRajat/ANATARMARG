@@ -16,7 +16,7 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(
       const ProviderScope(
-        child: AshraePlaygroundApp(),
+        child: AntarMargApp(),
       ),
     );
 
@@ -34,7 +34,7 @@ void main() {
   testWidgets('App has correct title', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
-        child: AshraePlaygroundApp(),
+        child: AntarMargApp(),
       ),
     );
 

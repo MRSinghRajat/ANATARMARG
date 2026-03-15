@@ -1,15 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../shared/services/premium_service.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
 import '../../data/repositories/chapter_repository.dart';
 import '../../data/repositories/verse_repository.dart';
 import '../../data/repositories/book_progress_repository.dart';
 import '../../data/services/verse_notes_service.dart';
+import '../../data/services/granthalaya_recent_service.dart';
 import 'book_chapter_screen.dart';
-import 'book_chat_screen.dart';
 import 'book_notes_screen.dart';
 
 /// Progress Hub - Dark theme with gold accents. Matches HTML design.
@@ -50,16 +52,27 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   Map<String, List<VerseNoteModel>> _notesByChapter = {};
   bool _isLoading = true;
   bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
-  int _selectedTab = 0; // 0: Chapters, 1: Chat, 2: Notes
+  int _selectedTab = 0; // 0: Chapters, 1: Notes
 
   @override
   void initState() {
     super.initState();
+    GranthalayaRecentService().recordBookOpened(widget.book.id);
     _loadChapters();
     PremiumService.instance.isPremium.then((v) {
       if (mounted) setState(() => _isPremium = v);
     });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    _premiumSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadChapters() async {
@@ -133,13 +146,35 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   }
 
   bool _canTapChapter(ChapterModel ch, int index) {
+    // Premium users can jump to any chapter
     if (_isPremium) return true;
+    // Free users must complete chapters sequentially
     final status = _chapterStatus(ch, index);
     return status != _ChapterStatus.locked;
   }
 
+  void _onLockedChapterTap() {
+    PaywallScreen.showAsBottomSheet(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If book itself is premium and user is free, show paywall and pop back
+    if (widget.book.isPremium && !_isPremium) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          PaywallScreen.showAsBottomSheet(context);
+          Navigator.of(context).pop();
+        }
+      });
+      return Scaffold(
+        backgroundColor: _ProgressHubColors.backgroundDeep,
+        body: const Center(
+          child: CircularProgressIndicator(color: _ProgressHubColors.primary),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _ProgressHubColors.backgroundDeep,
       body: SafeArea(
@@ -160,12 +195,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                       _buildChapterTimeline(context),
                       const SizedBox(height: 32),
                       _buildLegend(context),
-                    ] else if (_selectedTab == 1)
-                      SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.5,
-                        child: BookChatScreen(book: widget.book),
-                      )
-                    else
+                    ] else
                       SizedBox(
                         height: MediaQuery.of(context).size.height * 0.5,
                         child: BookNotesScreen(book: widget.book),
@@ -215,21 +245,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
               color: _ProgressHubColors.offWhite,
             ),
           ),
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => BookChatScreen(book: widget.book),
-                ),
-              );
-            },
-            icon: const Icon(Icons.chat_bubble_outline),
-            color: _ProgressHubColors.mutedGold,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.transparent,
-            ),
-          ),
+          const SizedBox(width: 48),
         ],
       ),
     );
@@ -358,9 +374,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
             children: [
               _buildCardTab(0, 'Chapters', Icons.list_alt, true),
               const SizedBox(width: 6),
-              _buildCardTab(1, 'Chat', Icons.auto_awesome, false),
-              const SizedBox(width: 6),
-              _buildCardTab(2, 'Notes', Icons.sticky_note_2_outlined, false),
+              _buildCardTab(1, 'Notes', Icons.sticky_note_2_outlined, false),
             ],
           ),
         ],
@@ -503,6 +517,11 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
               final isActive = status == _ChapterStatus.inProgress &&
                   index == _currentChapterIndex;
 
+              final canTap = _canTapChapter(ch, index);
+              // Show premium skip-ahead hint on locked chapters for free users
+              final showPremiumHint =
+                  !_isPremium && status == _ChapterStatus.locked;
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 24),
                 child: _ChapterTimelineItem(
@@ -511,8 +530,10 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                   isActive: isActive,
                   percent: pct,
                   versesRemaining: remaining,
-                  onTap:
-                      _canTapChapter(ch, index) ? () => _openChapter(ch) : null,
+                  isPremiumLocked: showPremiumHint,
+                  onTap: canTap
+                      ? () => _openChapter(ch)
+                      : (showPremiumHint ? _onLockedChapterTap : null),
                 ),
               );
             }),
@@ -611,6 +632,7 @@ class _ChapterTimelineItem extends StatelessWidget {
   final bool isActive;
   final int percent;
   final int versesRemaining;
+  final bool isPremiumLocked;
   final VoidCallback? onTap;
 
   const _ChapterTimelineItem({
@@ -619,6 +641,7 @@ class _ChapterTimelineItem extends StatelessWidget {
     required this.isActive,
     required this.percent,
     required this.versesRemaining,
+    this.isPremiumLocked = false,
     this.onTap,
   });
 
@@ -684,18 +707,44 @@ class _ChapterTimelineItem extends StatelessWidget {
                                 Icon(
                                   Icons.lock,
                                   size: 10,
-                                  color: Colors.grey.shade500,
+                                  color: isPremiumLocked
+                                      ? const Color(0xFFD4AF37)
+                                      : Colors.grey.shade500,
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
-                                  'Locked',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade500,
-                                    letterSpacing: 1,
+                                if (isPremiumLocked)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD4AF37)
+                                          .withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: const Color(0xFFD4AF37)
+                                            .withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'PRO',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFFD4AF37),
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    'Locked',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade500,
+                                      letterSpacing: 1,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                         ],

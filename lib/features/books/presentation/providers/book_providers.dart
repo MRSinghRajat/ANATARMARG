@@ -3,6 +3,9 @@ import '../../data/repositories/book_repository.dart';
 import '../../data/datasources/supabase_granthalaya_datasource.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../../data/models/book_model.dart';
+import '../../data/models/chapter_model.dart';
+import '../../data/models/meditation_guide_model.dart';
+import '../../../../features/content/data/models/verse_model.dart';
 
 final bookRepositoryProvider = Provider<BookRepository>((ref) {
   return BookRepository();
@@ -46,6 +49,11 @@ final userAudioProgressProvider = FutureProvider<List<UserAudioProgressModel>>((
 
 final chantsProvider = FutureProvider<List<ChantModel>>((ref) async {
   return ref.read(granthalayaDataSourceProvider).getChants();
+});
+
+/// YouTube videos for Granthalaya Video tab (from your channel, curated in Supabase).
+final granthalayaVideosProvider = FutureProvider<List<GranthalayaVideoModel>>((ref) async {
+  return ref.read(granthalayaDataSourceProvider).getVideos();
 });
 
 /// Chants filtered by deity slug - for Divine Presence deity→track relationship
@@ -96,4 +104,36 @@ final booksByDeityProvider = FutureProvider.family<List<BookModel>, String>((ref
 /// Fetch single deity by slug with full metadata
 final deityDetailProvider = FutureProvider.family<DeityModel?, String>((ref, slug) async {
   return ref.read(granthalayaDataSourceProvider).getDeityBySlug(slug);
+});
+
+// ── Listen Tab Providers ──
+
+/// Sacred texts that have audio_url populated
+final sacredTextsWithAudioProvider = FutureProvider<List<SacredTextModel>>((ref) async {
+  return ref.read(granthalayaDataSourceProvider).getSacredTextsWithAudio();
+});
+
+/// Books that have audio_url populated (audiobooks)
+final booksWithAudioProvider = FutureProvider<List<BookModel>>((ref) async {
+  return ref.read(granthalayaDataSourceProvider).getBooksWithAudio();
+});
+
+/// Sacred stories that have audio
+final storiesWithAudioProvider = FutureProvider<List<SacredStoryModel>>((ref) async {
+  return ref.read(granthalayaDataSourceProvider).getStoriesWithAudio();
+});
+
+/// Meditation guides from meditation_guides table
+final meditationGuidesProvider = FutureProvider<List<MeditationGuideModel>>((ref) async {
+  return ref.read(granthalayaDataSourceProvider).getMeditationGuides();
+});
+
+/// Chapters with audio for a specific book
+final chaptersWithAudioProvider = FutureProvider.family<List<ChapterModel>, String>((ref, bookId) async {
+  return ref.read(granthalayaDataSourceProvider).getChaptersWithAudio(bookId);
+});
+
+/// Verses with audio for a specific chapter
+final versesWithAudioProvider = FutureProvider.family<List<VerseContent>, String>((ref, chapterId) async {
+  return ref.read(granthalayaDataSourceProvider).getVersesWithAudio(chapterId);
 });

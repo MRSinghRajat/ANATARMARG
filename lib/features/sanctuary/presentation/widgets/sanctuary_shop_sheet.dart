@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../../shared/services/premium_service.dart';
 import '../../data/models/sanctuary_customization_model.dart';
 import '../../data/services/sanctuary_customization_service.dart';
 
@@ -84,11 +86,16 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       SanctuaryCustomizationService();
 
   late TabController _tabController;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
   // Preview state
   ShopItem? _previewItem;
   CustomizationCategory? _previewCategory;
   bool _showApplyButton = false;
+  // Deity zoom/fit when previewing a deity
+  double _previewDeityScale = 1.0;
+  BoxFit? _previewDeityFit;
 
   // Track which Mandir item is selected per category (single-select tabs only)
   final Map<MandirCategory, String> _selectedMandirItems = {
@@ -98,25 +105,44 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   // Decor items that are currently active (toggleable, multiple allowed)
   final Set<String> _activeMandirDecor = {'dec_mandir', 'dec_diyas'};
 
-  // FX items that are currently active (toggleable, multiple allowed)
-  final Set<String> _activeMandirFx = {};
+  // FX items that are currently active (toggleable, multiple allowed). Golden Dust default.
+  final Set<String> _activeMandirFx = {'fx_dust'};
+
+  List<CustomizationCategory> get _aatmaCategories =>
+      CustomizationCategory.values
+          .where((c) => c != CustomizationCategory.groundTypes)
+          .toList();
 
   int get _tabCount => widget.aanganTab == AanganTab.aatma
-      ? CustomizationCategory.values.length + 1
-      : MandirCategory.values.length;
+      ? _aatmaCategories.length
+      : MandirCategory.values.length + 1;
 
   void _rebuildTabController() {
     _tabController = TabController(length: _tabCount, vsync: this);
+  }
+
+  /// Whether an item requires premium (rare+ rarity or deity images).
+  /// High-level (Legendary) and Deity items are Pro-only; cannot be bought with karma.
+  bool _requiresPremium(ShopItem item) {
+    if (item.categoryKey == 'deityImage') return true;
+    return item.rarity.isProOnly;
   }
 
   @override
   void initState() {
     super.initState();
     _rebuildTabController();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
   }
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -125,7 +151,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.ashramBackgroundDark,
+        color: AppColors.ashramBackgroundDark.withValues(alpha: 0.75),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(
           top: BorderSide(
@@ -155,14 +181,11 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                         TabBarView(
                           controller: _tabController,
                           children: widget.aanganTab == AanganTab.aatma
-                              ? [
-                                  ...CustomizationCategory.values
-                                      .map(_buildCategoryGrid),
-                                  _buildMyCollectionView(),
-                                ]
+                              ? _aatmaCategories.map(_buildCategoryGrid).toList()
                               : [
                                   ...MandirCategory.values
                                       .map(_buildMandirCategoryGrid),
+                                  _buildMandirOwnedView(),
                                 ],
                         ),
                         if (_showApplyButton && _previewItem != null)
@@ -180,9 +203,9 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
   Widget _buildFixedHeader() {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.ashramBackgroundDark,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: AppColors.ashramBackgroundDark.withValues(alpha: 0.75),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -202,23 +225,28 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: GestureDetector(
-                onTap: widget.isMinimized
-                    ? widget.onExpandTap
-                    : widget.onMinimizeTap,
-                child: Icon(
-                  widget.isMinimized
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  size: 24,
-                  color: Colors.white.withValues(alpha: 0.6),
-                ),
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: widget.isMinimized
+                        ? widget.onExpandTap
+                        : widget.onMinimizeTap,
+                    child: Icon(
+                      widget.isMinimized
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 24,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (!widget.isMinimized) ...[
               _buildCategoryTabs(),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Container(
                 height: 1,
                 color: Colors.white.withValues(alpha: 0.05),
@@ -228,319 +256,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         ),
       ),
     );
-  }
-
-
-
-  Widget _buildMyCollectionView() {
-    final current = _customizationService.currentCustomization;
-
-    // Only categories visible in current tab
-    final Map<CustomizationCategory, List<ShopItem>> ownedByCategory = {};
-
-    for (final category in CustomizationCategory.values) {
-      final items = _getItemsForCategory(category);
-      final owned = items
-          .where((item) =>
-              _customizationService.isItemPurchased(
-                  item.categoryKey, item.id) ||
-              item.cost == 0 ||
-              item.isDefault)
-          .toList();
-      if (owned.isNotEmpty) {
-        ownedByCategory[category] = owned;
-      }
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 80),
-      itemCount:
-          ownedByCategory.length + 1, // +1 for currently equipped section
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          // Currently equipped section
-          return _buildCurrentlyEquippedSection(current);
-        }
-
-        final categoryIndex = index - 1;
-        final category = ownedByCategory.keys.elementAt(categoryIndex);
-        final items = ownedByCategory[category]!;
-
-        return _buildCollectionCategory(category, items);
-      },
-    );
-  }
-
-  Widget _buildCurrentlyEquippedSection(SanctuaryCustomization current) {
-    final equipped = <ShopItem>[];
-
-    equipped.add(ShopItem(
-      id: current.omStyle.name,
-      name: current.omStyle.displayName,
-      emoji: current.omStyle.emoji,
-      cost: 0,
-      rarity: current.omStyle.rarity,
-      isDefault: current.omStyle.isDefault,
-      categoryKey: 'omStyle',
-    ));
-    equipped.add(ShopItem(
-      id: current.ringStyle.name,
-      name: current.ringStyle.displayName,
-      emoji: current.ringStyle.emoji,
-      cost: 0,
-      rarity: current.ringStyle.rarity,
-      isDefault: current.ringStyle.isDefault,
-      categoryKey: 'ringStyle',
-    ));
-    equipped.add(ShopItem(
-      id: current.ringColor.name,
-      name: current.ringColor.displayName,
-      emoji: current.ringColor.emoji,
-      cost: 0,
-      rarity: current.ringColor.rarity,
-      isDefault: current.ringColor.isDefault,
-      categoryKey: 'ringColor',
-      previewColor: current.ringColor.primaryColor,
-    ));
-    equipped.add(ShopItem(
-      id: current.backgroundStyle.name,
-      name: current.backgroundStyle.displayName,
-      emoji: current.backgroundStyle.emoji,
-      cost: 0,
-      rarity: current.backgroundStyle.rarity,
-      isDefault: current.backgroundStyle.isDefault,
-      categoryKey: 'backgroundStyle',
-    ));
-    equipped.add(ShopItem(
-      id: current.glowColor.name,
-      name: current.glowColor.displayName,
-      emoji: current.glowColor.emoji,
-      cost: 0,
-      rarity: current.glowColor.rarity,
-      isDefault: current.glowColor.isDefault,
-      categoryKey: 'glowColor',
-      previewColor: current.glowColor.color,
-    ));
-    final ground = _customizationService.templeGroundType;
-    equipped.add(ShopItem(
-      id: ground.name,
-      name: ground.displayName,
-      emoji: ground.emoji,
-      cost: 0,
-      rarity: ItemRarity.common,
-      isDefault: ground == TempleGroundType.white,
-      categoryKey: 'templeGround',
-    ));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.ashramAccentGold.withValues(alpha: 0.3),
-                      AppColors.ashramAccentGold.withValues(alpha: 0.1),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.star,
-                        size: 10, color: AppColors.ashramAccentGold),
-                    const SizedBox(width: 3),
-                    Text(
-                      'EQUIPPED',
-                      style: GoogleFonts.tenorSans(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ashramAccentGold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 60,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: equipped.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 6),
-            itemBuilder: (context, index) {
-              final item = equipped[index];
-              return SizedBox(
-                width: 54,
-                child: _buildMiniItemCard(item, isEquipped: true),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.05),
-        ),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
-
-  Widget _buildCollectionCategory(
-      CustomizationCategory category, List<ShopItem> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Text(category.emoji, style: const TextStyle(fontSize: 12)),
-              const SizedBox(width: 4),
-              Text(
-                category.displayName.toUpperCase(),
-                style: GoogleFonts.tenorSans(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.7),
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${items.length}',
-                style: GoogleFonts.tenorSans(
-                  fontSize: 9,
-                  color: Colors.white.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 60,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 6),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final isEquipped = _customizationService.isItemSelected(
-                  item.categoryKey, item.id);
-              return SizedBox(
-                width: 54,
-                child: _buildMiniItemCard(item, isEquipped: isEquipped),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 10),
-      ],
-    );
-  }
-
-  Widget _buildMiniItemCard(ShopItem item, {bool isEquipped = false}) {
-    return GestureDetector(
-      onTap: () {
-        _onItemTap(
-            item,
-            CustomizationCategory.values.firstWhere(
-              (c) => _categoryKeyMatches(c, item.categoryKey),
-              orElse: () => CustomizationCategory.omStyles,
-            ));
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isEquipped
-                ? [
-                    AppColors.ashramAccentGold.withValues(alpha: 0.2),
-                    AppColors.ashramAccentGold.withValues(alpha: 0.05),
-                  ]
-                : [
-                    const Color(0xFF1A2837).withValues(alpha: 0.6),
-                    const Color(0xFF2A3847).withValues(alpha: 0.3),
-                  ],
-          ),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isEquipped
-                ? AppColors.ashramAccentGold.withValues(alpha: 0.5)
-                : item.rarity.color.withValues(alpha: 0.2),
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            item.previewColor != null
-                ? Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: item.previewColor!.withValues(alpha: 0.3),
-                      border: Border.all(color: item.previewColor!, width: 1.5),
-                    ),
-                  )
-                : Text(item.emoji, style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 2),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                item.name,
-                style: GoogleFonts.tenorSans(
-                  fontSize: 7,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _categoryKeyMatches(CustomizationCategory category, String key) {
-    switch (category) {
-      case CustomizationCategory.omStyles:
-        return key == 'omStyle';
-      case CustomizationCategory.ringStyles:
-        return key == 'ringStyle';
-      case CustomizationCategory.ringColors:
-        return key == 'ringColor';
-      case CustomizationCategory.frameStyles:
-        return key == 'frameStyle';
-      case CustomizationCategory.animations:
-        return key == 'animationStyle';
-      case CustomizationCategory.backgrounds:
-        return key == 'backgroundStyle';
-      case CustomizationCategory.glowColors:
-        return key == 'glowColor';
-      case CustomizationCategory.specialEffects:
-        return key == 'specialEffect';
-      case CustomizationCategory.particles:
-        return key == 'particleStyle';
-      case CustomizationCategory.deityImages:
-        return key == 'deityImage';
-      case CustomizationCategory.groundTypes:
-        return key == 'templeGround';
-    }
   }
 
   Widget _buildCategoryTabs() {
@@ -567,7 +282,23 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         labelPadding: const EdgeInsets.symmetric(horizontal: 8),
         tabs: widget.aanganTab == AanganTab.aatma
             ? [
-                ...CustomizationCategory.values.map((category) {
+                ..._aatmaCategories.map((category) {
+                  return Tab(
+                    height: 28,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(category.emoji,
+                            style: const TextStyle(fontSize: 11)),
+                        const SizedBox(width: 3),
+                        Text(category.displayName),
+                      ],
+                    ),
+                  );
+                }),
+              ]
+            : [
+                ...MandirCategory.values.map((category) {
                   return Tab(
                     height: 28,
                     child: Row(
@@ -592,22 +323,6 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                     ],
                   ),
                 ),
-              ]
-            : [
-                ...MandirCategory.values.map((category) {
-                  return Tab(
-                    height: 28,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(category.emoji,
-                            style: const TextStyle(fontSize: 11)),
-                        const SizedBox(width: 3),
-                        Text(category.displayName),
-                      ],
-                    ),
-                  );
-                }),
               ],
       ),
     );
@@ -657,13 +372,33 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
     if (category == MandirCategory.fx) {
       return _activeMandirFx.contains(item.id);
     }
+    if (category == MandirCategory.ground) {
+      return 'ground_${_customizationService.templeGroundType.name}' == item.id;
+    }
     return _selectedMandirItems[category] == item.id;
   }
 
   Widget _buildMandirItemCard(
       MandirItem item, MandirCategory category, bool isSelected) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
+        if (category == MandirCategory.ground) {
+          final groundId = item.id.replaceFirst('ground_', '');
+          TempleGroundType? type;
+          for (final t in TempleGroundType.values) {
+            if (t.name == groundId) {
+              type = t;
+              break;
+            }
+          }
+          if (type != null) {
+            await _customizationService.setTempleGroundType(type);
+            widget.onGroundTypeChange?.call(type);
+            widget.onMandirAction?.call(item.jsCall);
+            setState(() {});
+          }
+          return;
+        }
         setState(() {
           if (category == MandirCategory.decor) {
             if (_activeMandirDecor.contains(item.id)) {
@@ -695,8 +430,8 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                     AppColors.ashramAccentGold.withValues(alpha: 0.05),
                   ]
                 : [
-                    const Color(0xFF1A2837).withValues(alpha: 0.6),
-                    const Color(0xFF2A3847).withValues(alpha: 0.3),
+                    const Color(0xFF1A2837).withValues(alpha: 0.38),
+                    const Color(0xFF2A3847).withValues(alpha: 0.22),
                   ],
           ),
           borderRadius: BorderRadius.circular(10),
@@ -734,7 +469,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                   const SizedBox(height: 1),
                   if (item.cost > 0)
                     Text(
-                      '💎 ${item.cost}',
+                      '${item.cost} Karma',
                       style: GoogleFonts.tenorSans(
                         fontSize: 7,
                         color: Colors.white.withValues(alpha: 0.5),
@@ -763,6 +498,89 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMandirOwnedView() {
+    final ground = _customizationService.templeGroundType;
+    final moodId = _selectedMandirItems[MandirCategory.light] ?? 'mood_midday';
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 80),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.ashramAccentGold.withValues(alpha: 0.3),
+                      AppColors.ashramAccentGold.withValues(alpha: 0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star,
+                        size: 10, color: AppColors.ashramAccentGold),
+                    const SizedBox(width: 3),
+                    Text(
+                      'EQUIPPED',
+                      style: GoogleFonts.tenorSans(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ashramAccentGold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          'Ground: ${ground.displayName} ${ground.emoji}',
+          style: GoogleFonts.tenorSans(
+            fontSize: 10,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Light/Mood: $moodId',
+          style: GoogleFonts.tenorSans(
+            fontSize: 10,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: () async {
+            widget.onMandirAction?.call("setFloor('mud',null)");
+            widget.onMandirAction?.call("mood('midday',null)");
+            widget.onMandirAction?.call("setSpecialFX('none',null)");
+            await _customizationService.setTempleGroundType(TempleGroundType.mud);
+            widget.onGroundTypeChange?.call(TempleGroundType.mud);
+            if (mounted) {
+              setState(() {
+                _selectedMandirItems[MandirCategory.light] = 'mood_midday';
+              });
+            }
+          },
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Set Mandir to default'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.ashramAccentGold,
+            side: BorderSide(
+                color: AppColors.ashramAccentGold.withValues(alpha: 0.5)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -888,13 +706,13 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
             .toList();
 
       case CustomizationCategory.deityImages:
-        return DeityImage.values
+        return deityConfigs
             .map((deity) => ShopItem(
-                  id: deity.name,
+                  id: deity.id,
                   name: deity.displayName,
                   emoji: deity.emoji,
-                  cost: deity.coinCost,
-                  rarity: deity.rarity,
+                  cost: ItemRarity.legendary.karmaCost,
+                  rarity: ItemRarity.legendary,
                   isDefault: false,
                   categoryKey: 'deityImage',
                   description: deity.description,
@@ -909,7 +727,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                   emoji: type.emoji,
                   cost: 0,
                   rarity: ItemRarity.common,
-                  isDefault: type == TempleGroundType.white,
+                  isDefault: type == TempleGroundType.mud,
                   categoryKey: 'templeGround',
                 ))
             .toList();
@@ -944,8 +762,8 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                         AppColors.ashramAccentGold.withValues(alpha: 0.05),
                       ]
                     : [
-                        const Color(0xFF1A2837).withValues(alpha: 0.6),
-                        const Color(0xFF2A3847).withValues(alpha: 0.3),
+                        const Color(0xFF1A2837).withValues(alpha: 0.38),
+                        const Color(0xFF2A3847).withValues(alpha: 0.22),
                       ],
           ),
           borderRadius: BorderRadius.circular(10),
@@ -1035,6 +853,36 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                   ),
                 ),
               ),
+
+            // Premium lock badge
+            if (!_isPremium && _requiresPremium(item) && !isSelected)
+              Positioned(
+                top: 2,
+                left: 2,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock, size: 6, color: Colors.white),
+                      const SizedBox(width: 1),
+                      Text(
+                        'PRO',
+                        style: GoogleFonts.tenorSans(
+                          fontSize: 6,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -1061,6 +909,25 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
           ],
         ),
       );
+    }
+
+    // Deities: show actual image if available, else emoji
+    if (item.categoryKey == 'deityImage') {
+      final deity = getDeityById(item.id);
+      if (deity != null) {
+        return SizedBox(
+          width: 32,
+          height: 32,
+          child: Image.asset(
+            deity.assetPath,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Text(
+              item.emoji,
+              style: const TextStyle(fontSize: 24),
+            ),
+          ),
+        );
+      }
     }
 
     return Text(
@@ -1090,16 +957,11 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('💎', style: TextStyle(fontSize: 7)),
-        const SizedBox(width: 1),
-        Text(
-          item.cost.toString(),
-          style: GoogleFonts.tenorSans(
-            fontSize: 8,
-            fontWeight: FontWeight.w600,
-            color: canAfford ? AppColors.ashramAccentGold : Colors.red.shade300,
-          ),
-        ),
+        Text('${item.cost} Karma', style: GoogleFonts.tenorSans(
+          fontSize: 7,
+          fontWeight: FontWeight.w600,
+          color: canAfford ? AppColors.ashramAccentGold : Colors.red.shade100,
+        )),
       ],
     );
   }
@@ -1115,7 +977,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
     if (category == CustomizationCategory.groundTypes) {
       final type = TempleGroundType.values.firstWhere(
         (e) => e.name == item.id,
-        orElse: () => TempleGroundType.white,
+        orElse: () => TempleGroundType.mud,
       );
       _customizationService.setTempleGroundType(type);
       widget.onGroundTypeChange?.call(type);
@@ -1123,11 +985,16 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       return;
     }
 
-    // Set preview
+    // Set preview; for deities init zoom/fit from current
     setState(() {
       _previewItem = item;
       _previewCategory = category;
       _showApplyButton = true;
+      if (category == CustomizationCategory.deityImages) {
+        final cur = _customizationService.currentCustomization;
+        _previewDeityScale = cur.deityImageScale;
+        _previewDeityFit = cur.deityImageFit ?? BoxFit.cover;
+      }
     });
 
     // Trigger preview callback
@@ -1169,7 +1036,10 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
           break;
         case 'deityImage':
           preview = current.copyWith(
-              deityImage: DeityImage.values.firstWhere((e) => e.name == item.id));
+            deityImageId: item.id,
+            deityImageScale: _previewDeityScale,
+            deityImageFit: _previewDeityFit,
+          );
           break;
         case 'frameStyle':
           preview = current.copyWith(
@@ -1196,19 +1066,31 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
     widget.onPreviewChange?.call(preview);
   }
 
+  void _updateDeityPreviewZoomFit(double scale, BoxFit? fit) {
+    setState(() {
+      _previewDeityScale = scale;
+      _previewDeityFit = fit;
+    });
+    if (_previewItem != null && _previewCategory != null) {
+      _triggerPreview(_previewItem!, _previewCategory!);
+    }
+  }
+
   Widget _buildApplyOverlay() {
     final item = _previewItem!;
     final isPurchased =
         _customizationService.isItemPurchased(item.categoryKey, item.id);
     final canAfford = _coinService.currentBalance >= item.cost;
-    final canApply = isPurchased || item.cost == 0 || canAfford;
+    final isPremiumLocked = !_isPremium && _requiresPremium(item);
+    final canApply = isPremiumLocked || isPurchased || item.cost == 0 || canAfford;
+    final isDeityPreview = _previewCategory == CustomizationCategory.deityImages;
 
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -1223,79 +1105,167 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         ),
         child: SafeArea(
           top: false,
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Cancel button
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _cancelPreview,
-                  style: OutlinedButton.styleFrom(
-                    side:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              if (isDeityPreview) _buildDeityZoomFitControls(),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _cancelPreview,
+                      style: OutlinedButton.styleFrom(
+                        side:
+                            BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        minimumSize: Size.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.tenorSans(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.tenorSans(
-                      fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.7),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: canApply ? () => _applyItem(item) : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: canApply
+                            ? AppColors.ashramAccentGold
+                            : Colors.grey.shade800,
+                        foregroundColor: canApply ? Colors.black : Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        minimumSize: Size.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: canApply ? 4 : 0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isPremiumLocked
+                                ? 'Pro Only'
+                                : isPurchased || item.cost == 0
+                                    ? 'Apply'
+                                    : canAfford
+                                        ? 'Buy & Apply'
+                                        : 'Not Enough Karma',
+                            style: GoogleFonts.tenorSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: canApply ? Colors.black : Colors.white,
+                            ),
+                          ),
+                          if (!isPremiumLocked && !isPurchased && item.cost > 0 && canAfford) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${item.cost} Karma',
+                              style: GoogleFonts.tenorSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeityZoomFitControls() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Fit',
+            style: GoogleFonts.tenorSans(
+              fontSize: 10,
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: _DeityFitChip(
+                  label: 'Contain',
+                  selected: _previewDeityFit == BoxFit.contain,
+                  onTap: () => _updateDeityPreviewZoomFit(_previewDeityScale, BoxFit.contain),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _DeityFitChip(
+                  label: 'Cover',
+                  selected: _previewDeityFit == BoxFit.cover,
+                  onTap: () => _updateDeityPreviewZoomFit(_previewDeityScale, BoxFit.cover),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                'Zoom',
+                style: GoogleFonts.tenorSans(
+                  fontSize: 10,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: AppColors.ashramAccentGold,
+                    inactiveTrackColor: Colors.white24,
+                    thumbColor: AppColors.ashramAccentGold,
+                    overlayColor: AppColors.ashramAccentGold.withValues(alpha: 0.2),
+                  ),
+                  child: Slider(
+                    value: _previewDeityScale.clamp(0.5, 2.0),
+                    min: 0.5,
+                    max: 2.0,
+                    onChanged: (v) => _updateDeityPreviewZoomFit(v, _previewDeityFit),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-
-              // Apply button
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: canApply ? () => _applyItem(item) : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: canApply
-                        ? AppColors.ashramAccentGold
-                        : Colors.grey.shade700,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: canApply ? 4 : 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        isPurchased || item.cost == 0
-                            ? 'Apply'
-                            : canAfford
-                                ? 'Buy & Apply'
-                                : 'Not Enough Coins',
-                        style: GoogleFonts.tenorSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (!isPurchased && item.cost > 0 && canAfford) ...[
-                        const SizedBox(width: 8),
-                        const Text('💎', style: TextStyle(fontSize: 12)),
-                        Text(
-                          item.cost.toString(),
-                          style: GoogleFonts.tenorSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ],
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '${(_previewDeityScale.clamp(0.5, 2.0) * 100).round()}%',
+                  style: GoogleFonts.tenorSans(
+                    fontSize: 10,
+                    color: Colors.white70,
                   ),
                 ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1313,6 +1283,25 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   }
 
   Future<void> _applyItem(ShopItem item) async {
+    if (!_isPremium && _requiresPremium(item)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'This is a Premium option. Upgrade to Pro to apply this customization.',
+              style: GoogleFonts.tenorSans(fontSize: 12),
+            ),
+            backgroundColor: const Color(0xFFD4AF37).withValues(alpha: 0.9),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     final isPurchased =
         _customizationService.isItemPurchased(item.categoryKey, item.id);
 
@@ -1352,10 +1341,16 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
               Text('${item.name} applied!'),
             ],
           ),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
           behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: AppColors.ashramAccentGold.withValues(alpha: 0.5),
+              width: 1,
+            ),
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -1400,7 +1395,9 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         break;
       case 'deityImage':
         await _customizationService.applyCustomization(
-          deityImage: DeityImage.values.firstWhere((e) => e.name == item.id),
+          deityImageId: item.id,
+          deityImageScale: _previewDeityScale,
+          deityImageFit: _previewDeityFit,
         );
         break;
       case 'frameStyle':
@@ -1426,17 +1423,66 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   void _showInsufficientFundsMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Text('💎', style: TextStyle(fontSize: 20)),
-            SizedBox(width: 8),
-            Text('Not enough coins! Complete Ashram tasks to earn more.'),
+            const Text('💎', style: TextStyle(fontSize: 20)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Not enough Karma! Complete Ashram tasks to earn more.',
+                style: GoogleFonts.tenorSans(
+                  fontSize: 14,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+}
+
+class _DeityFitChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DeityFitChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? AppColors.ashramAccentGold.withValues(alpha: 0.3)
+          : Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.tenorSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.ashramAccentGold : Colors.white70,
+              ),
+            ),
+          ),
         ),
       ),
     );

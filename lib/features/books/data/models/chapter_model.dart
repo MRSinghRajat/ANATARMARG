@@ -10,6 +10,8 @@ class ChapterModel {
   final List<String>? keyCharacters;
   final int estimatedReadingMinutes;
   final int orderIndex;
+  final String? audioUrl;
+  final String? audioUrlEn;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -25,6 +27,8 @@ class ChapterModel {
     this.keyCharacters,
     this.estimatedReadingMinutes = 2,
     required this.orderIndex,
+    this.audioUrl,
+    this.audioUrlEn,
     this.createdAt,
     this.updatedAt,
   });
@@ -49,6 +53,8 @@ class ChapterModel {
           : null,
       estimatedReadingMinutes: json['estimated_reading_minutes'] as int? ?? 2,
       orderIndex: json['order_index'] as int,
+      audioUrl: json['audio_url'] as String?,
+      audioUrlEn: json['audio_url_en'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -71,6 +77,8 @@ class ChapterModel {
       'key_characters': keyCharacters,
       'estimated_reading_minutes': estimatedReadingMinutes,
       'order_index': orderIndex,
+      'audio_url': audioUrl,
+      'audio_url_en': audioUrlEn,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

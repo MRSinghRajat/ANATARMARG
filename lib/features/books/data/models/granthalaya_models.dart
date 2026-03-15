@@ -87,6 +87,7 @@ class SacredTextModel {
   final String? textEnglish;
   final String? transliteration;
   final String? audioUrl;
+  final String? audioUrlEn;
   final int? durationSeconds;
   final String? benefits;
   final String? whenToRecite;
@@ -108,6 +109,7 @@ class SacredTextModel {
     this.textEnglish,
     this.transliteration,
     this.audioUrl,
+    this.audioUrlEn,
     this.durationSeconds,
     this.benefits,
     this.whenToRecite,
@@ -131,6 +133,7 @@ class SacredTextModel {
       textEnglish: json['text_english'] as String?,
       transliteration: json['transliteration'] as String?,
       audioUrl: json['audio_url'] as String?,
+      audioUrlEn: json['audio_url_en'] as String?,
       durationSeconds: json['duration_seconds'] as int?,
       benefits: json['benefits'] as String?,
       whenToRecite: json['when_to_recite'] as String?,
@@ -173,7 +176,10 @@ class SacredStoryModel {
   final String? reflectionPrompt;
   final int estimatedMinutes;
   final bool isFeatured;
+  final bool isPremium;
   final int orderIndex;
+  final String? audioUrl;
+  final String? audioUrlEn;
 
   SacredStoryModel({
     required this.id,
@@ -189,11 +195,23 @@ class SacredStoryModel {
     this.reflectionPrompt,
     this.estimatedMinutes = 3,
     this.isFeatured = false,
+    this.isPremium = false,
     this.orderIndex = 0,
+    this.audioUrl,
+    this.audioUrlEn,
   });
 
-  factory SacredStoryModel.fromJson(Map<String, dynamic> json) {
-    final pagesJson = json['pages'] as List<dynamic>? ?? [];
+  factory SacredStoryModel.fromJson(Map<String, dynamic> json, {List<SacredStoryPage>? pages}) {
+    List<SacredStoryPage> pageList = pages ?? [];
+    if (pageList.isEmpty) {
+      final pagesJson = json['pages'] as List<dynamic>? ?? [];
+      pageList = [];
+      for (var i = 0; i < pagesJson.length; i++) {
+        final p = pagesJson[i] as Map<String, dynamic>;
+        final withNumber = Map<String, dynamic>.from(p)..['page_number'] = p['page_number'] ?? (i + 1);
+        pageList.add(SacredStoryPage.fromJson(withNumber));
+      }
+    }
     return SacredStoryModel(
       id: json['id'] as String,
       slug: json['slug'] as String,
@@ -202,40 +220,64 @@ class SacredStoryModel {
       deitySlug: json['deity_slug'] as String?,
       source: json['source'] as String?,
       category: json['category'] as String? ?? 'mythology',
-      pages: pagesJson
-          .map((p) => SacredStoryPage.fromJson(p as Map<String, dynamic>))
-          .toList(),
+      pages: pageList,
       coverImageUrl: json['cover_image_url'] as String?,
       keyTeaching: json['key_teaching'] as String?,
       reflectionPrompt: json['reflection_prompt'] as String?,
       estimatedMinutes: json['estimated_minutes'] as int? ?? 3,
       isFeatured: json['is_featured'] as bool? ?? false,
+      isPremium: json['is_premium'] as bool? ?? false,
       orderIndex: json['order_index'] as int? ?? 0,
+      audioUrl: json['audio_url'] as String?,
+      audioUrlEn: json['audio_url_en'] as String?,
     );
   }
 }
 
+/// Layout for a story page: text-only, image on top, or full-bleed image.
+enum StoryPageLayout { text, imageTop, fullBleed }
+
 class SacredStoryPage {
+  final int pageNumber;
   final String textEnglish;
   final String textHindi;
-  final String? illustrationUrl;
-  final bool isFinal;
+  final String? textSanskrit;
+  final String? imageUrl;
+  final String? audioUrl;
+  final String? audioUrlEn;
+  final StoryPageLayout layoutType;
 
   SacredStoryPage({
+    required this.pageNumber,
     required this.textEnglish,
     required this.textHindi,
-    this.illustrationUrl,
-    this.isFinal = false,
+    this.textSanskrit,
+    this.imageUrl,
+    this.audioUrl,
+    this.audioUrlEn,
+    this.layoutType = StoryPageLayout.text,
   });
 
+  /// For backward compatibility with legacy JSON (e.g. pages array in sacred_stories).
   factory SacredStoryPage.fromJson(Map<String, dynamic> json) {
+    final layout = json['layout_type'] as String? ?? 'text';
+    StoryPageLayout layoutType = StoryPageLayout.text;
+    if (layout == 'image-top') layoutType = StoryPageLayout.imageTop;
+    if (layout == 'full-bleed') layoutType = StoryPageLayout.fullBleed;
     return SacredStoryPage(
+      pageNumber: json['page_number'] as int? ?? 0,
       textEnglish: json['text_english'] as String? ?? '',
       textHindi: json['text_hindi'] as String? ?? '',
-      illustrationUrl: json['illustration_url'] as String?,
-      isFinal: json['is_final'] as bool? ?? false,
+      textSanskrit: json['text_sanskrit'] as String?,
+      imageUrl: json['image_url'] as String? ?? json['illustration_url'] as String?,
+      audioUrl: json['audio_url'] as String?,
+      audioUrlEn: json['audio_url_en'] as String?,
+      layoutType: layoutType,
     );
   }
+
+  /// True when this is the last page (used for key teaching / reflection).
+  bool isFinal(int totalPages) => pageNumber == totalPages;
 }
 
 class ResourceCardModel {
@@ -521,6 +563,61 @@ class ChantModel {
       deitySlug: json['deity_slug'] as String?,
       orderIndex: json['order_index'] as int? ?? 0,
       effectiveAudioUrl: effectiveAudioUrl,
+    );
+  }
+}
+
+/// YouTube video for Granthalaya Video section (from your channel, curated in Supabase).
+class GranthalayaVideoModel {
+  final String id;
+  final String videoId;
+  final String title;
+  final String? titleHindi;
+  final String? description;
+  final String? thumbnailUrl;
+  final int? durationSeconds;
+  final int displayOrder;
+
+  GranthalayaVideoModel({
+    required this.id,
+    required this.videoId,
+    required this.title,
+    this.titleHindi,
+    this.description,
+    this.thumbnailUrl,
+    this.durationSeconds,
+    this.displayOrder = 0,
+  });
+
+  /// YouTube thumbnail; use stored URL or default img.youtube.com.
+  String get effectiveThumbnailUrl =>
+      thumbnailUrl?.isNotEmpty == true
+          ? thumbnailUrl!
+          : 'https://img.youtube.com/vi/$videoId/mqdefault.jpg';
+
+  /// Open in YouTube app or browser.
+  String get youtubeWatchUrl => 'https://www.youtube.com/watch?v=$videoId';
+
+  String get durationFormatted {
+    if (durationSeconds == null || durationSeconds! <= 0) return '';
+    final m = durationSeconds! ~/ 60;
+    final s = durationSeconds! % 60;
+    if (m > 0) return '${m}:${s.toString().padLeft(2, '0')}';
+    return '0:${s.toString().padLeft(2, '0')}';
+  }
+
+  factory GranthalayaVideoModel.fromJson(Map<String, dynamic> json) {
+    final videoId = (json['video_id']?.toString() ?? '').trim();
+    final id = (json['id']?.toString() ?? videoId).trim();
+    return GranthalayaVideoModel(
+      id: id.isEmpty ? videoId : id,
+      videoId: videoId,
+      title: (json['title'] as String? ?? '').trim(),
+      titleHindi: (json['title_hindi'] as String?)?.trim(),
+      description: (json['description'] as String?)?.trim(),
+      thumbnailUrl: (json['thumbnail_url'] as String?)?.trim(),
+      durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
+      displayOrder: (json['display_order'] as num?)?.toInt() ?? 0,
     );
   }
 }

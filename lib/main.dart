@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,75 +12,77 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/app_router.dart';
 import 'core/utils/sound_manager.dart';
 import 'core/services/supabase_service.dart';
+import 'core/services/compressed_image_cache.dart';
 import 'core/services/revenuecat_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/daily_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'shared/services/avatar_growth_service.dart';
 import 'shared/services/premium_service.dart';
-import 'features/onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 
-/// Checked during startup to decide initial route
-bool _onboardingComplete = false;
+/// Runs after first frame so app shows quickly; reduces startup/login latency.
+void _deferredInit() async {
+  try {
+    await PushNotificationService().initialize();
+    PushNotificationService.setupForegroundHandler();
+  } catch (e) {
+    if (kDebugMode) print('Firebase / push init failed: $e');
+  }
+  try {
+    await DailyNotificationService().initialize();
+  } catch (e) {
+    if (kDebugMode) print('Daily notification init failed: $e');
+  }
+  try {
+    await AvatarGrowthService().initialize();
+  } catch (e) {
+    if (kDebugMode) print('Avatar initialization failed: $e');
+  }
+  try {
+    await RevenueCatService.instance.initialize();
+    await PremiumService.instance.initialize();
+    if (kDebugMode) print('RevenueCat initialized successfully');
+  } catch (e) {
+    if (kDebugMode) print('RevenueCat initialization failed: $e');
+  }
+  CompressedImageCache.instance.initialize();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Minimal blocking init so first frame shows fast (avoids 1000+ ms startup latency)
   try {
     await dotenv.load(fileName: ".env");
-    print('=== ENV LOADED ===');
-    print('GPT_API_KEY exists: ${dotenv.env['GPT_API_KEY']?.isNotEmpty ?? false}');
-    print('GPT_API_KEY length: ${dotenv.env['GPT_API_KEY']?.length ?? 0}');
+    if (kDebugMode) {
+      print('=== ENV LOADED ===');
+      final hasGptKey = dotenv.env['GPT_API_KEY']?.isNotEmpty ?? false;
+      print('AI Guru (GPT) API: ${hasGptKey ? "ENABLED (key present)" : "DISABLED (missing or empty GPT_API_KEY in .env)"}');
+    }
   } catch (e) {
-    print('Error loading .env file: $e');
+    if (kDebugMode) print('Error loading .env file: $e');
   }
 
   // Initialize Supabase (optional - app works without it)
   try {
     await SupabaseService().initialize();
   } catch (e) {
-    print('Supabase initialization failed: $e. App will use local data.');
+    if (kDebugMode) print('Supabase initialization failed: $e. App will use local data.');
   }
 
-  // Initialize Firebase and push notifications (Apple APNs via FCM)
+  // Firebase must be initialized before runApp (required by Firebase APIs)
   try {
     await Firebase.initializeApp();
-    await PushNotificationService().initialize();
-    PushNotificationService.setupForegroundHandler();
   } catch (e) {
-    print('Firebase / push init failed: $e. Add Firebase project and GoogleService-Info.plist for push.');
+    if (kDebugMode) print('Firebase init failed: $e');
   }
 
-  // Daily local notification at 6:00 AM: "Your daily tasks are ready"
-  try {
-    await DailyNotificationService().initialize();
-  } catch (e) {
-    print('Daily notification init failed: $e');
-  }
-
-  // Initialize Inner Avatar (vision-aligned growth system)
-  try {
-    await AvatarGrowthService().initialize();
-  } catch (e) {
-    print('Avatar initialization failed: $e. App will use default avatar.');
-  }
-
-  // Initialize RevenueCat for in-app purchases
-  try {
-    await RevenueCatService.instance.initialize();
-    await PremiumService.instance.initialize();
-    print('RevenueCat initialized successfully');
-  } catch (e) {
-    print('RevenueCat initialization failed: $e. Subscriptions may not work.');
-  }
-
-  // Allow Google Fonts to load from network for fonts not in assets (e.g. Cormorant Light/Medium, Tenor Sans, Merriweather).
-  // Bundled fonts in pubspec (Cormorant Garamond, Inter, etc.) are still used when specified in theme.
   GoogleFonts.config.allowRuntimeFetching = true;
-
-  // Check if onboarding has been completed
-  _onboardingComplete = await SpiritualOnboardingScreen.isOnboardingComplete();
 
   runApp(
     const ProviderScope(
@@ -86,6 +90,8 @@ void main() async {
     ),
   );
 
+  // Defer heavy init so app and login feel responsive (no 1000+ ms block before first paint)
+  WidgetsBinding.instance.addPostFrameCallback((_) => _deferredInit());
 }
 
 class AntarMargApp extends StatefulWidget {
@@ -170,7 +176,7 @@ class _AntarMargAppState extends State<AntarMargApp> {
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialRoute: _onboardingComplete ? AppRouter.login : AppRouter.spiritualOnboarding,
+      initialRoute: AppRouter.splash,
       onGenerateRoute: AppRouter.generateRoute,
     );
   }

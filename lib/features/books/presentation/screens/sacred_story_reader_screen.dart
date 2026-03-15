@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import '../../data/models/granthalaya_models.dart';
+import '../../data/services/granthalaya_bookmarks_service.dart';
+import '../../data/services/granthalaya_recent_service.dart';
 
 /// Reader for sacred stories from the dedicated sacred_stories table.
 /// Uses the same visual language as StoryReaderScreen but works with SacredStoryModel.
@@ -21,6 +24,9 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
 
   int _currentPage = 0;
   bool _showHindi = false;
+  bool _isBookmarked = false;
+  final GranthalayaBookmarksService _bookmarksService =
+      GranthalayaBookmarksService();
 
   static const _bg1 = Color(0xFF0D0B08);
   static const _bg2 = Color(0xFF1A1510);
@@ -31,6 +37,8 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
   @override
   void initState() {
     super.initState();
+    GranthalayaRecentService().recordSacredStoryOpened(widget.story.id);
+    _loadBookmarkState();
     _pageController = PageController();
     _fadeController = AnimationController(
       vsync: this,
@@ -53,6 +61,16 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
   void _onPageChanged(int index) {
     if (index == _currentPage) return;
     setState(() => _currentPage = index);
+  }
+
+  Future<void> _loadBookmarkState() async {
+    final b = await _bookmarksService.isSacredStoryBookmarked(widget.story.id);
+    if (mounted) setState(() => _isBookmarked = b);
+  }
+
+  Future<void> _toggleBookmark() async {
+    await _bookmarksService.toggleSacredStoryBookmark(widget.story.id);
+    if (mounted) setState(() => _isBookmarked = !_isBookmarked);
   }
 
   @override
@@ -79,13 +97,17 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
                     ? Center(
                         child: Text('Story coming soon...',
                             style: GoogleFonts.inter(color: Colors.white38)))
-                    : PageView.builder(
-                        controller: _pageController,
-                        physics: const PageScrollPhysics(),
-                        itemCount: pages.length,
-                        onPageChanged: _onPageChanged,
-                        itemBuilder: (_, i) =>
-                            _buildPage(pages[i], i),
+                    : InteractiveViewer(
+                        minScale: 0.6,
+                        maxScale: 3.5,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          physics: const PageScrollPhysics(),
+                          itemCount: pages.length,
+                          onPageChanged: _onPageChanged,
+                          itemBuilder: (_, i) =>
+                              _buildPage(pages[i], i),
+                        ),
                       ),
               ),
               _buildBottomNav(pages.length),
@@ -113,18 +135,21 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.story.title,
+                      widget.story.title.toUpperCase(),
                       style: GoogleFonts.crimsonPro(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: _goldLight,
+                        letterSpacing: 0.8,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (widget.story.source != null)
                       Text(
-                        '${widget.story.source} • ${widget.story.estimatedMinutes} min',
+                        widget.story.estimatedMinutes > 0
+                            ? '${widget.story.source} • ${widget.story.estimatedMinutes} min'
+                            : widget.story.source!,
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           color: _gold.withValues(alpha: 0.5),
@@ -133,6 +158,14 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
                       ),
                   ],
                 ),
+              ),
+              IconButton(
+                icon: Icon(
+                  _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  color: _gold,
+                  size: 24,
+                ),
+                onPressed: _toggleBookmark,
               ),
               _buildLanguageToggle(),
             ],
@@ -196,36 +229,189 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
 
   Widget _buildPage(SacredStoryPage page, int index) {
     final text = _showHindi ? page.textHindi : page.textEnglish;
-    final isFinal = page.isFinal || index == widget.story.pages.length - 1;
+    final isFinal = page.isFinal(widget.story.pages.length) || index == widget.story.pages.length - 1;
+    final totalPages = widget.story.pages.length;
+    // Use only this page's image so each page can show its own image (not the same cover on every page)
+    final pageImage = page.imageUrl != null && page.imageUrl!.isNotEmpty ? page.imageUrl : null;
 
     return FadeTransition(
       opacity: CurvedAnimation(parent: _fadeController, curve: Curves.easeIn),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
         physics: const BouncingScrollPhysics(),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 16),
-            FadeTransition(
-              opacity: CurvedAnimation(
-                  parent: _decorController, curve: Curves.easeInOut),
-              child: _buildOrnament(),
-            ),
-            const SizedBox(height: 16),
-            _buildPageNumber(index),
-            const SizedBox(height: 16),
-            _buildParchmentText(text),
+            // 1. Image section on top: this page's image only, or placeholder if none
+            if (pageImage != null)
+              _buildBlendedImageWithPageBar(pageImage, index, totalPages)
+            else
+              _buildPlaceholderImageSection(index, totalPages),
+            // 2. Story text below (same layout for all pages)
+            _buildStoryTextBlended(text),
             const SizedBox(height: 24),
             if (isFinal) ...[
-              _buildDivider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildDivider(),
+              ),
               const SizedBox(height: 20),
-              if (widget.story.keyTeaching != null) _buildKeyTeaching(),
+              if (widget.story.keyTeaching != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _buildKeyTeaching(),
+                ),
               const SizedBox(height: 16),
-              if (widget.story.reflectionPrompt != null) _buildReflection(),
+              if (widget.story.reflectionPrompt != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _buildReflection(),
+                ),
               const SizedBox(height: 16),
             ],
             const SizedBox(height: 60),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Placeholder image section when neither page nor story has an image (keeps layout consistent).
+  Widget _buildPlaceholderImageSection(int index, int totalPages) {
+    return SizedBox(
+      height: 280,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _gold.withValues(alpha: 0.12),
+                  _bg2,
+                  _bg1,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Center(
+              child: Text(
+                'ॐ',
+                style: TextStyle(
+                  fontSize: 72,
+                  color: _gold.withValues(alpha: 0.15),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: _gold.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _gold.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                'PAGE ${index + 1} OF $totalPages',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _goldLight,
+                  letterSpacing: 2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Full-bleed image with gradient overlay and "PAGE X OF Y" bar overlaid at bottom (blended look).
+  Widget _buildBlendedImageWithPageBar(String imageUrl, int index, int totalPages) {
+    return SizedBox(
+      height: 280,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AppNetworkImage(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            cacheFailure: true,
+            fallback: Container(color: _bg2),
+          ),
+          // Gradient overlay so page bar and transition to text blend into image
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: 100,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    _bg1.withValues(alpha: 0.6),
+                    _bg1,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ),
+          // Page indicator overlaid on bottom of image (dark gold bar)
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: _gold.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _gold.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                'PAGE ${index + 1} OF $totalPages',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _goldLight,
+                  letterSpacing: 2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Story text directly below image on same dark background (blended).
+  Widget _buildStoryTextBlended(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      color: _bg1,
+      child: Text(
+        text,
+        style: GoogleFonts.crimsonPro(
+          fontSize: _showHindi ? 19 : 18,
+          height: 1.9,
+          color: const Color(0xFFE8E0D4),
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -246,7 +432,7 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
     );
   }
 
-  Widget _buildPageNumber(int index) {
+  Widget _buildPageNumber(int index, int totalPages) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
@@ -255,12 +441,46 @@ class _SacredStoryReaderScreenState extends State<SacredStoryReaderScreen>
         ),
       ),
       child: Text(
-        'Page ${index + 1} of ${widget.story.pages.length}',
+        'Page ${index + 1} of $totalPages',
         style: GoogleFonts.inter(
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: _gold.withValues(alpha: 0.4),
           letterSpacing: 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageTop(String url) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AppNetworkImage(
+          imageUrl: url,
+          height: 180,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          cacheFailure: true,
+          fallback: const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullBleedImage(String url) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AppNetworkImage(
+          imageUrl: url,
+          height: 220,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          cacheFailure: true,
+          fallback: const SizedBox.shrink(),
         ),
       ),
     );

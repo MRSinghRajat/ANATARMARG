@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,10 +10,6 @@ import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/widgets/flying_coins_animation.dart';
-import '../../../gamification/data/repositories/avatar_repository.dart';
-import '../../../sanctuary/data/models/sanctuary_customization_model.dart';
-import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
-import '../../../sanctuary/presentation/widgets/customizable_om_sanctuary.dart';
 import '../../data/models/daily_task_model.dart';
 import '../../data/models/custom_habit_model.dart';
 import '../../data/models/user_spiritual_progress_model.dart';
@@ -22,8 +17,6 @@ import '../../data/models/achievement_model.dart';
 import '../../data/services/daily_task_service.dart';
 import '../../data/services/custom_habit_service.dart';
 import '../../data/repositories/ashram_daily_verse_repository.dart';
-import '../widgets/daily_task_card.dart';
-import '../widgets/custom_habit_card.dart';
 import '../widgets/add_habit_sheet.dart';
 import '../widgets/achievement_unlock_dialog.dart';
 import '../../../books/data/datasources/supabase_granthalaya_datasource.dart';
@@ -38,7 +31,23 @@ import 'chant_player_screen.dart';
 import 'japa_counter_screen.dart';
 import 'manifestation_practice_screen.dart';
 import 'habit_detail_screen.dart';
-import '../../../garbh_sanskar/presentation/widgets/garbh_sanskar_entry_card.dart';
+import '../../data/panchang/panchang_engine.dart';
+import '../../data/panchang/panchang_models.dart';
+import '../panchang/widgets/panchang_detail_sheet.dart';
+import '../panchang/widgets/panchang_month_sheet.dart';
+import '../panchang/widgets/today_pill.dart';
+import '../../../journey/data/models/journey_models.dart';
+import '../../../journey/presentation/providers/journey_providers.dart';
+import '../../../onboarding/presentation/screens/spiritual_onboarding_screen.dart';
+import '../../../profile/data/repositories/app_profile_repository.dart';
+import '../../../home/data/services/aangan_notification_service.dart';
+import '../../../../core/utils/app_router.dart';
+import '../../../../core/services/app_notification_service.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
+
+/// Set to true to show the debug "Tap to change date" banner (e.g. for testing).
+const bool kShowDebugDateBanner = true;
 
 class AshramScreen extends ConsumerStatefulWidget {
   const AshramScreen({super.key});
@@ -50,9 +59,6 @@ class AshramScreen extends ConsumerStatefulWidget {
 class _AshramScreenState extends ConsumerState<AshramScreen>
     with WidgetsBindingObserver {
   final CoinService _coinService = CoinService();
-  final AvatarRepository _avatarRepository = AvatarRepository();
-  final SanctuaryCustomizationService _customizationService =
-      SanctuaryCustomizationService();
   final AshramDailyVerseRepository _verseRepository =
       AshramDailyVerseRepository();
   final DailyTaskService _taskService = DailyTaskService.instance;
@@ -60,9 +66,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
 
   // State
   bool _isLoading = true;
-  SanctuaryCustomization? _currentCustomization;
-  StreamSubscription<SanctuaryCustomization>? _customizationSubscription;
-  bool _customizationLoaded = false;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
   // Task system state
   List<UserDailyTask> _tasks = [];
   List<CustomHabit> _habits = [];
@@ -76,20 +81,59 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   final GlobalKey _coinCounterKey = GlobalKey();
   final Map<String, GlobalKey> _taskKeys = {};
   final Map<String, GlobalKey> _habitKeys = {};
+  bool _practiceToolsExpanded = true;
+  bool _todayPathExpanded = true;
+  bool _activeJourneyExpanded = true;
+  bool _myHabitsExpanded = true;
+  int _lastKnownLevel = 1;
+  final AppProfileRepository _appProfileRepo = AppProfileRepository();
+  late final Future<({String displayName, String? avatarUrl})> _profileFuture;
+
+  Future<({String displayName, String? avatarUrl})> _loadProfileForHeader() async {
+    final onb = await SpiritualOnboardingScreen.getStoredUserName();
+    final name = await _appProfileRepo.getDisplayNameWithFallback(onboardingName: onb);
+    final avatar = await _appProfileRepo.getAvatarUrlWithFallback();
+    return (displayName: name ?? onb ?? 'Sadhak', avatarUrl: avatar);
+  }
+
+  /// Same layout/colors as My Growth: orange–purple gradient, white border, radius 20.
+  BoxDecoration get _streakStyleDecoration => BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryOrange.withValues(alpha: 0.2),
+            AppColors.deepPurple.withValues(alpha: 0.2),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      );
 
   @override
   void initState() {
     super.initState();
+    _profileFuture = _loadProfileForHeader();
     WidgetsBinding.instance.addObserver(this);
     _coinService.initialize();
-    _initializeCustomization();
+    FlyingCoinsAnimation.coinCounterKey = _coinCounterKey;
     _initializeTaskSystem();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotification());
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _customizationSubscription?.cancel();
+    _premiumSubscription?.cancel();
     _tasksSubscription?.cancel();
     _progressSubscription?.cancel();
     _achievementSubscription?.cancel();
@@ -100,32 +144,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _refreshCustomization();
       _taskService.refresh();
       _habitService.refresh();
-    }
-  }
-
-  Future<void> _initializeCustomization() async {
-    await _customizationSubscription?.cancel();
-
-    _customizationSubscription =
-        _customizationService.customizationStream.listen((customization) {
-      if (mounted) {
-        setState(() {
-          _currentCustomization = customization;
-          _customizationLoaded = true;
-        });
-      }
-    });
-
-    await _customizationService.ensureInitialized();
-
-    if (mounted) {
-      setState(() {
-        _currentCustomization = _customizationService.currentCustomization;
-        _customizationLoaded = true;
-      });
     }
   }
 
@@ -136,7 +156,19 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     });
 
     _progressSubscription = _taskService.progressStream.listen((progress) {
-      if (mounted) setState(() => _progress = progress);
+      if (mounted) {
+        final previousLevel = _progress?.spiritualLevel ?? _lastKnownLevel;
+        setState(() => _progress = progress);
+        if (progress != null && progress.spiritualLevel >= 1 && _coinService.currentBalance == 0) {
+          _coinService.ensureMinimumKarmaForLevel(progress.spiritualLevel);
+        }
+        if (progress != null && progress.spiritualLevel > previousLevel) {
+          _lastKnownLevel = progress.spiritualLevel;
+          WidgetsBinding.instance.addPostFrameCallback((_) => _showLevelUpAnimation(progress!.spiritualLevel));
+        } else if (progress != null) {
+          _lastKnownLevel = progress.spiritualLevel;
+        }
+      }
     });
 
     _achievementSubscription =
@@ -167,12 +199,28 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     }
   }
 
-  Future<void> _refreshCustomization() async {
-    await _customizationService.refresh();
-    if (mounted) {
-      setState(() {
-        _currentCustomization = _customizationService.currentCustomization;
-      });
+  /// Pushes Ashram/Aangan notifications into the bell list so they appear on the Notifications page.
+  Future<void> _loadNotification() async {
+    try {
+      final service = AanganNotificationService();
+      final locale = WidgetsBinding.instance.platformDispatcher.locale;
+      if (locale.countryCode != null && locale.countryCode!.isNotEmpty) {
+        service.userRegion = locale.countryCode;
+      }
+      final items = await service.getNotificationsForList();
+      final appNotif = AppNotificationService.instance;
+      final now = DateTime.now();
+      final todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      for (final item in items) {
+        await appNotif.addNotification(
+          title: item.emojiOrIcon != null ? '${item.emojiOrIcon} ${item.title}' : item.title,
+          body: item.subtitle ?? '',
+          type: 'aangan',
+          customId: 'aangan_${item.id}_$todayKey',
+        );
+      }
+    } catch (_) {
+      // Optional: add a fallback notification for testing
     }
   }
 
@@ -253,11 +301,11 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             estimatedMinutes: sacred.estimatedMinutes,
             totalPages: sacred.pages.length,
             pages: sacred.pages.asMap().entries.map((e) => StoryPage(
-              pageNumber: e.key,
+              pageNumber: e.value.pageNumber,
               textEnglish: e.value.textEnglish,
               textHindi: e.value.textHindi,
-              illustrationUrl: e.value.illustrationUrl,
-              isFinal: e.value.isFinal,
+              illustrationUrl: e.value.imageUrl,
+              isFinal: e.value.isFinal(sacred.pages.length),
             )).toList(),
             keyTeaching: sacred.keyTeaching,
             reflectionPrompt: sacred.reflectionPrompt,
@@ -315,6 +363,11 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
         break;
 
       case 'manifestation':
+        final isPremium = await PremiumService.instance.isPremium;
+        if (!isPremium) {
+          if (mounted) PaywallScreen.showAsBottomSheet(context);
+          return;
+        }
         screen = ManifestationPracticeScreen(
           onComplete: () => _onTaskTap(task),
         );
@@ -368,7 +421,84 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     return _habitKeys.putIfAbsent(habitId, () => GlobalKey());
   }
 
-  void _showAddHabitSheet() {
+  void _showLevelUpAnimation(int newLevel) {
+    if (!mounted) return;
+    final title = _progress?.spiritualTitle ?? 'Beginner';
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionBuilder: (_, animation, __, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                decoration: BoxDecoration(
+                  color: AppColors.ashramBackgroundDark,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.5), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryOrange.withValues(alpha: 0.3),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Level Up!',
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryOrange,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Lv. $newLevel',
+                      style: GoogleFonts.poppins(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  Future<void> _showAddHabitSheet() async {
+    final canCreate = await _habitService.canCreateHabit();
+    if (!canCreate && mounted) {
+      PaywallScreen.showAsBottomSheet(context);
+      return;
+    }
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -381,101 +511,47 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     );
   }
 
-  // Getters for task organization
+  /// Non-premium users see only: daily verse, daily daan (donate), daily meditation, japa counter.
+  static const _nonPremiumTaskSlugs = {
+    'daily_verse',
+    'donate',
+    'daily_meditation',
+    'morning_meditation',
+    'pranayama',
+    'japa_108',
+  };
+
+  List<UserDailyTask> get _visibleTasks => _isPremium
+      ? _tasks
+      : _tasks.where((t) => _nonPremiumTaskSlugs.contains(t.slug)).toList();
+
   List<UserDailyTask> get _pendingTasks =>
-      _tasks.where((t) => t.isPending).toList();
-  List<UserDailyTask> get _completedTasks =>
-      _tasks.where((t) => t.isCompleted).toList();
+      _visibleTasks.where((t) => t.isPending).toList();
   List<CustomHabit> get _todaysHabits =>
       _habits.where((h) => h.isScheduledForToday).toList();
-  List<CustomHabit> get _pendingHabits => _todaysHabits
-      .where((h) => !_habitService.isCompletedToday(h.id))
-      .toList();
   List<CustomHabit> get _completedHabits =>
       _todaysHabits.where((h) => _habitService.isCompletedToday(h.id)).toList();
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final topHeight = screenHeight * 0.50; // Reduced to 50% for more task space
+    const double headerHeight = 100;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1623),
+      backgroundColor: AppColors.ashramBackgroundDark,
       body: SafeArea(
         child: Stack(
-          clipBehavior: Clip.hardEdge,
           fit: StackFit.expand,
           children: [
-            // Geometry overlay
-            const Positioned.fill(child: _GeometryOverlay()),
-
-            // Layer 1: OM section (top 50%)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: topHeight,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: ClipRect(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 16),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: _buildPremiumHeader(context),
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            child: Center(
-                              child: _customizationLoaded &&
-                                      _currentCustomization != null
-                                  ? CustomizableOmSanctuary(
-                                      size: 260,
-                                      customization: _currentCustomization!,
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Layer 2: Draggable task sheet
-            Positioned.fill(
-              child: DraggableScrollableSheet(
-                initialChildSize: 0.40,
-                minChildSize: 0.35,
-                maxChildSize: 0.95,
-                snap: true,
-                snapSizes: const [0.35, 0.50, 0.70, 0.95],
-                builder: (context, scrollController) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.ashramBackgroundDark,
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(24)),
-                      border: Border(
-                        top: BorderSide(
-                          color: Colors.white.withOpacity(0.05),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: _buildTaskContent(scrollController),
-                  );
-                },
-              ),
+            Column(
+              children: [
+                SizedBox(
+                  height: headerHeight,
+                  child: _buildAshramHeader(context),
+                ),
+                Expanded(
+                  child: _buildAshramBody(),
+                ),
+              ],
             ),
           ],
         ),
@@ -491,38 +567,126 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     );
   }
 
-  Widget _buildTaskContent(ScrollController scrollController) {
+  Widget _buildAshramHeader(BuildContext context) {
+    final lang = ref.watch(languageProvider);
+    final currencyName = AppStrings.get('ashram_currency', lang);
+    final level = _progress?.spiritualLevel ?? 1;
+    final levelProgress = _progress?.levelProgress ?? 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.ashramBackgroundDark.withValues(alpha: 0.95),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.primaryOrange.withValues(alpha: 0.15),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => Navigator.of(context).pushNamed(AppRouter.myGrowth),
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                children: [
+                  FutureBuilder<({String displayName, String? avatarUrl})>(
+                    future: _profileFuture,
+                    builder: (context, snap) {
+                      final avatarUrl = snap.data?.avatarUrl;
+                      return _AshramProfileAvatar(level: level, avatarUrl: avatarUrl);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FutureBuilder<({String displayName, String? avatarUrl})>(
+                      future: _profileFuture,
+                      builder: (context, snap) {
+                        final displayName = snap.data?.displayName ?? 'Sadhak';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              displayName,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            StreamBuilder<int>(
+                              stream: _coinService.coinStream,
+                              initialData: _coinService.currentBalance,
+                              builder: (context, coinSnap) {
+                                final coins = coinSnap.data ?? 0;
+                                return KeyedSubtree(
+                                  key: _coinCounterKey,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.card_giftcard_rounded,
+                                        size: 14,
+                                        color: AppColors.primaryOrange,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$coins $currencyName',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primaryOrange,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: levelProgress.clamp(0.0, 1.0),
+                                            backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryOrange),
+                                            minHeight: 4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _NotificationBell(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAshramBody() {
+    final now = AppClock.now();
+    final dateStr = '${now.day} ${_monthName(now.month)}, ${now.year}';
+
     return CustomScrollView(
-      controller: scrollController,
       physics: const ClampingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
       slivers: [
-        // Handle bar
-        SliverToBoxAdapter(
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 48,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-
-        // Debug date picker (only in debug builds)
-        if (kDebugMode)
+        SliverToBoxAdapter(child: SizedBox(height: 28)),
+        if (kDebugMode && kShowDebugDateBanner)
           SliverToBoxAdapter(
             child: _buildDebugDateBanner(),
           ),
-
-        // Loading indicator
         if (_isLoading)
           const SliverFillRemaining(
             hasScrollBody: false,
@@ -533,105 +697,167 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             ),
           )
         else ...[
-          // Garbh Sanskar entry card
-          const SliverToBoxAdapter(
-            child: GarbhSanskarEntryCard(),
-          ),
-
-          // Section: Today's Tasks
+          // ─── Today pill (Panchang) + calendar icon ───
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Builder(builder: (context) {
-                final lang = ref.watch(languageProvider);
-                return _buildSectionHeader(
-                  title: AppStrings.get('todays_tasks', lang),
-                  subtitle:
-                      '${_completedTasks.length}/${_tasks.length} ${AppStrings.get('completed', lang)}',
-                  icon: Icons.check_circle_outline,
-                );
-              }),
+            child: TodayPill(
+              day: PanchangEngine.getPanchangDay(now.year, now.month, now.day),
+              onTapDetails: () => _openPanchangDetailSheet(now),
+              onTapCalendar: _openPanchangMonthSheet,
             ),
           ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-          // Pending Tasks
-          if (_pendingTasks.isNotEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final task = _pendingTasks[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DailyTaskCard(
-                        task: task,
-                        onTap: () => _onTaskTap(task),
-                        onNavigate: _hasScreen(task)
-                            ? () => _navigateToTaskScreen(task)
-                            : null,
-                        rewardsKey: _getTaskKey(task.id),
-                      ),
-                    );
-                  },
-                  childCount: _pendingTasks.length,
+          // ─── Today's Path (collapsible) ───
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _todayPathExpanded = !_todayPathExpanded),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _todayPathExpanded ? Icons.expand_more : Icons.chevron_right,
+                          color: AppColors.primaryOrange,
+                          size: 28,
+                        ),
+                        Icon(Icons.auto_awesome, color: AppColors.primaryOrange, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    "Today's Path",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryOrange.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      '${_visibleTasks.where((t) => t.isCompleted).length}/${_visibleTasks.length}',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryOrange,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                dateStr,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-
-          // No pending tasks message
-          if (_pendingTasks.isEmpty && _tasks.isNotEmpty)
+          ),
+          if (_todayPathExpanded)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.green.withOpacity(0.15),
-                        Colors.green.withOpacity(0.05),
+                  decoration: _streakStyleDecoration,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_visibleTasks.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(
+                              'No tasks for today',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white54,
+                                fontSize: 14,
+                              ),
+                            ),
+                          )
+                        else
+                          ...List.generate(_visibleTasks.length, (index) {
+                            final task = _visibleTasks[index];
+                            final alt = index.isEven;
+                            return KeyedSubtree(
+                              key: _getTaskKey(task.id),
+                              child: _TodayPathTaskRow(
+                                task: task,
+                                alternatingBg: alt,
+                                onTap: () => _onTaskTap(task),
+                                onCheckTap: () => _toggleTaskCompletion(task),
+                                hasScreen: _hasScreen(task),
+                                onNavigate: () => _navigateToTaskScreen(task),
+                              ),
+                            );
+                          }),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.green.withOpacity(0.3),
-                    ),
                   ),
+                ),
+              ),
+            ),
+          if (_pendingTasks.isEmpty && _visibleTasks.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: _streakStyleDecoration,
                   child: Row(
                     children: [
-                      const Icon(Icons.celebration,
-                          color: Colors.green, size: 32),
-                      const SizedBox(width: 16),
+                      const Icon(Icons.celebration, color: AppColors.primaryOrange, size: 28),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Builder(builder: (context) {
-                              final lang = ref.watch(languageProvider);
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    AppStrings.get('all_tasks_complete', lang),
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                        child: Builder(
+                          builder: (context) {
+                            final lang = ref.watch(languageProvider);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  AppStrings.get('all_tasks_complete', lang),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    AppStrings.get('all_tasks_complete_sub', lang),
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                    ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  AppStrings.get('all_tasks_complete_sub', lang),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white70,
+                                    fontSize: 11,
                                   ),
-                                ],
-                              );
-                            }),
-                          ],
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -639,126 +865,382 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                 ),
               ),
             ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-          // Section: Custom Habits
-          if (_todaysHabits.isNotEmpty || _habits.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: Builder(builder: (context) {
-                  final lang = ref.watch(languageProvider);
-                  return _buildSectionHeader(
-                    title: AppStrings.get('my_habits', lang),
-                    subtitle:
-                        '${_completedHabits.length}/${_todaysHabits.length} ${AppStrings.get('today', lang)}',
-                    icon: Icons.repeat,
-                    action: TextButton(
-                      onPressed: _showAddHabitSheet,
-                      child: Text(
-                        AppStrings.get('add', lang),
-                        style: GoogleFonts.poppins(
-                          color: AppColors.primaryOrange,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+          // ─── Active Journey (collapsible): one card per active journey inside ───
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final allJourneys = ref.watch(allUserJourneysProvider).valueOrNull ?? [];
+                final activeJourneys = allJourneys.where((j) => j.isActive).toList();
+                if (activeJourneys.isEmpty) return const SizedBox.shrink();
+                final types = ref.watch(journeyTypesProvider).valueOrNull ?? [];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => setState(() => _activeJourneyExpanded = !_activeJourneyExpanded),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _activeJourneyExpanded ? Icons.expand_more : Icons.chevron_right,
+                                color: AppColors.primaryOrange,
+                                size: 28,
+                              ),
+                              Icon(Icons.spa_rounded, color: AppColors.primaryOrange, size: 22),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Active Journey',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      activeJourneys.length == 1
+                                          ? '1 journey'
+                                          : '${activeJourneys.length} journeys',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  );
-                }),
-              ),
+                    if (_activeJourneyExpanded) ...[
+                      for (final active in activeJourneys)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+                          child: _JourneyCard(
+                            userJourney: active,
+                            types: types,
+                            streakStyleDecoration: _streakStyleDecoration,
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
             ),
-
-          // Pending Habits
-          if (_pendingHabits.isNotEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final habit = _pendingHabits[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: CustomHabitCard(
-                        habit: habit,
-                        isCompleted: _habitService.isCompletedToday(habit.id),
-                        onTap: () => _onHabitTap(habit),
-                        onNavigate: () => _navigateToHabitDetail(habit),
-                        onLongPress: () => _showHabitOptions(habit),
-                        animationKey: _getHabitKey(habit.id),
-                      ),
-                    );
-                  },
-                  childCount: _pendingHabits.length,
-                ),
-              ),
-            ),
-
-          // Section: Completed Today
-          if (_completedTasks.isNotEmpty || _completedHabits.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: Builder(builder: (context) {
-                  final lang = ref.watch(languageProvider);
-                  return _buildSectionHeader(
-                    title: AppStrings.get('completed_today', lang),
-                    subtitle:
-                        '${_completedTasks.length + _completedHabits.length} ${AppStrings.get('items', lang)}',
-                    icon: Icons.done_all,
-                  );
-                }),
-              ),
-            ),
-
-          // Completed Tasks
-          if (_completedTasks.isNotEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final task = _completedTasks[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: CompletedTaskTile(
-                        task: task,
-                        onTap: () => _onTaskTap(task),
-                      ),
-                    );
-                  },
-                  childCount: _completedTasks.length,
-                ),
-              ),
-            ),
-
-          // Completed Habits
-          if (_completedHabits.isNotEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final habit = _completedHabits[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: CompletedHabitTile(
-                        habit: habit,
-                        onTap: () => _navigateToHabitDetail(habit),
-                      ),
-                    );
-                  },
-                  childCount: _completedHabits.length,
-                ),
-              ),
-            ),
-
-          // Bottom padding
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 100),
           ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+          // ─── My habits (collapsible) ───
+          SliverToBoxAdapter(
+            child: Builder(
+              builder: (context) {
+                final lang = ref.watch(languageProvider);
+                final habitCount = _todaysHabits.isNotEmpty ? _todaysHabits.length : _habits.length;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => setState(() => _myHabitsExpanded = !_myHabitsExpanded),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _myHabitsExpanded ? Icons.expand_more : Icons.chevron_right,
+                                color: AppColors.primaryOrange,
+                                size: 28,
+                              ),
+                              Icon(Icons.repeat, color: AppColors.primaryOrange, size: 22),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.get('my_habits', lang),
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_completedHabits.length}/$habitCount ${AppStrings.get('today', lang)}',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_myHabitsExpanded) ...[
+                      if (_habits.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: _streakStyleDecoration,
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.add_circle_outline,
+                                    size: 40,
+                                    color: AppColors.primaryOrange.withValues(alpha: 0.8),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    AppStrings.get('add', lang) + ' personal practice',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white54,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            decoration: _streakStyleDecoration,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ...List.generate(
+                                    (_todaysHabits.isNotEmpty ? _todaysHabits : _habits).length,
+                                    (index) {
+                                      final list = _todaysHabits.isNotEmpty ? _todaysHabits : _habits;
+                                      final habit = list[index];
+                                      final isCompleted = _habitService.isCompletedToday(habit.id);
+                                      final isLast = index == list.length - 1;
+                                      return KeyedSubtree(
+                                        key: _getHabitKey(habit.id),
+                                        child: _FullWidthHabitRow(
+                                          habit: habit,
+                                          isCompleted: isCompleted,
+                                          onTap: () => _onHabitTap(habit),
+                                          onNavigate: () => _navigateToHabitDetail(habit),
+                                          onLongPress: () => _showHabitOptions(habit),
+                                          showDivider: !isLast,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+          // ─── Expanded Practice Tools ───
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  decoration: _streakStyleDecoration,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                    InkWell(
+                      onTap: () => setState(() => _practiceToolsExpanded = !_practiceToolsExpanded),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.grid_view_rounded,
+                              color: AppColors.primaryOrange,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Expanded Practice Tools',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              _practiceToolsExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                              color: AppColors.primaryOrange,
+                              size: 24,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_practiceToolsExpanded) ...[
+                      Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: GridView.count(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 1.1,
+                          children: [
+                            _PracticeToolTile(
+                              icon: Icons.touch_app_rounded,
+                              label: 'Japa Counter',
+                              locked: !_isPremium,
+                              onTap: _isPremium
+                                  ? () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const JapaCounterScreen(),
+                                        ),
+                                      )
+                                  : () => PaywallScreen.showAsBottomSheet(context),
+                            ),
+                            _PracticeToolTile(
+                              icon: Icons.headphones_rounded,
+                              label: 'Med Library',
+                              locked: !_isPremium,
+                              onTap: _isPremium
+                                  ? () => Navigator.of(context).pushNamed(AppRouter.listenAllMeditation)
+                                  : () => PaywallScreen.showAsBottomSheet(context),
+                            ),
+                            _PracticeToolTile(
+                              icon: Icons.music_note_rounded,
+                              label: 'Chants',
+                              locked: !_isPremium,
+                              onTap: _isPremium
+                                  ? () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => ChantPlayerScreen(),
+                                        ),
+                                      )
+                                  : () => PaywallScreen.showAsBottomSheet(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ],
     );
+  }
+
+  String _monthName(int month) {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[(month - 1).clamp(0, 11)];
+  }
+
+  static IconData _journeyTaskIcon(String slug) {
+    if (slug.contains('mantra') || slug.contains('chant') || slug.contains('listen')) return Icons.graphic_eq_rounded;
+    if (slug.contains('story') || slug.contains('read')) return Icons.menu_book_rounded;
+    if (slug.contains('affirmation') || slug.contains('heart')) return Icons.favorite_rounded;
+    if (slug.contains('stretch') || slug.contains('yoga') || slug.contains('movement')) return Icons.self_improvement_rounded;
+    return Icons.task_alt_rounded;
+  }
+
+  void _openPanchangMonthSheet() {
+    final now = AppClock.now();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, _) => PanchangMonthSheet(
+          initialDate: now,
+          onDaySelected: (d) {
+            Navigator.of(context).pop();
+            _openPanchangDetailSheet(d);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openPanchangDetailSheet(DateTime d) {
+    final day = PanchangEngine.getPanchangDay(d.year, d.month, d.day);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, _) => PanchangDetailSheet(
+          day: day,
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleTaskCompletion(UserDailyTask task) async {
+    if (task.isCompleted) {
+      await _taskService.uncompleteTask(task);
+    } else {
+      final result = await _taskService.completeTask(task);
+      _taskService.refresh();
+      if (mounted && result.success && result.coinsEarned > 0) {
+        final taskKey = _taskKeys[task.id];
+        if (taskKey != null) {
+          FlyingCoinsAnimation.show(
+            context,
+            amount: result.coinsEarned,
+            fromKey: taskKey,
+            toKey: _coinCounterKey,
+          );
+        }
+      }
+      return;
+    }
+    _taskService.refresh();
   }
 
   Widget _buildSectionHeader({
@@ -932,89 +1414,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     });
   }
 
-  Widget _buildPremiumHeader(BuildContext context) {
-    return FutureBuilder(
-      future: _avatarRepository.getAvatar(),
-      builder: (context, avatarSnapshot) {
-        return StreamBuilder<int>(
-          stream: _coinService.coinStream,
-          initialData: _coinService.currentBalance,
-          builder: (context, coinSnapshot) {
-            final coins = coinSnapshot.data ?? 0;
-            final level = _progress?.spiritualLevel ?? 1;
-
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Profile Avatar with level
-                Row(
-                  children: [
-                    const _PremiumProfileAvatar(),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Level $level',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          _progress?.spiritualTitle ?? 'Beginner',
-                          style: GoogleFonts.poppins(
-                            color: AppColors.primaryOrange,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                // Stats Row (coins only; streak is shown on Self/Profile tab)
-                KeyedSubtree(
-                  key: _coinCounterKey,
-                  child: _buildPremiumStatBubble(
-                      '$coins', Icons.monetization_on, Colors.amber),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildPremiumStatBubble(String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A2837).withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: color.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _navigateToHabitDetail(CustomHabit habit) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -1122,143 +1521,676 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   }
 }
 
-/// Geometry overlay with diagonal lines
-class _GeometryOverlay extends StatelessWidget {
-  const _GeometryOverlay();
+/// One card per journey: title = journey name only, no "Active Journey" label.
+class _JourneyCard extends ConsumerWidget {
+  const _JourneyCard({
+    required this.userJourney,
+    required this.types,
+    required this.streakStyleDecoration,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _GeometryPainter(opacity: 0.03),
-    );
+  final UserJourney userJourney;
+  final List<JourneyType> types;
+  final BoxDecoration streakStyleDecoration;
+
+  static IconData _taskIcon(String slug) {
+    if (slug.contains('mantra') || slug.contains('chant') || slug.contains('listen')) return Icons.graphic_eq_rounded;
+    if (slug.contains('story') || slug.contains('read')) return Icons.menu_book_rounded;
+    if (slug.contains('affirmation') || slug.contains('heart')) return Icons.favorite_rounded;
+    if (slug.contains('stretch') || slug.contains('yoga') || slug.contains('movement')) return Icons.self_improvement_rounded;
+    return Icons.task_alt_rounded;
   }
-}
-
-class _GeometryPainter extends CustomPainter {
-  final double opacity;
-
-  _GeometryPainter({required this.opacity});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFD4AF37).withOpacity(opacity)
-      ..strokeWidth = 1;
-
-    const spacing = 80.0;
-    for (var i = -size.width; i < size.width * 2; i += spacing) {
-      canvas.drawLine(
-        Offset(i.toDouble(), 0),
-        Offset(i + size.height, size.height),
-        paint,
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final journeyType = types.where((t) => t.id == userJourney.journeyTypeId).firstOrNull;
+    final tasksAsync = ref.watch(todaysJourneyTasksProvider(userJourney.id));
+    final tasks = tasksAsync.valueOrNull ?? [];
+    final meta = userJourney.metadata;
+    int currentDay = 24;
+    int totalDays = 90;
+    if (meta.containsKey('due_date')) {
+      final due = DateTime.tryParse(meta['due_date'] as String? ?? '');
+      if (due != null) {
+        final start = due.subtract(const Duration(days: 280));
+        final elapsed = DateTime.now().difference(start).inDays.clamp(0, 280);
+        currentDay = elapsed;
+        totalDays = 280;
+      }
     }
-    for (var i = -size.width; i < size.width * 2; i += spacing) {
-      canvas.drawLine(
-        Offset(i.toDouble(), size.height),
-        Offset(i + size.height, 0),
-        paint,
-      );
-    }
-  }
+    final progress = totalDays > 0 ? (currentDay / totalDays).clamp(0.0, 1.0) : 0.0;
+    final title = journeyType?.title ?? 'Journey';
 
-  @override
-  bool shouldRepaint(covariant _GeometryPainter oldDelegate) =>
-      oldDelegate.opacity != opacity;
-}
-
-/// Premium profile avatar with shimmer effect
-class _PremiumProfileAvatar extends StatefulWidget {
-  const _PremiumProfileAvatar();
-
-  @override
-  State<_PremiumProfileAvatar> createState() => _PremiumProfileAvatarState();
-}
-
-class _PremiumProfileAvatarState extends State<_PremiumProfileAvatar>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _shimmerController;
-
-  @override
-  void initState() {
-    super.initState();
-    _shimmerController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _shimmerController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: RepaintBoundary(
-        child: AnimatedBuilder(
-          animation: _shimmerController,
-          builder: (context, _) {
-            return Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFFD4AF37), Color(0xFFF4E4B6)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD4AF37).withOpacity(0.3),
-                    blurRadius: 15,
+    return Container(
+      decoration: streakStyleDecoration,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.spa_rounded, color: AppColors.primaryOrange, size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Day $currentDay',
+              style: GoogleFonts.poppins(
+                color: Colors.white54,
+                fontSize: 12,
               ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Transform.rotate(
-                      angle: _shimmerController.value * 2 * math.pi,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.transparent,
-                              Colors.white.withOpacity(0.3),
-                              Colors.transparent,
-                            ],
-                            stops: [
-                              0.0,
-                              _shimmerController.value % 1.0,
-                              (_shimmerController.value % 1.0) + 0.2,
+            ),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final taskList = tasks.take(4).toList();
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.4,
+                  ),
+                  itemCount: taskList.length,
+                  itemBuilder: (context, index) {
+                    final twc = taskList[index];
+                    final icon = _taskIcon(twc.task.slug);
+                    return Material(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () => Navigator.of(context).pushNamed(
+                          AppRouter.journeyTask,
+                          arguments: {'userJourneyId': userJourney.id, 'taskId': twc.task.id},
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, color: AppColors.primaryOrange, size: 22),
+                              const SizedBox(height: 6),
+                              Flexible(
+                                child: Text(
+                                  twc.task.title,
+                                  style: GoogleFonts.poppins(
+                                    color: twc.isCompleted ? Colors.white54 : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: twc.isCompleted ? TextDecoration.lineThrough : null,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
-                    ),
+                    );
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '$currentDay / $totalDays DAYS',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white54,
                   ),
-                  Center(
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF0B1623),
-                      ),
-                    ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryOrange),
+                minHeight: 6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Profile avatar with level ring around it (Ashram header).
+class _AshramProfileAvatar extends StatelessWidget {
+  const _AshramProfileAvatar({required this.level, this.avatarUrl});
+
+  final int level;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      height: 52,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Level ring around avatar
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.primaryOrange,
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryOrange.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF0B1623),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: avatarUrl != null && avatarUrl!.isNotEmpty
+                    ? Image.network(
+                        avatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _placeholderIcon(),
+                      )
+                    : _placeholderIcon(),
+              ),
+            ),
+          ),
+          // Level badge on the ring (bottom-right)
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primaryOrange,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 4,
                   ),
                 ],
               ),
-            );
-          },
+              child: Text(
+                '$level',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderIcon() {
+    return const Icon(Icons.person_rounded, color: Colors.white38, size: 26);
+  }
+}
+
+/// Notification bell in Ashram header: opens notifications list; shows dot when unread.
+class _NotificationBell extends StatefulWidget {
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppNotificationService.instance.getUnreadCount();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = AppNotificationService.instance;
+    return ValueListenableBuilder<int>(
+      valueListenable: service.unreadCountNotifier,
+      builder: (context, unreadCount, _) {
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              color: AppColors.primaryOrange,
+              onPressed: () {
+                Navigator.of(context).pushNamed(AppRouter.notificationsList);
+              },
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryOrange,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.ashramBackgroundDark, width: 1.5),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ─── Today's Path compact task row ───
+class _TodayPathTaskRow extends StatelessWidget {
+  final UserDailyTask task;
+  final bool alternatingBg;
+  final VoidCallback onTap;
+  final VoidCallback onCheckTap;
+  final bool hasScreen;
+  final VoidCallback? onNavigate;
+
+  const _TodayPathTaskRow({
+    required this.task,
+    required this.alternatingBg,
+    required this.onTap,
+    required this.onCheckTap,
+    required this.hasScreen,
+    this.onNavigate,
+  });
+
+  static IconData _iconForSlug(String slug) {
+    switch (slug) {
+      case 'daily_verse':
+        return Icons.menu_book_rounded;
+      case 'donate':
+        return Icons.volunteer_activism_rounded;
+      case 'daily_meditation':
+      case 'morning_meditation':
+      case 'pranayama':
+        return Icons.self_improvement_rounded;
+      case 'japa_108':
+        return Icons.touch_app_rounded;
+      default:
+        return Icons.check_circle_outline;
+    }
+  }
+
+  static String _subtitleForTask(UserDailyTask task) {
+    if (task.estimatedMinutes > 0) return '${task.estimatedMinutes} mins';
+    if (task.description != null && task.description!.isNotEmpty) {
+      final d = task.description!;
+      return d.length > 40 ? '${d.substring(0, 40)}...' : d;
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.primaryOrange;
+    return Material(
+      color: alternatingBg ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
+      child: InkWell(
+        onTap: hasScreen && onNavigate != null ? onNavigate! : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                _iconForSlug(task.slug),
+                size: 22,
+                color: accent.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      task.title,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (_subtitleForTask(task).isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _subtitleForTask(task),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: onCheckTap,
+                child: Icon(
+                  task.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 24,
+                  color: task.isCompleted ? Colors.green : accent.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Full-width habit row (like Today's task rows) ───
+class _FullWidthHabitRow extends StatelessWidget {
+  const _FullWidthHabitRow({
+    required this.habit,
+    required this.isCompleted,
+    required this.onTap,
+    required this.onNavigate,
+    required this.onLongPress,
+    this.showDivider = true,
+  });
+
+  final CustomHabit habit;
+  final bool isCompleted;
+  final VoidCallback onTap;
+  final VoidCallback onNavigate;
+  final VoidCallback? onLongPress;
+  final bool showDivider;
+
+  static IconData _iconFromName(String name) {
+    switch (name) {
+      case 'self_improvement':
+      case 'meditation':
+        return Icons.self_improvement_rounded;
+      case 'menu_book':
+      case 'book':
+        return Icons.menu_book_rounded;
+      case 'favorite':
+        return Icons.favorite_rounded;
+      case 'eco':
+        return Icons.eco_rounded;
+      default:
+        return Icons.check_circle_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(
+                    _iconFromName(habit.iconName),
+                    size: 24,
+                    color: isCompleted ? Colors.green : AppColors.primaryOrange,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          habit.title,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          habit.frequency.displayName,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isCompleted)
+                    Icon(Icons.check_circle, size: 22, color: Colors.green),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right_rounded),
+                    color: Colors.white54,
+                    onPressed: onNavigate,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (showDivider)
+          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08), indent: 52, endIndent: 16),
+      ],
+    );
+  }
+}
+
+// ─── Compact habit card for 2-column grid ───
+class _CompactHabitCard extends StatelessWidget {
+  final CustomHabit habit;
+  final bool isCompleted;
+  final VoidCallback onTap;
+  final VoidCallback onNavigate;
+  final VoidCallback? onLongPress;
+  final BoxDecoration? cardDecoration;
+
+  const _CompactHabitCard({
+    required this.habit,
+    required this.isCompleted,
+    required this.onTap,
+    required this.onNavigate,
+    this.onLongPress,
+    this.cardDecoration,
+  });
+
+  static IconData _iconFromName(String name) {
+    switch (name) {
+      case 'self_improvement':
+      case 'meditation':
+        return Icons.self_improvement_rounded;
+      case 'menu_book':
+      case 'book':
+        return Icons.menu_book_rounded;
+      case 'favorite':
+        return Icons.favorite_rounded;
+      case 'eco':
+        return Icons.eco_rounded;
+      default:
+        return Icons.check_circle_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = cardDecoration ?? BoxDecoration(
+      color: AppColors.cardDark,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+    );
+    return Container(
+      decoration: decoration,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _iconFromName(habit.iconName),
+                      size: 24,
+                      color: isCompleted ? Colors.green : AppColors.primaryOrange,
+                    ),
+                    const Spacer(),
+                    if (isCompleted)
+                      const Icon(Icons.check_circle, size: 18, color: Colors.green),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  habit.title,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  habit.frequency.displayName,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white54,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Expanded Practice Tools tile ───
+class _PracticeToolTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool locked;
+
+  const _PracticeToolTile({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.locked = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: locked ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 28,
+                    color: locked
+                        ? Colors.white38
+                        : AppColors.primaryOrange,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      color: locked ? Colors.white38 : Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (locked)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: 16,
+                  color: Colors.white54,
+                ),
+              ),
+          ],
         ),
       ),
     );

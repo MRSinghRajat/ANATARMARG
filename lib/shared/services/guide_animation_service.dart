@@ -31,8 +31,7 @@ class GuideAnimationService {
   }
 
   void triggerAnimation(String animationName) {
-    // Trigger specific animation by name
-    // This will be connected to Rive controller
+    // Trigger specific animation by name (for AnimatedGuide / future use)
   }
 
   void updateWisdomLevel(int level) {

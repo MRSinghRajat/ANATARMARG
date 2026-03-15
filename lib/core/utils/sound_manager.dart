@@ -58,11 +58,14 @@ class SoundManager {
 
   Future<void> playBackgroundSound(SoundType type) async {
     if (_isMuted) return;
+    // Avoid restarting the same sound (prevents overlapping / fast loop)
+    if (_currentSound == type) return;
 
     _currentSound = type;
     String soundPath = _getSoundPath(type);
 
     try {
+      await _backgroundPlayer.stop();
       await _backgroundPlayer.setReleaseMode(ReleaseMode.loop);
       await _backgroundPlayer.play(AssetSource(soundPath));
       await _backgroundPlayer.setVolume(_volume);

@@ -1,6 +1,6 @@
 class AppConstants {
   // App Information
-  static const String appName = 'Antar Marg';
+  static const String appName = 'Antar मार्ग';
   static const String appTagline = 'The Inner Path';
   
   // Books

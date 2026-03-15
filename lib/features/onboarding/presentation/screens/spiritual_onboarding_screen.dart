@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/utils/app_router.dart';
 
 /// Duolingo-style animated spiritual onboarding for Antar Marg.
@@ -14,6 +15,7 @@ class SpiritualOnboardingScreen extends StatefulWidget {
   const SpiritualOnboardingScreen({super.key});
 
   static const String onboardingCompleteKey = 'onboarding_complete';
+  static const String onboardingUserNameKey = 'onboarding_user_name';
 
   static Future<bool> isOnboardingComplete() async {
     final prefs = await SharedPreferences.getInstance();
@@ -23,6 +25,17 @@ class SpiritualOnboardingScreen extends StatefulWidget {
   static Future<void> markOnboardingComplete() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(onboardingCompleteKey, true);
+  }
+
+  static Future<void> saveUserName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(onboardingUserNameKey, name.trim());
+  }
+
+  static Future<String?> getStoredUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final n = prefs.getString(onboardingUserNameKey);
+    return (n != null && n.trim().isNotEmpty) ? n.trim() : null;
   }
 
   @override
@@ -56,6 +69,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   String? _goalAnswer;
   String _userName = '';
 
+  // Onboarding language (Hindi default)
+  bool _onboardingHindi = true;
+
   // Typewriter
   Timer? _typewriterTimer;
   String _typewriterVisible = '';
@@ -67,6 +83,13 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     '',
     'A path the ancient sages walked.',
     'A path meant for you.',
+  ];
+  static const _typewriterLinesHindi = [
+    'आधुनिक दुनिया की भागदौड़ में...',
+    'भीतर एक मार्ग है।',
+    '',
+    'वह मार्ग जो पुरातन ऋषियों ने चला।',
+    'वह मार्ग आपके लिए।',
   ];
   late String _typewriterFull;
   bool _showWelcomeUI = false;
@@ -95,7 +118,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   void initState() {
     super.initState();
 
-    _typewriterFull = _typewriterLines.join('\n');
+    _typewriterFull = (_onboardingHindi ? _typewriterLinesHindi : _typewriterLines).join('\n');
 
     _omPulseController = AnimationController(
       vsync: this, duration: const Duration(seconds: 3),
@@ -159,6 +182,59 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     super.dispose();
   }
 
+  void _setOnboardingLanguage(bool hindi) {
+    if (_currentStep == 0) {
+      _typewriterTimer?.cancel();
+      setState(() {
+        _onboardingHindi = hindi;
+        _typewriterFull = (hindi ? _typewriterLinesHindi : _typewriterLines).join('\n');
+        _typewriterVisible = _typewriterFull;
+        _typewriterDone = true;
+        _typewriterIdx = _typewriterFull.length;
+        _showWelcomeUI = true;
+      });
+    } else {
+      setState(() => _onboardingHindi = hindi);
+    }
+  }
+
+  Widget _buildLanguageToggle() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          onPressed: _onboardingHindi ? null : () => _setOnboardingLanguage(true),
+          child: Text(
+            'हिंदी',
+            style: GoogleFonts.tenorSans(
+              fontSize: 14,
+              fontWeight: _onboardingHindi ? FontWeight.w700 : FontWeight.w500,
+              color: _onboardingHindi ? _gold : Colors.white.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+        Text(
+          '|',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.white.withValues(alpha: 0.3),
+          ),
+        ),
+        TextButton(
+          onPressed: !_onboardingHindi ? null : () => _setOnboardingLanguage(false),
+          child: Text(
+            'English',
+            style: GoogleFonts.tenorSans(
+              fontSize: 14,
+              fontWeight: !_onboardingHindi ? FontWeight.w700 : FontWeight.w500,
+              color: !_onboardingHindi ? _gold : Colors.white.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ───── Typewriter logic ─────
   void _startTypewriter() {
     _typewriterTimer = Timer.periodic(const Duration(milliseconds: 55), (t) {
@@ -188,15 +264,26 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     _QuestionData(
       symbol: 'ॐ',
       symbolFontSize: 52,
-      title: 'How many years of\nwisdom do you carry?',
+      title: 'Which age group\nare you in?',
       subtitle: 'Your age helps us personalise',
       options: ['Under 18', '18–25', '26–35', '36–45', '46–55', '55+'],
+      titleHindi: 'आप किस आयु वर्ग में हैं?',
+      subtitleHindi: 'उम्र से हम अनुभव को व्यक्तिगत बनाते हैं',
+      optionsHindi: ['18 से कम', '18–25', '26–35', '36–45', '46–55', '55+'],
       factBuilder: (idx) {
         final pcts = [92, 78, 65, 52, 38, 24];
         return _FactData(
           percentage: pcts[idx],
           text: "You're ahead of ${pcts[idx]}% of seekers\nwho started at your age!",
           subtext: 'The best time to begin is now.',
+        );
+      },
+      factBuilderHindi: (idx) {
+        final pcts = [92, 78, 65, 52, 38, 24];
+        return _FactData(
+          percentage: pcts[idx],
+          text: 'आपकी उम्र में शुरू करने वालों में\nआप ${pcts[idx]}% से आगे हैं!',
+          subtext: 'शुरू करने का सबसे अच्छा समय अभी है।',
         );
       },
     ),
@@ -206,6 +293,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
       title: 'How often do you\nconnect with the divine?',
       subtitle: 'Prayer, puja, or any spiritual practice',
       options: ['Daily', 'Few times a week', 'Occasionally', 'Rarely', 'Starting fresh today'],
+      titleHindi: 'आप भगवान की पूजा\nकितनी बार करते हैं?',
+      subtitleHindi: 'प्रार्थना, पूजा या कोई आध्यात्मिक अभ्यास',
+      optionsHindi: ['रोज़', 'हफ़्ते में कुछ बार', 'कभी-कभी', 'बहुत कम', 'आज से शुरू'],
       factBuilder: (idx) {
         final pcts = [12, 28, 45, 68, 85];
         final msgs = [
@@ -218,6 +308,18 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
         return _FactData(percentage: pcts[idx], text: msgs[idx],
           subtext: 'Consistency is the path to inner peace.');
       },
+      factBuilderHindi: (idx) {
+        final pcts = [12, 28, 45, 68, 85];
+        final msgs = [
+          'केवल १२% रोज़ प्रार्थना करते हैं।\nआप भक्ति के विशेष समूह में हैं!',
+          'आप ७२% आध्यात्मिक साधकों से\nअधिक नियमित हैं!',
+          'आप पहले से ५५% से आगे।\nइसे आदत बनाएं!',
+          'हमारे ३२% सक्रिय उपयोगकर्ता\nयहीं से शुरू हुए!',
+          'हर बड़ी यात्रा एक कदम से शुरू होती है।\nस्वागत है!',
+        ];
+        return _FactData(percentage: pcts[idx], text: msgs[idx],
+          subtext: 'नियमितता ही अंतरात्मा की शांति का मार्ग है।');
+      },
     ),
     _QuestionData(
       symbol: '📖',
@@ -225,8 +327,12 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
       title: 'Which sacred texts\nhave you explored?',
       subtitle: 'Select all that apply',
       options: ['Bhagavad Gita', 'Ramayan', 'Mahabharata', 'Vedas', 'Upanishads', 'None yet'],
+      titleHindi: 'आपने कौन-से पवित्र\nग्रंथ पढ़े हैं?',
+      subtitleHindi: 'सभी लागू विकल्प चुनें',
+      optionsHindi: ['भगवद् गीता', 'रामायण', 'महाभारत', 'वेद', 'उपनिषद', 'अभी कोई नहीं'],
       isMultiSelect: true,
       factBuilder: (_) => _FactData(percentage: 0, text: '', subtext: ''),
+      factBuilderHindi: (_) => _FactData(percentage: 0, text: '', subtext: ''),
     ),
     _QuestionData(
       symbol: '🧘',
@@ -234,6 +340,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
       title: 'Do you meditate?',
       subtitle: 'Even a minute of stillness counts',
       options: ['Yes, daily', 'Sometimes', 'Tried but struggled', 'Never tried', 'Want to start'],
+      titleHindi: 'क्या आप ध्यान करते हैं?',
+      subtitleHindi: 'एक मिनट की शांति भी मायने रखती है',
+      optionsHindi: ['हाँ, रोज़', 'कभी-कभी', 'किया पर मुश्किल लगा', 'कभी नहीं', 'शुरू करना चाहता हूँ'],
       factBuilder: (idx) {
         final pcts = [8, 22, 45, 60, 35];
         final msgs = [
@@ -246,6 +355,18 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
         return _FactData(percentage: pcts[idx], text: msgs[idx],
           subtext: 'Meditation transforms the mind.');
       },
+      factBuilderHindi: (idx) {
+        final pcts = [8, 22, 45, 60, 35];
+        final msgs = [
+          'केवल ८% रोज़ ध्यान करते हैं।\nआप सच में अनुशासित हैं!',
+          'आप अपनी उम्र के ७८% लोगों से\nअधिक शांत हैं!',
+          '४५% का अनुभव आप जैसा है।\nहम इसे आसान बनाएंगे!',
+          'हमारे ६०% शीर्ष उपयोगकर्ता\nशून्य अनुभव से शुरू हुए!',
+          'सुंदर! आपके लिए मार्गदर्शित सत्र हैं।',
+        ];
+        return _FactData(percentage: pcts[idx], text: msgs[idx],
+          subtext: 'ध्यान मन को बदल देता है।');
+      },
     ),
     _QuestionData(
       symbol: '✨',
@@ -253,6 +374,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
       title: 'What draws you\nto this path?',
       subtitle: 'Choose what resonates most',
       options: ['Inner peace', 'Understanding dharma', 'Daily discipline', 'Ancient wisdom', 'Personal growth'],
+      titleHindi: 'इस मार्ग की ओर\nआपको क्या खींचता है?',
+      subtitleHindi: 'जो सबसे ज़्यादा अनुकूल लगे चुनें',
+      optionsHindi: ['अंतर शांति', 'धर्म की समझ', 'दैनिक अनुशासन', 'प्राचीन ज्ञान', 'व्यक्तिगत विकास'],
       factBuilder: (idx) {
         final msgs = [
           "Peace seekers find calm\n3x faster with daily practice!",
@@ -264,8 +388,38 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
         return _FactData(percentage: 0, text: msgs[idx],
           subtext: 'Your path is uniquely yours.', hideBar: true);
       },
+      factBuilderHindi: (idx) {
+        final msgs = [
+          'शांति चाहने वाले रोज़ अभ्यास से\n३ गुना तेज़ शांति पाते हैं!',
+          'धर्म नींव है।\nआप मज़बूत ज़मीन पर खड़े हैं!',
+          'अनुशासन से ही मुक्ति।\nअपनी लगन बढ़ाएं!',
+          'प्राचीनों को वे रहस्य पता थे\nजो हम अभी खोज रहे हैं!',
+          'विकास अनंत है।\nहर श्लोक नई दृष्टि लाता है!',
+        ];
+        return _FactData(percentage: 0, text: msgs[idx],
+          subtext: 'आपका मार्ग सिर्फ आपका है।', hideBar: true);
+      },
     ),
   ];
+
+  String _qTitle(_QuestionData q) =>
+      _onboardingHindi && q.titleHindi != null ? q.titleHindi! : q.title;
+  String _qSubtitle(_QuestionData q) =>
+      _onboardingHindi && q.subtitleHindi != null ? q.subtitleHindi! : q.subtitle;
+  String _qOption(_QuestionData q, int i) =>
+      _onboardingHindi && q.optionsHindi != null && i < q.optionsHindi!.length
+          ? q.optionsHindi![i]
+          : q.options[i];
+  _FactData _qFact(_QuestionData q, int idx) =>
+      _onboardingHindi && q.factBuilderHindi != null
+          ? q.factBuilderHindi!(idx)
+          : q.factBuilder(idx);
+
+  String _optionDisplayLabel(int qIdx, String englishOption) {
+    final q = _questions[qIdx];
+    final i = q.options.indexOf(englishOption);
+    return i >= 0 ? _qOption(q, i) : englishOption;
+  }
 
   // ───── Selection handlers ─────
   void _onOptionSelected(int index) {
@@ -338,8 +492,12 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     });
   }
 
-  void _nextStep() {
+  void _nextStep() async {
     HapticFeedback.lightImpact();
+    // Save user name when leaving name step (7)
+    if (_currentStep == _questions.length + 2 && _userName.trim().isNotEmpty) {
+      await SpiritualOnboardingScreen.saveUserName(_userName);
+    }
     _fadeController.reset();
     _rippleController.reset();
     _resultController.reset();
@@ -395,12 +553,16 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   }
 
   void _goToLogin() {
+    FocusManager.instance.primaryFocus?.unfocus();
     SpiritualOnboardingScreen.markOnboardingComplete();
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, AppRouter.login);
   }
 
   void _skipToHome() {
+    FocusManager.instance.primaryFocus?.unfocus();
     SpiritualOnboardingScreen.markOnboardingComplete();
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, AppRouter.home);
   }
 
@@ -410,9 +572,11 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   @override
   Widget build(BuildContext context) {
     final isQ = _currentStep >= 1 && _currentStep <= _questions.length;
-    return Scaffold(
-      backgroundColor: _bg,
-      body: Stack(
+    return PopScope(
+      canPop: _currentStep > 0,
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: Stack(
         children: [
           // Water waves during questions
           if (isQ)
@@ -453,6 +617,32 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               child: _buildCurrentStep(),
             ),
           ),
+          // Language toggle (Hindi / English) — always on top, right corner; never overridden by content
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8, right: 12),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _bg.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _buildLanguageToggle(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           // Back button (visible after step 0)
           if (_currentStep > 0)
             Positioned(
@@ -475,6 +665,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
             ),
         ],
       ),
+      ),
     );
   }
 
@@ -491,106 +682,104 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  STEP 0: WELCOME — Typewriter + Vibration
   // ═══════════════════════════════════════════════════════════
   Widget _buildWelcome() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        children: [
-          const Spacer(flex: 2),
-          // Om symbol with pulse
-          AnimatedBuilder(
-            animation: _omPulse,
-            builder: (_, __) => Container(
-              width: 120, height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: _gold.withValues(alpha: 0.12 * _omPulse.value),
-                    blurRadius: 50 * _omPulse.value,
-                    spreadRadius: 15 * _omPulse.value,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Logo in background — no fixed dimensions; scales to fit, content overlays it
+        Positioned.fill(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: AnimatedBuilder(
+                animation: _omPulse,
+                builder: (_, __) => Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _gold.withValues(alpha: 0.15 * _omPulse.value),
+                        blurRadius: 40 * _omPulse.value,
+                        spreadRadius: 10 * _omPulse.value,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Center(
-                child: ShaderMask(
-                  shaderCallback: (b) => const LinearGradient(
-                    colors: [_gold, _lightGold, _gold],
-                  ).createShader(b),
-                  child: Text('ॐ',
-                    style: GoogleFonts.notoSerifDevanagari(
-                      fontSize: 90, fontWeight: FontWeight.w300,
-                      color: Colors.white, height: 1,
+                  child: Image.asset(
+                    AppConfig.appLogoPath,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Center(
+                      child: Text('ॐ',
+                        style: GoogleFonts.notoSerifDevanagari(
+                          fontSize: 80, fontWeight: FontWeight.w300,
+                          color: _gold, height: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 40),
-          // Typewriter text
-          SizedBox(
-            height: 130,
-            child: Text(
-              _typewriterVisible,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 22, fontWeight: FontWeight.w500,
-                color: _lightGold.withValues(alpha: 0.9),
-                height: 1.6,
-              ),
-            ),
-          ),
-          // Blinking cursor
-          if (!_typewriterDone)
-            AnimatedBuilder(
-              animation: _omPulseController,
-              builder: (_, __) => Opacity(
-                opacity: (_omPulseController.value > 0.5) ? 1.0 : 0.0,
-                child: Container(
-                  width: 2, height: 24,
-                  color: _gold,
+        ),
+        // Content overlays the logo — typewriter; button at bottom (reserve top space so toggle never overlaps)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              // Reserve space for language toggle (top-right) so first-page text never overlaps it
+              const SizedBox(height: 60),
+              // Typewriter text
+              SizedBox(
+                height: 130,
+                child: Text(
+                  _typewriterVisible,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cormorantGaramond(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w500,
+                    color: _lightGold.withValues(alpha: 0.9),
+                    height: 1.6,
+                  ),
                 ),
               ),
-            ),
-          const SizedBox(height: 24),
-          // App name + button appear after typewriter
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 800),
-            opacity: _showWelcomeUI ? 1.0 : 0.0,
-            child: Column(
-              children: [
-                ShaderMask(
-                  shaderCallback: (b) => const LinearGradient(
-                    colors: [_lightGold, _gold],
-                  ).createShader(b),
-                  child: Text('ANTAR MARG',
-                    style: GoogleFonts.cormorantGaramond(
-                      fontSize: 36, fontWeight: FontWeight.w600,
-                      letterSpacing: 5, color: Colors.white,
+              if (!_typewriterDone)
+                AnimatedBuilder(
+                  animation: _omPulseController,
+                  builder: (_, __) => Opacity(
+                    opacity: (_omPulseController.value > 0.5) ? 1.0 : 0.0,
+                    child: Container(
+                      width: 2,
+                      height: 24,
+                      color: _gold,
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text('Your Inner Path',
-                  style: GoogleFonts.tenorSans(
-                    fontSize: 14, letterSpacing: 3,
-                    color: _lightGold.withValues(alpha: 0.5),
-                  ),
+              const Spacer(flex: 5),
+              // Button close to bottom
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 800),
+                opacity: _showWelcomeUI ? 1.0 : 0.0,
+                child: Column(
+                  children: [
+                    _GoldButton(
+                      label: _onboardingHindi ? 'अपनी यात्रा शुरू करें' : 'Begin Your Journey',
+                      onTap: _nextStep,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _onboardingHindi ? 'केवल २ मिनट' : 'Takes only 2 minutes',
+                      style: GoogleFonts.tenorSans(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 40),
-                _GoldButton(label: 'Begin Your Journey', onTap: _nextStep),
-                const SizedBox(height: 12),
-                Text('Takes only 2 minutes',
-                  style: GoogleFonts.tenorSans(
-                    fontSize: 12, color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 40),
+            ],
           ),
-          const Spacer(flex: 2),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -619,7 +808,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                 )),
                 SizedBox(height: _showResult ? 8 : 20),
                 if (!_showResult)
-                  Center(child: Text(q.title,
+                  Center(child: Text(_qTitle(q),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.cormorantGaramond(
                       fontSize: 26, fontWeight: FontWeight.w600,
@@ -627,7 +816,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                     ),
                   )),
                 if (_showResult)
-                  Center(child: Text(q.title.replaceAll('\n', ' '),
+                  Center(child: Text(_qTitle(q).replaceAll('\n', ' '),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.cormorantGaramond(
                       fontSize: 18, fontWeight: FontWeight.w600,
@@ -636,7 +825,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                   )),
                 if (!_showResult) ...[
                   const SizedBox(height: 6),
-                  Center(child: Text(q.subtitle,
+                  Center(child: Text(_qSubtitle(q),
                     style: GoogleFonts.tenorSans(
                       fontSize: 13, color: Colors.white.withValues(alpha: 0.4),
                     ),
@@ -674,7 +863,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
             Padding(
               padding: const EdgeInsets.only(bottom: 24),
               child: _GoldButton(
-                label: _currentStep == _questions.length ? 'See Your Journey' : 'Continue',
+                label: _currentStep == _questions.length
+                    ? (_onboardingHindi ? 'अपनी यात्रा देखें' : 'See Your Journey')
+                    : (_onboardingHindi ? 'आगे बढ़ें' : 'Continue'),
                 onTap: _nextStep,
               ),
             ),
@@ -690,13 +881,17 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
       child: Column(
         children: [
           ...List.generate(q.options.length, (i) {
-            if (isBooks) return _buildMultiChip(q.options[i], i);
-            return _buildOptionTile(q.options[i], i, qIdx);
+            if (isBooks) return _buildMultiChip(q.options[i], i, qIdx);
+            return _buildOptionTile(_qOption(q, i), i, qIdx);
           }),
           if (isBooks && !_optionsHiding && _booksAnswer.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: _GoldButton(label: 'Continue', onTap: _confirmBooks, compact: true),
+              child: _GoldButton(
+                label: _onboardingHindi ? 'आगे बढ़ें' : 'Continue',
+                onTap: _confirmBooks,
+                compact: true,
+              ),
             ),
           const SizedBox(height: 20),
         ],
@@ -738,8 +933,8 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   Widget _buildSelectedBadge(int qIdx) {
     final q = _questions[qIdx];
     final label = q.isMultiSelect
-        ? _booksAnswer.join(', ')
-        : (_selectedOption != null ? q.options[_selectedOption!] : '');
+        ? _booksAnswer.map((opt) => _optionDisplayLabel(qIdx, opt)).join(', ')
+        : (_selectedOption != null ? _qOption(q, _selectedOption!) : '');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
@@ -772,35 +967,34 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  Q1 RESULT: Life Grid (age visualization)
+  //  Q1 RESULT: Journey grid (wisdom / path — no fixed “remaining years”)
   // ═══════════════════════════════════════════════════════════
   Widget _buildLifeGrid() {
     final ages = [15, 22, 30, 40, 50, 60];
     final userAge = ages[_ageIndex.clamp(0, ages.length - 1)];
-    const totalYears = 80;
+    const totalDots = 60; // “Steps on the path” — metaphorical, not years left
 
     return AnimatedBuilder(
       animation: _lifeGrid,
       builder: (_, __) {
-        final revealCount = (totalYears * _lifeGrid.value).round();
+        final revealCount = (totalDots * _lifeGrid.value).round();
         return Column(
           children: [
             ShaderMask(
               shaderCallback: (b) => const LinearGradient(
                 colors: [_lightGold, _gold],
               ).createShader(b),
-              child: Text('This is your life',
+              child: Text(_onboardingHindi ? 'अब तक की आपकी यात्रा' : 'Your journey so far',
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 26, fontWeight: FontWeight.w700, color: Colors.white,
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            // Dot grid
             Wrap(
               spacing: 8, runSpacing: 8,
               alignment: WrapAlignment.center,
-              children: List.generate(totalYears, (i) {
+              children: List.generate(totalDots, (i) {
                 final isLived = i < userAge;
                 final isRevealed = i < revealCount;
                 return AnimatedContainer(
@@ -821,19 +1015,18 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               }),
             ),
             const SizedBox(height: 20),
-            // Legend
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _dot(_gold), const SizedBox(width: 6),
-                Text('Years lived', style: _legendStyle()),
+                Text(_onboardingHindi ? 'अब तक का आपका मार्ग' : 'Your path so far', style: _legendStyle()),
                 const SizedBox(width: 20),
                 _dot(Colors.white.withValues(alpha: 0.15)), const SizedBox(width: 6),
-                Text('Years remaining', style: _legendStyle()),
+                Text(_onboardingHindi ? 'आगे का रास्ता' : 'The road ahead', style: _legendStyle()),
               ],
             ),
             const SizedBox(height: 16),
-            Text('Make every golden dot count.',
+            Text(_onboardingHindi ? 'हर कदम मायने रखता है।' : 'Make every step count.',
               style: GoogleFonts.tenorSans(
                 fontSize: 13, color: _lightGold.withValues(alpha: 0.6),
                 fontStyle: FontStyle.italic,
@@ -854,7 +1047,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  Q2 RESULT: Prayer — Animated flame gauge
   // ═══════════════════════════════════════════════════════════
   Widget _buildPrayerResult() {
-    final fact = _questions[1].factBuilder(_selectedOption ?? 0);
+    final fact = _qFact(_questions[1], _selectedOption ?? 0);
     return AnimatedBuilder(
       animation: _resultAnim,
       builder: (_, __) {
@@ -888,11 +1081,15 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   Widget _buildBooksResult() {
     final count = _booksAnswer.where((b) => b != 'None yet').length;
     final pct = count == 0 ? 85 : (100 - count * 15).clamp(10, 90);
-    final text = count == 0
-        ? "85% of our most loved users\nstarted with zero knowledge!"
-        : "You've explored $count sacred text${count > 1 ? 's' : ''}!\nThat puts you ahead of ${100 - pct}% of seekers.";
-    final fact = _FactData(percentage: pct, text: text,
-      subtext: 'Our library has all of these and more.');
+    final text = _onboardingHindi
+        ? (count == 0
+            ? 'हमारे ८५% पसंदीदा उपयोगकर्ताओं ने\nशून्य ज्ञान से शुरुआत की!'
+            : 'आपने $count पवित्र ग्रंथ पढ़े हैं!\nआप ${100 - pct}% साधकों से आगे हैं।')
+        : (count == 0
+            ? "85% of our most loved users\nstarted with zero knowledge!"
+            : "You've explored $count sacred text${count > 1 ? 's' : ''}!\nThat puts you ahead of ${100 - pct}% of seekers.");
+    final subtext = _onboardingHindi ? 'हमारे पुस्तकालय में ये सब और भी बहुत कुछ है।' : 'Our library has all of these and more.';
+    final fact = _FactData(percentage: pct, text: text, subtext: subtext);
 
     return AnimatedBuilder(
       animation: _resultAnim,
@@ -942,7 +1139,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  Q4 RESULT: Meditation — Breathing circle
   // ═══════════════════════════════════════════════════════════
   Widget _buildMeditationResult() {
-    final fact = _questions[3].factBuilder(_selectedOption ?? 0);
+    final fact = _qFact(_questions[3], _selectedOption ?? 0);
     return AnimatedBuilder(
       animation: _resultAnim,
       builder: (_, __) {
@@ -972,7 +1169,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('breathe...',
+                Text(_onboardingHindi ? 'साँस लें...' : 'breathe...',
                   style: GoogleFonts.tenorSans(
                     fontSize: 12, color: _lightGold.withValues(alpha: 0.4),
                     fontStyle: FontStyle.italic, letterSpacing: 4,
@@ -992,7 +1189,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  Q5 RESULT: Goal — Sparkle path
   // ═══════════════════════════════════════════════════════════
   Widget _buildGoalResult() {
-    final fact = _questions[4].factBuilder(_selectedOption ?? 0);
+    final fact = _qFact(_questions[4], _selectedOption ?? 0);
     return AnimatedBuilder(
       animation: _resultAnim,
       builder: (_, __) {
@@ -1171,8 +1368,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
     );
   }
 
-  Widget _buildMultiChip(String label, int index) {
-    final isSelected = _booksAnswer.contains(label);
+  Widget _buildMultiChip(String optionKey, int index, int qIdx) {
+    final isSelected = _booksAnswer.contains(optionKey);
+    final displayLabel = _qOption(_questions[qIdx], index);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
@@ -1196,7 +1394,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
           child: Row(
             children: [
               Expanded(
-                child: Text(label,
+                child: Text(displayLabel,
                   style: GoogleFonts.tenorSans(
                     fontSize: 15,
                     color: isSelected ? _lightGold : Colors.white.withValues(alpha: 0.8),
@@ -1223,11 +1421,17 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  STEP 6: PROGRESSION — Dark → Light transformation
   // ═══════════════════════════════════════════════════════════
   Widget _buildProgression() {
-    final stages = [
+    final stagesEn = [
       ('Darkness', '🌑', 'Where most begin...', Colors.white.withValues(alpha: 0.3)),
       ('Seeking', '🌅', 'The journey inward starts...', _saffron),
       ('Illumination', '☀️', 'The light was always within you.', _gold),
     ];
+    final stagesHi = [
+      ('अंधकार', '🌑', 'जहाँ अधिकतर शुरू करते हैं...', Colors.white.withValues(alpha: 0.3)),
+      ('खोज', '🌅', 'भीतर की यात्रा शुरू होती है...', _saffron),
+      ('प्रकाश', '☀️', 'प्रकाश हमेशा आपके भीतर था।', _gold),
+    ];
+    final stages = _onboardingHindi ? stagesHi : stagesEn;
 
     return Center(
       child: Padding(
@@ -1242,7 +1446,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                     ? [_lightGold, _gold]
                     : [Colors.white.withValues(alpha: 0.5), Colors.white.withValues(alpha: 0.3)],
               ).createShader(b),
-              child: Text('Your Transformation',
+              child: Text(_onboardingHindi ? 'आपका रूपांतरण' : 'Your Transformation',
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white,
                 ),
@@ -1314,7 +1518,9 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                 shaderCallback: (b) => const LinearGradient(
                   colors: [_lightGold, _gold],
                 ).createShader(b),
-                child: Text('Antar Marg illuminates\nyour inner path',
+                child: Text(_onboardingHindi
+                    ? '${AppConfig.appDisplayName} आपके\nभीतरी मार्ग को रोशन करता है'
+                    : '${AppConfig.appDisplayName} illuminates\nyour inner path',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.cormorantGaramond(
                     fontSize: 22, fontWeight: FontWeight.w600,
@@ -1323,7 +1529,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                 ),
               ),
               const SizedBox(height: 32),
-              _GoldButton(label: 'Continue', onTap: _nextStep),
+              _GoldButton(label: _onboardingHindi ? 'आगे बढ़ें' : 'Continue', onTap: _nextStep),
             ],
             const Spacer(flex: 3),
           ],
@@ -1336,20 +1542,23 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
   //  STEP 7: NAME INPUT
   // ═══════════════════════════════════════════════════════════
   Widget _buildNameInput() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Spacer(flex: 2),
-            const Text('🙏', style: TextStyle(fontSize: 56)),
+    return MediaQuery.withClampedTextScaling(
+      minScaleFactor: 0.8,
+      maxScaleFactor: 1.2,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Spacer(flex: 2),
+              const Text('🙏', style: TextStyle(fontSize: 56)),
             const SizedBox(height: 24),
             ShaderMask(
               shaderCallback: (b) => const LinearGradient(
                 colors: [_lightGold, _gold],
               ).createShader(b),
-              child: Text('What shall we\ncall you, seeker?',
+              child: Text(_onboardingHindi ? 'हम आपको क्या\nबुलाएँ, साधक?' : 'What shall we\ncall you, seeker?',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 30, fontWeight: FontWeight.w600,
@@ -1358,30 +1567,33 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               ),
             ),
             const SizedBox(height: 8),
-            Text('Your name helps personalise the experience',
+            Text(_onboardingHindi ? 'आपका नाम अनुभव को व्यक्तिगत बनाता है' : 'Your name helps personalise the experience',
               style: GoogleFonts.tenorSans(
                 fontSize: 13, color: Colors.white.withValues(alpha: 0.4),
               ),
             ),
             const SizedBox(height: 36),
-            // Name field
+            // Name field — light background so typed text is clearly visible in black
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _gold.withValues(alpha: 0.3)),
-                color: _cardBg.withValues(alpha: 0.5),
+                border: Border.all(color: _gold.withValues(alpha: 0.4)),
+                color: const Color(0xFFF5F0E8),
               ),
               child: TextField(
                 onChanged: (v) => setState(() => _userName = v.trim()),
                 textAlign: TextAlign.center,
-                cursorColor: _gold,
+                cursorColor: const Color(0xFF0B1623),
                 style: GoogleFonts.tenorSans(
-                  fontSize: 18, color: _lightGold, fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: Colors.black,
+                  fontWeight: FontWeight.w500,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Enter your name',
+                  hintText: _onboardingHindi ? 'अपना नाम लिखें' : 'Enter your name',
                   hintStyle: GoogleFonts.tenorSans(
-                    fontSize: 16, color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 16,
+                    color: Colors.black45,
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -1393,26 +1605,17 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               duration: const Duration(milliseconds: 300),
               opacity: _userName.isNotEmpty ? 1.0 : 0.3,
               child: _GoldButton(
-                label: _userName.isNotEmpty ? 'Welcome, $_userName!' : 'Continue',
-                onTap: _userName.isNotEmpty ? _nextStep : () {
-                  // Allow skip without name
-                  _nextStep();
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _nextStep,
-              child: Text('Skip',
-                style: GoogleFonts.tenorSans(
-                  fontSize: 13, color: Colors.white.withValues(alpha: 0.3),
-                ),
+                label: _userName.isNotEmpty
+                    ? (_onboardingHindi ? 'स्वागत है, $_userName!' : 'Welcome, $_userName!')
+                    : (_onboardingHindi ? 'आगे बढ़ें' : 'Continue'),
+                onTap: _userName.isNotEmpty ? _nextStep : () {},
               ),
             ),
             const Spacer(flex: 3),
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -1427,13 +1630,11 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
         child: Column(
           children: [
             const SizedBox(height: 20),
-            const Text('🎉', style: TextStyle(fontSize: 56)),
-            const SizedBox(height: 16),
             ShaderMask(
               shaderCallback: (b) => const LinearGradient(
                 colors: [_lightGold, _gold],
               ).createShader(b),
-              child: Text('Namaste$greeting!\nYour Profile is Ready',
+              child: Text(_onboardingHindi ? 'नमस्ते$greeting!\nआपकी प्रोफ़ाइल तैयार है' : 'Namaste$greeting!\nYour Profile is Ready',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 30, fontWeight: FontWeight.w600,
@@ -1442,11 +1643,11 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               ),
             ),
             const SizedBox(height: 32),
-            if (_ageAnswer != null) _summaryTile('🕉️', 'Age', _ageAnswer!),
-            if (_prayerAnswer != null) _summaryTile('🪔', 'Prayer', _prayerAnswer!),
-            if (_booksAnswer.isNotEmpty) _summaryTile('📖', 'Texts', _booksAnswer.join(', ')),
-            if (_meditationAnswer != null) _summaryTile('🧘', 'Meditation', _meditationAnswer!),
-            if (_goalAnswer != null) _summaryTile('✨', 'Goal', _goalAnswer!),
+            if (_ageAnswer != null) _summaryTile('🕉️', _onboardingHindi ? 'उम्र' : 'Age', _optionDisplayLabel(0, _ageAnswer!)),
+            if (_prayerAnswer != null) _summaryTile('🪔', _onboardingHindi ? 'प्रार्थना' : 'Prayer', _optionDisplayLabel(1, _prayerAnswer!)),
+            if (_booksAnswer.isNotEmpty) _summaryTile('📖', _onboardingHindi ? 'ग्रंथ' : 'Texts', _booksAnswer.map((o) => _optionDisplayLabel(2, o)).join(', ')),
+            if (_meditationAnswer != null) _summaryTile('🧘', _onboardingHindi ? 'ध्यान' : 'Meditation', _optionDisplayLabel(3, _meditationAnswer!)),
+            if (_goalAnswer != null) _summaryTile('✨', _onboardingHindi ? 'लक्ष्य' : 'Goal', _optionDisplayLabel(4, _goalAnswer!)),
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(16),
@@ -1458,17 +1659,20 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                 border: Border.all(color: _gold.withValues(alpha: 0.15)),
               ),
               child: Text(
-                'Antar Marg will personalise your journey based on your answers. '
-                'Daily tasks, verses, and guided practices await you.',
+                _onboardingHindi
+                    ? 'आपके जवाबों के आधार पर हम आपकी यात्रा को व्यक्तिगत बनाएंगे। '
+                      'दैनिक कार्य, श्लोक और मार्गदर्शित अभ्यास आपका इंतज़ार कर रहे हैं।'
+                    : 'We\'ll personalise your journey based on your answers. '
+                        'Daily tasks, verses, and guided practices await you.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.tenorSans(
                   fontSize: 13, color: Colors.white.withValues(alpha: 0.6), height: 1.6,
                 ),
               ),
             ),
-            const SizedBox(height: 28),
-            _GoldButton(label: "Let's Go!", onTap: _nextStep),
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
+            _GoldButton(label: _onboardingHindi ? 'चलें!' : "Let's Go!", onTap: _goToLogin),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -1516,31 +1720,23 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Spacer(flex: 2),
-            ShaderMask(
-              shaderCallback: (b) => const LinearGradient(
-                colors: [_gold, _lightGold],
-              ).createShader(b),
-              child: Text('ॐ',
-                style: GoogleFonts.notoSerifDevanagari(
-                  fontSize: 64, fontWeight: FontWeight.w300, color: Colors.white, height: 1,
+            Image.asset(
+              AppConfig.appLogoPath,
+              height: 140,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => ShaderMask(
+                shaderCallback: (b) => const LinearGradient(
+                  colors: [_gold, _lightGold],
+                ).createShader(b),
+                child: Text('ॐ',
+                  style: GoogleFonts.notoSerifDevanagari(
+                    fontSize: 80, fontWeight: FontWeight.w300, color: Colors.white, height: 1,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            Text('ANTAR MARG',
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 28, fontWeight: FontWeight.w600, letterSpacing: 4, color: _lightGold,
-              ),
-            ),
             const SizedBox(height: 40),
-            Text('Create an account to sync\nyour progress across devices',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.tenorSans(
-                fontSize: 14, color: Colors.white.withValues(alpha: 0.5), height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 40),
-            _GoldButton(label: 'Sign In / Create Account', onTap: _goToLogin),
+            _GoldButton(label: _onboardingHindi ? 'साइन इन / खाता बनाएं' : 'Sign In / Create Account', onTap: _goToLogin),
             const SizedBox(height: 16),
             GestureDetector(
               onTap: _skipToHome,
@@ -1551,7 +1747,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
                   border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Center(child: Text('Skip for now',
+                child: Center(child: Text(_onboardingHindi ? 'अभी छोड़ें' : 'Skip for now',
                   style: GoogleFonts.tenorSans(
                     fontSize: 15, color: Colors.white.withValues(alpha: 0.5),
                   ),
@@ -1559,7 +1755,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               ),
             ),
             const SizedBox(height: 12),
-            Text('You can sign in later from Profile',
+            Text(_onboardingHindi ? 'बाद में प्रोफ़ाइल से साइन इन कर सकते हैं' : 'You can sign in later from Profile',
               style: GoogleFonts.tenorSans(
                 fontSize: 11, color: Colors.white.withValues(alpha: 0.3),
               ),
@@ -1583,6 +1779,10 @@ class _QuestionData {
   final List<String> options;
   final bool isMultiSelect;
   final _FactData Function(int selectedIndex) factBuilder;
+  final String? titleHindi;
+  final String? subtitleHindi;
+  final List<String>? optionsHindi;
+  final _FactData Function(int selectedIndex)? factBuilderHindi;
 
   _QuestionData({
     required this.symbol,
@@ -1592,6 +1792,10 @@ class _QuestionData {
     required this.options,
     required this.factBuilder,
     this.isMultiSelect = false,
+    this.titleHindi,
+    this.subtitleHindi,
+    this.optionsHindi,
+    this.factBuilderHindi,
   });
 }
 

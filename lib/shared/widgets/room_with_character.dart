@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'rive_room_background.dart';
 import 'animated_guide.dart';
 
 /// Shared room + character section for Aangan and Ashram.
@@ -29,7 +28,20 @@ class RoomWithCharacter extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const RiveRoomBackground(fit: BoxFit.contain),
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.green.shade100.withOpacity(0.3),
+                  Colors.brown.shade100.withOpacity(0.5),
+                ],
+              ),
+            ),
+          ),
           Center(
             child: Padding(
               padding: characterPadding ?? const EdgeInsets.only(top: 50),

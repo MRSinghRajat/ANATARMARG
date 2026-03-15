@@ -106,6 +106,11 @@ class VerseNotesService {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
+  /// All verse notes (for Bookmarked & Notes section on Granthalaya).
+  Future<List<VerseNoteModel>> getAllNotes() async {
+    return _getAllNotes();
+  }
+
   Future<void> addNote(VerseNoteModel note) async {
     // Save to Supabase when authenticated
     final userId = _userId;

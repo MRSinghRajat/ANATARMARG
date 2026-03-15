@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../providers/now_playing_provider.dart';
 
 /// Full-screen audio player. Opened when user taps the mini player bar.
@@ -84,12 +85,12 @@ class FullAudioPlayerScreen extends ConsumerWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: (state.coverUrl != null && state.coverUrl!.isNotEmpty)
-                        ? CachedNetworkImage(
+                        ? AppNetworkImage(
                             imageUrl: state.coverUrl!,
                             fit: BoxFit.cover,
                             color: Colors.white.withOpacity(0.9),
                             colorBlendMode: BlendMode.modulate,
-                            errorWidget: (_, __, ___) => _placeholderCover(),
+                            errorBuilder: (_, __, ___) => _placeholderCover(),
                           )
                         : _placeholderCover(),
                   ),
@@ -238,9 +239,6 @@ class FullAudioPlayerScreen extends ConsumerWidget {
   }
 
   static Widget _placeholderCover() {
-    return Container(
-      color: AppColors.charcoalCard,
-      child: const Icon(Icons.music_note_rounded, color: AppColors.matteGold, size: 80),
-    );
+    return const AntarmargPlaceholder();
   }
 }

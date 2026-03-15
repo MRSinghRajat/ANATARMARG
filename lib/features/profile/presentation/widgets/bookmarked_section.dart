@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/bookmarked_items_service.dart';
+import '../screens/bookmarked_notes_screen.dart';
 
-/// Bookmarked section for Profile - Granthalaya black theme, Books + User Attached.
+/// Bookmarks & Notes section for Profile. Shows preview and "See all" to full screen.
 class BookmarkedSection extends StatefulWidget {
   const BookmarkedSection({super.key});
 
@@ -57,7 +58,7 @@ class _BookmarkedSectionState extends State<BookmarkedSection> {
                   const Icon(Icons.bookmark, color: AppColors.matteGold, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Bookmarked Verses',
+                    'Bookmarks & Notes',
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -66,20 +67,24 @@ class _BookmarkedSectionState extends State<BookmarkedSection> {
                   ),
                 ],
               ),
-              if (_items.isNotEmpty)
-                GestureDetector(
-                  onTap: () {
-                    // TODO: Navigate to full bookmarks screen
-                  },
-                  child: Text(
-                    'See All',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.matteGold,
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BookmarkedNotesScreen(),
                     ),
+                  ).then((_) => _loadBookmarks());
+                },
+                child: Text(
+                  'See All',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.matteGold,
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -101,7 +106,7 @@ class _BookmarkedSectionState extends State<BookmarkedSection> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
-                'No bookmarked verses yet. Tap the bookmark icon while reading to save favorites.',
+                'No bookmarks yet. Tap the bookmark icon while reading verses, sacred texts or stories to save them. Tap "See All" to view notes too.',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.zinc500,

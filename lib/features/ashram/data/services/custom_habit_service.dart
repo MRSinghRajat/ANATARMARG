@@ -3,6 +3,8 @@ import '../models/custom_habit_model.dart';
 import '../repositories/custom_habit_repository.dart';
 import '../repositories/spiritual_progress_repository.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../../shared/services/feature_gate_config.dart';
 
 /// Service for managing custom habits
 class CustomHabitService {
@@ -60,6 +62,12 @@ class CustomHabitService {
   /// Refresh habits
   Future<void> refresh() async {
     await _loadHabits();
+  }
+
+  /// Whether a free user can create more habits.
+  Future<bool> canCreateHabit() async {
+    if (await PremiumService.instance.isPremium) return true;
+    return _habits.length < FeatureGateConfig.freeCustomHabitsMax;
   }
 
   /// Create a new custom habit
@@ -129,7 +137,7 @@ class CustomHabitService {
       return HabitCompletionResult(
         success: true,
         coinsEarned: coinsEarned,
-        message: 'Habit completed! +$coinsEarned coins',
+        message: 'Habit completed! +$coinsEarned Karma',
       );
     } catch (e) {
       print('Error completing habit: $e');

@@ -131,7 +131,7 @@ class _CustomerCenterScreenState extends State<CustomerCenterScreen> {
     final uri = Uri(
       scheme: 'mailto',
       path: 'support@antarmarg.com',
-      query: 'subject=Antar Marg Pro Support&body=User ID: $_appUserId',
+      query: 'subject=Antar मार्ग Pro Support&body=User ID: $_appUserId',
     );
     url_launcher.launchUrl(uri);
   }
@@ -240,7 +240,7 @@ class _CustomerCenterScreenState extends State<CustomerCenterScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isActive ? 'Antar Marg Pro' : 'Free Plan',
+                  isActive ? 'Antar मार्ग Pro' : 'Free Plan',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 18,

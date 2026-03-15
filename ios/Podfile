@@ -160,34 +160,36 @@ post_install do |installer|
 
   # 3) Add GACAppCheck.m to Pods project (file is not in podspec)
   pbx = File.join(installer.sandbox.root, 'Pods.xcodeproj', 'project.pbxproj')
-  ref_id = 'A1B2C3D4E5F6071829345670'
-  bld_id = 'B2C3D4E5F607182934567801'
-  lines = File.readlines(pbx)
-  unless lines.any? { |l| l.include?(ref_id) }
-  lines.each_with_index do |line, i|
-    if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources')
-      lines.insert(i + 1, "\t\t#{bld_id} /* GACAppCheck.m in Sources */ = {isa = PBXBuildFile; fileRef = #{ref_id} /* GACAppCheck.m */; };\n")
-      break
+  if File.exist?(pbx)
+    ref_id = 'A1B2C3D4E5F6071829345670'
+    bld_id = 'B2C3D4E5F607182934567801'
+    lines = File.readlines(pbx)
+    unless lines.any? { |l| l.include?(ref_id) }
+      lines.each_with_index do |line, i|
+        if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources')
+          lines.insert(i + 1, "\t\t#{bld_id} /* GACAppCheck.m in Sources */ = {isa = PBXBuildFile; fileRef = #{ref_id} /* GACAppCheck.m */; };\n")
+          break
+        end
+      end
+      lines.each_with_index do |line, i|
+        if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */ = {isa = PBXFileReference')
+          lines.insert(i + 1, "\t\t#{ref_id} /* GACAppCheck.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = GACAppCheck.m; path = AppCheckCore/Sources/Core/GACAppCheck.m; sourceTree = \"<group>\"; };\n")
+          break
+        end
+      end
+      lines.each_with_index do |line, i|
+        if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */,')
+          lines.insert(i + 1, "\t\t\t\t#{ref_id} /* GACAppCheck.m */,\n")
+          break
+        end
+      end
+      lines.each_with_index do |line, i|
+        if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources */,')
+          lines.insert(i + 1, "\t\t\t\t\t#{bld_id} /* GACAppCheck.m in Sources */,\n")
+          break
+        end
+      end
+      File.write(pbx, lines.join)
     end
-  end
-  lines.each_with_index do |line, i|
-    if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */ = {isa = PBXFileReference')
-      lines.insert(i + 1, "\t\t#{ref_id} /* GACAppCheck.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = GACAppCheck.m; path = AppCheckCore/Sources/Core/GACAppCheck.m; sourceTree = \"<group>\"; };\n")
-      break
-    end
-  end
-  lines.each_with_index do |line, i|
-    if line.include?('6CF25AA21C1AF54EACE5003288FEA950') && line.include?('GACAppCheckSettings.m */,')
-      lines.insert(i + 1, "\t\t\t\t#{ref_id} /* GACAppCheck.m */,\n")
-      break
-    end
-  end
-  lines.each_with_index do |line, i|
-    if line.include?('5BB646F615B0FC70E09A8D28226D09E6') && line.include?('GACAppCheckSettings.m in Sources */,')
-      lines.insert(i + 1, "\t\t\t\t\t#{bld_id} /* GACAppCheck.m in Sources */,\n")
-      break
-    end
-  end
-  File.write(pbx, lines.join)
   end
 end

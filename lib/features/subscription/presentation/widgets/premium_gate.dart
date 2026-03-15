@@ -140,7 +140,7 @@ class PremiumGate extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Upgrade to Antar Marg Pro to unlock this feature',
+            'Upgrade to Antar मार्ग Pro to unlock this feature',
             style: GoogleFonts.poppins(
               color: Colors.white54,
               fontSize: 14,

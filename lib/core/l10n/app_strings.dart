@@ -89,6 +89,7 @@ class AppStrings {
     'spiritual_journey': 'Your Spiritual Journey',
     'streaks': 'Streaks',
     'coins': 'Coins',
+    'ashram_currency': 'Karma',
     'days': 'days',
 
     // Aangan / Home
@@ -98,6 +99,8 @@ class AppStrings {
 
     // Chat / AI Guru
     'ai_guru': 'AI Guru',
+    'how_are_you_feeling_today': 'How are you feeling today?',
+    'how_are_you_feeling_today_with_name': 'How are you feeling today, {name}?',
     'new_consultation': 'New Consultation',
     'delete_conversation': 'Delete Conversation?',
     'delete': 'Delete',
@@ -231,6 +234,7 @@ class AppStrings {
     'spiritual_journey': 'आपकी आध्यात्मिक यात्रा',
     'streaks': 'स्ट्रीक्स',
     'coins': 'सिक्के',
+    'ashram_currency': 'कर्म',
     'days': 'दिन',
 
     // Aangan / Home
@@ -240,6 +244,8 @@ class AppStrings {
 
     // Chat / AI Guru
     'ai_guru': 'AI गुरु',
+    'how_are_you_feeling_today': 'आज आप कैसा महसूस कर रहे हैं?',
+    'how_are_you_feeling_today_with_name': 'आज आप कैसा महसूस कर रहे हैं, {name}?',
     'new_consultation': 'नया परामर्श',
     'delete_conversation': 'बातचीत हटाएं?',
     'delete': 'हटाएं',

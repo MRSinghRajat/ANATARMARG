@@ -346,6 +346,31 @@ class RevenueCatService {
     return entitlement?.productIdentifier;
   }
 
+  /// Present the native offer code redemption sheet (iOS 14+).
+  /// On Android this may no-op; users can use Restore or redeem via Play Store.
+  Future<void> presentCodeRedemptionSheet() async {
+    if (!_isInitialized) return;
+    try {
+      await Purchases.presentCodeRedemptionSheet();
+      await syncPurchases();
+    } catch (e) {
+      debugPrint('RevenueCat: presentCodeRedemptionSheet error: $e');
+      rethrow;
+    }
+  }
+
+  /// Sync local purchases with RevenueCat (e.g. after redeeming a code outside the app).
+  Future<CustomerInfo?> syncPurchases() async {
+    if (!_isInitialized && _apiKey.isEmpty) return null;
+    try {
+      await Purchases.syncPurchases();
+      return await refreshCustomerInfo();
+    } catch (e) {
+      debugPrint('RevenueCat: syncPurchases error: $e');
+      return null;
+    }
+  }
+
   /// Set user attributes (for analytics and targeting)
   Future<void> setUserAttributes({
     String? email,
