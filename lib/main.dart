@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -17,6 +17,7 @@ import 'core/services/revenuecat_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/daily_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'shared/services/avatar_growth_service.dart';
 import 'shared/services/premium_service.dart';
 
@@ -78,6 +79,10 @@ void main() async {
   // Firebase must be initialized before runApp (required by Firebase APIs)
   try {
     await Firebase.initializeApp();
+    // FCM: register before runApp (iOS release can crash if this runs after runApp).
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
   } catch (e) {
     if (kDebugMode) print('Firebase init failed: $e');
   }
@@ -91,7 +96,11 @@ void main() async {
   );
 
   // Defer heavy init so app and login feel responsive (no 1000+ ms block before first paint)
-  WidgetsBinding.instance.addPostFrameCallback((_) => _deferredInit());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _deferredInit();
+    // After first frame: background music / prefs (avoids racing plugin registration at process start).
+    SoundManager().initialize();
+  });
 }
 
 class AntarMargApp extends StatefulWidget {
@@ -110,10 +119,6 @@ class _AntarMargAppState extends State<AntarMargApp> {
     super.initState();
     _listenToAuthLinks();
     _handleInitialAuthLink();
-    // Defer sound init so it doesn't block the first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SoundManager().initialize();
-    });
   }
 
   Future<void> _handleInitialAuthLink() async {

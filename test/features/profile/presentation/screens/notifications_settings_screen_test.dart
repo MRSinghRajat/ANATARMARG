@@ -1,49 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ashrae_playground/features/profile/presentation/screens/notifications_settings_screen.dart';
+import 'package:antarmarg/core/services/notification_preferences.dart';
+import 'package:antarmarg/features/profile/presentation/screens/notifications_settings_screen.dart';
 
 void main() {
-  testWidgets('NotificationsSettingsScreen loads and toggles settings', (WidgetTester tester) async {
-    // Mock SharedPreferences
+  testWidgets('NotificationsSettingsScreen loads and toggles daily switch',
+      (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({
-      'notifications_daily': true,
-      'notifications_prayer': false,
+      NotificationPreferences.keyMaster: true,
+      NotificationPreferences.keyDaily: true,
+      NotificationPreferences.keyPrayer: false,
+      NotificationPreferences.keyUpdates: true,
+      NotificationPreferences.keyReading: true,
     });
 
     await tester.pumpWidget(const MaterialApp(
       home: NotificationsSettingsScreen(),
     ));
 
-    // Wait for the FutureBuilder/async init to complete
     await tester.pumpAndSettle();
 
-    // Verify initial state
-    expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('Daily Reminders'), findsOneWidget);
-    expect(find.text('Prayer Alerts'), findsOneWidget);
-    expect(find.text('New Content Updates'), findsOneWidget);
+    expect(find.text('Notification center'), findsOneWidget);
+    expect(find.text('Daily reminders'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Continue reading'),
+      500,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Prayer alerts'), findsOneWidget);
+    expect(find.text('Messages & updates'), findsOneWidget);
+    expect(find.text('Continue reading'), findsOneWidget);
 
-    // Check switch values (Switch widgets)
-    final dailySwitch = tester.widget<Switch>(find.byType(Switch).at(0));
+    final switches = find.byType(Switch);
+    expect(switches, findsNWidgets(5));
+
+    final masterSwitch = tester.widget<Switch>(switches.at(0));
+    expect(masterSwitch.value, true);
+
+    final dailySwitch = tester.widget<Switch>(switches.at(1));
     expect(dailySwitch.value, true);
 
-    final prayerSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+    final prayerSwitch = tester.widget<Switch>(switches.at(2));
     expect(prayerSwitch.value, false);
 
-    final contentSwitch = tester.widget<Switch>(find.byType(Switch).at(2));
-    expect(contentSwitch.value, true); // Default was true in code if null
+    await tester.tap(switches.at(1));
+    await tester.pump();
 
-    // Toggle a switch
-    await tester.tap(find.byType(Switch).at(0));
-    await tester.pump(); // Rebuild
+    final dailyToggled = tester.widget<Switch>(switches.at(1));
+    expect(dailyToggled.value, false);
 
-    // Verify change
-    final dailySwitchToggled = tester.widget<Switch>(find.byType(Switch).at(0));
-    expect(dailySwitchToggled.value, false);
-
-    // Verify persistence
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('notifications_daily'), false);
+    expect(prefs.getBool(NotificationPreferences.keyDaily), false);
   });
 }

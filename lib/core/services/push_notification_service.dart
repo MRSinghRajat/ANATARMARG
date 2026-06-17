@@ -7,8 +7,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Handles Apple (APNs) / FCM push: permission, token, and saving to Supabase.
 /// Requires Firebase project + GoogleService-Info.plist (iOS) and APNs key in Firebase.
+/// Must be registered with [FirebaseMessaging.onBackgroundMessage] in [main]
+/// **before** [runApp] (see Firebase Messaging docs). Not inside a widget or post-frame callback.
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   if (kDebugMode) {
     print('Background message: ${message.messageId}');
@@ -35,7 +37,6 @@ class PushNotificationService {
         sound: true,
         provisional: false,
       );
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       _initialized = true;
       await _refreshTokenAndSave();
       _messaging.onTokenRefresh.listen((_) => _refreshTokenAndSave());

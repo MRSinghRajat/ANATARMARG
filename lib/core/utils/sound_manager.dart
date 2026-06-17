@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum SoundType {
@@ -7,7 +8,8 @@ enum SoundType {
   prayer,
   books,
   forest,
-  birdSinging, // Bird singing sound for background ambience
+  /// Default looping background music (Profile → Background Sound).
+  defaultBackground,
 }
 
 class SoundManager {
@@ -16,16 +18,17 @@ class SoundManager {
   SoundManager._internal();
 
   final AudioPlayer _backgroundPlayer = AudioPlayer();
-  AudioPlayer? _oneShotPlayer;
   bool _isMuted = false;
   double _volume = 0.5;
   SoundType? _currentSound;
   bool _isInitialized = false;
+  Future<void>? _initializeFuture;
 
-  AudioPlayer get _oneShot {
-    _oneShotPlayer ??= AudioPlayer();
-    return _oneShotPlayer!;
-  }
+  /// True when Profile "Background Sound" is on (`!isMuted`).
+  final ValueNotifier<bool> backgroundSoundEnabled = ValueNotifier<bool>(true);
+
+  /// Profile volume slider 0–1; Mandir WebView Aarti audio listens via [AanganScreen].
+  final ValueNotifier<double> backgroundVolume = ValueNotifier<double>(0.5);
 
   bool get isMuted => _isMuted;
   double get volume => _volume;
@@ -34,26 +37,41 @@ class SoundManager {
   /// Initialize sound manager and load saved preferences
   Future<void> initialize() async {
     if (_isInitialized) return;
+    _initializeFuture ??= _initializeBody();
+    try {
+      await _initializeFuture!;
+    } finally {
+      _initializeFuture = null;
+    }
+  }
 
+  Future<void> _initializeBody() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // First install: no key yet — treat as ON and persist so Profile/onboarding stay consistent.
+      if (!prefs.containsKey('sound_muted')) {
+        await prefs.setBool('sound_muted', false);
+      }
       _isMuted = prefs.getBool('sound_muted') ?? false;
       _volume = prefs.getDouble('sound_volume') ?? 0.5;
+      backgroundSoundEnabled.value = !_isMuted;
+      backgroundVolume.value = _volume;
 
-      // Start playing bird singing sound if not muted
       if (!_isMuted) {
-        await playBirdSinging();
+        await playDefaultBackgroundMusic();
       }
 
       _isInitialized = true;
     } catch (e) {
-      print('Error initializing SoundManager: $e');
+      if (kDebugMode) {
+        debugPrint('Error initializing SoundManager: $e');
+      }
     }
   }
 
-  /// Play bird singing sound continuously throughout the app
-  Future<void> playBirdSinging() async {
-    await playBackgroundSound(SoundType.birdSinging);
+  /// Loops [backgroundmusic.mp3] until the user turns off Background Sound in Profile.
+  Future<void> playDefaultBackgroundMusic() async {
+    await playBackgroundSound(SoundType.defaultBackground);
   }
 
   Future<void> playBackgroundSound(SoundType type) async {
@@ -66,12 +84,26 @@ class SoundManager {
 
     try {
       await _backgroundPlayer.stop();
+      if (_isMuted) {
+        _currentSound = null;
+        return;
+      }
       await _backgroundPlayer.setReleaseMode(ReleaseMode.loop);
+      if (_isMuted) {
+        _currentSound = null;
+        return;
+      }
       await _backgroundPlayer.play(AssetSource(soundPath));
+      if (_isMuted) {
+        await _backgroundPlayer.stop();
+        _currentSound = null;
+        return;
+      }
       await _backgroundPlayer.setVolume(_volume);
     } catch (e) {
-      // Sound file not found - gracefully handle missing files
-      print('Sound file not found: $soundPath. Continuing without sound.');
+      if (kDebugMode) {
+        debugPrint('Sound file not found: $soundPath. Continuing without sound.');
+      }
       _currentSound = null;
     }
   }
@@ -83,74 +115,55 @@ class SoundManager {
 
   Future<void> setVolume(double volume) async {
     _volume = volume.clamp(0.0, 1.0);
+    backgroundVolume.value = _volume;
+    // Apply to hardware immediately (don’t wait for prefs I/O).
+    await _backgroundPlayer.setVolume(_isMuted ? 0.0 : _volume);
 
-    // Save to preferences
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble('sound_volume', _volume);
     } catch (e) {
-      print('Error saving volume: $e');
+      if (kDebugMode) {
+        debugPrint('Error saving volume: $e');
+      }
     }
+  }
 
-    await _backgroundPlayer.setVolume(_volume);
+  /// Sets Profile "Background Sound" on/off without relying on toggle heuristics.
+  Future<void> setBackgroundSoundEnabled(bool enabled) async {
+    if ((!_isMuted) == enabled) {
+      backgroundSoundEnabled.value = enabled;
+      return;
+    }
+    await toggleMute();
   }
 
   Future<void> toggleMute() async {
     _isMuted = !_isMuted;
+    backgroundSoundEnabled.value = !_isMuted;
 
-    // Save to preferences
+    if (_isMuted) {
+      await stopBackgroundSound();
+      await _backgroundPlayer.setVolume(0.0);
+    } else {
+      await _backgroundPlayer.setVolume(_volume);
+      await playDefaultBackgroundMusic();
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('sound_muted', _isMuted);
     } catch (e) {
-      print('Error saving mute state: $e');
-    }
-
-    if (_isMuted) {
-      await _backgroundPlayer.setVolume(0.0);
-      await stopBackgroundSound();
-    } else {
-      await _backgroundPlayer.setVolume(_volume);
-      // Always resume bird singing when unmuted (it's the default background sound)
-      await playBirdSinging();
+      if (kDebugMode) {
+        debugPrint('Error saving mute state: $e');
+      }
     }
   }
 
-  /// Play a one-shot sound (e.g. meditation inhale/exhale, step transition).
-  /// Respects mute. Fails silently if asset is missing.
-  Future<void> playOneShot(String assetPath) async {
-    if (_isMuted) return;
-    try {
-      await _oneShot.setReleaseMode(ReleaseMode.release);
-      await _oneShot.setVolume(_volume);
-      await _oneShot.play(AssetSource(assetPath));
-    } catch (_) {
-      // Asset may not exist; ignore
-    }
-  }
-
-  String _getSoundPath(SoundType type) {
-    switch (type) {
-      case SoundType.home:
-        return 'sounds/home_ambience.mp3';
-      case SoundType.reading:
-        return 'sounds/forest_reading.mp3';
-      case SoundType.prayer:
-        return 'sounds/prayer_meditation.mp3';
-      case SoundType.books:
-        return 'sounds/library_ambience.mp3';
-      case SoundType.forest:
-        return 'sounds/forest_birds_sitar.mp3';
-      case SoundType.birdSinging:
-        return 'sounds/bird_singing.wav'; // Bird singing WAV file
-    }
-  }
-
-  // Note: Sound files are optional. The app works without them.
-  // See SOUND_FILES_GUIDE.md for instructions on adding sounds.
+  /// Single bundled asset: background loop for Profile / app ambience. All other audio uses remote URLs.
+  String _getSoundPath(SoundType _) => 'sounds/backgroundmusic.mp3';
 
   void dispose() {
     _backgroundPlayer.dispose();
-    _oneShotPlayer?.dispose();
   }
 }

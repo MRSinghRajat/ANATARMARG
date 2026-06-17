@@ -1,10 +1,12 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../widgets/streak_celebration_background.dart';
+import '../widgets/streak_gradient_buttons.dart';
 
-/// Day 1 streak celebration: "DAY 1", "Come tomorrow to maintain your streak!",
-/// optional "Set your goal" to show commitment screen.
+/// Day 1 streak celebration: animated flame, gradients, themed CTAs.
 class Day1StreakScreen extends StatefulWidget {
   final VoidCallback onLetsGo;
   final VoidCallback? onSetGoal;
@@ -20,170 +22,213 @@ class Day1StreakScreen extends StatefulWidget {
 }
 
 class _Day1StreakScreenState extends State<Day1StreakScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+    with TickerProviderStateMixin {
+  late AnimationController _entry;
+  late AnimationController _flamePulse;
   late Animation<double> _scale;
   late Animation<double> _opacity;
+  late Animation<double> _flameScale;
+  late Animation<double> _flameRotate;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _entry = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1100),
     );
+    _flamePulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+
     _scale = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+      CurvedAnimation(parent: _entry, curve: Curves.elasticOut),
     );
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      CurvedAnimation(parent: _entry, curve: Curves.easeOut),
     );
-    _controller.forward();
+    _flameScale = Tween<double>(begin: 0.92, end: 1.08).animate(
+      CurvedAnimation(parent: _flamePulse, curve: Curves.easeInOut),
+    );
+    _flameRotate = Tween<double>(begin: -0.06, end: 0.06).animate(
+      CurvedAnimation(parent: _flamePulse, curve: Curves.easeInOut),
+    );
+    _entry.forward();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _entry.dispose();
+    _flamePulse.dispose();
     super.dispose();
+  }
+
+  void _safeLetsGo() {
+    HapticFeedback.mediumImpact();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onLetsGo();
+    });
+  }
+
+  void _safeSetGoal() {
+    HapticFeedback.lightImpact();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onSetGoal?.call();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final bg = const Color(0xFF1a1625);
     final gold = AppColors.journeyGold;
-    final muted = Colors.white70;
+    final muted = Colors.white.withValues(alpha: 0.72);
 
     return Scaffold(
-      backgroundColor: bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const Spacer(flex: 2),
-              // Day 1 label
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _opacity.value,
-                    child: Transform.scale(
-                      scale: _scale.value,
-                      child: Text(
-                        'DAY 1',
-                        style: GoogleFonts.inter(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: gold,
-                          letterSpacing: 4,
+      body: StreakCelebrationBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                const Spacer(flex: 2),
+                AnimatedBuilder(
+                  animation: Listenable.merge([_entry, _flamePulse]),
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _opacity.value,
+                      child: Transform.scale(
+                        scale: _scale.value,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) {
+                            return LinearGradient(
+                              colors: [
+                                gold,
+                                AppColors.primaryOrange,
+                                AppColors.ashramAccentGold,
+                              ],
+                            ).createShader(bounds);
+                          },
+                          child: Text(
+                            'DAY 1',
+                            style: GoogleFonts.inter(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 6,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Day Streak',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: muted,
-                  letterSpacing: 1.2,
+                    );
+                  },
                 ),
-              ),
-              const Spacer(),
-              // Simple flame / heart icon (streak symbol)
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Opacity(
+                const SizedBox(height: 8),
+                AnimatedBuilder(
+                  animation: _entry,
+                  builder: (_, __) => Opacity(
                     opacity: _opacity.value,
-                    child: Icon(
-                      Icons.local_fire_department_rounded,
-                      size: 80,
-                      color: gold.withValues(alpha: 0.9),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'Come back tomorrow to maintain\nyour streak!',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'A little practice each day builds a lasting habit.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: muted,
-                  height: 1.4,
-                ),
-              ),
-              const Spacer(flex: 2),
-              if (widget.onSetGoal != null) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      widget.onSetGoal!();
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: gold,
-                      side: BorderSide(color: gold.withValues(alpha: 0.6)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                    child: Text(
+                      'Day Streak',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: muted,
+                        letterSpacing: 1.4,
                       ),
                     ),
+                  ),
+                ),
+                const Spacer(),
+                AnimatedBuilder(
+                  animation: Listenable.merge([_entry, _flamePulse]),
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _opacity.value,
+                      child: Transform.rotate(
+                        angle: _flameRotate.value,
+                        child: Transform.scale(
+                          scale: _flameScale.value * _scale.value,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                Icons.local_fire_department_rounded,
+                                size: 120,
+                                color: AppColors.primaryOrange
+                                    .withValues(alpha: 0.35),
+                              ),
+                              Icon(
+                                Icons.local_fire_department_rounded,
+                                size: 88,
+                                color: gold,
+                                shadows: [
+                                  Shadow(
+                                    color: AppColors.primaryOrange
+                                        .withValues(alpha: 0.9),
+                                    blurRadius: 28,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 28),
+                AnimatedBuilder(
+                  animation: _entry,
+                  builder: (_, __) => Opacity(
+                    opacity: _opacity.value,
                     child: Text(
-                      'Set your goal',
+                      'Come back tomorrow to maintain\nyour streak!',
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
-                        fontSize: 16,
+                        color: Colors.white,
+                        height: 1.45,
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-              ],
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    widget.onLetsGo();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: bg,
-                    elevation: 2,
-                    shadowColor: Colors.black26,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Text(
-                    "Let's go!",
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
+                Text(
+                  'A little practice each day builds a lasting habit.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: muted,
+                    height: 1.45,
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
-            ],
+                const Spacer(flex: 2),
+                if (widget.onSetGoal != null) ...[
+                  StreakGradientOutlineButton(
+                    label: 'Set your goal',
+                    onPressed: _safeSetGoal,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                StreakGradientPrimaryButton(
+                  label: "Let's go!",
+                  onPressed: _safeLetsGo,
+                ),
+                const SizedBox(height: 16),
+                AnimatedBuilder(
+                  animation: _flamePulse,
+                  builder: (_, __) {
+                    return Transform.scale(
+                      scale:
+                          1 + 0.12 * math.sin(_flamePulse.value * 2 * math.pi),
+                      child: const Text('🔥', style: TextStyle(fontSize: 26)),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),

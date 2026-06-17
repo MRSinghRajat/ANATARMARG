@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:audioplayers/audioplayers.dart';
 
+import '../../../../core/config/app_config.dart';
+
 class BellWidget extends StatefulWidget {
   const BellWidget({super.key});
 
@@ -86,11 +88,14 @@ class _BellWidgetState extends State<BellWidget> with SingleTickerProviderStateM
     if (DateTime.now().difference(_lastRingTime).inMilliseconds < 1000) return;
     _lastRingTime = DateTime.now();
 
+    final url = AppConfig.aanganBellAudioUrl;
+    if (url.isEmpty) return;
+
     try {
       if (_isPlaying) {
         await _audioPlayer.stop();
       }
-      await _audioPlayer.play(AssetSource('sounds/bell.mp3'));
+      await _audioPlayer.play(UrlSource(url));
       _isPlaying = true;
       
       // Stop after 3 seconds

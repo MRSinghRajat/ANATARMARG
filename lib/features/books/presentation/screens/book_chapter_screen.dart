@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/guide_animation_service.dart';
 import '../../../../shared/services/avatar_growth_service.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/services/premium_service.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/widgets/coin_earned_overlay.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../shared/widgets/pro_gradient_badge.dart';
 import '../../../../core/utils/coin_calculator.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
@@ -63,8 +66,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   final VerseNotesService _notesService = VerseNotesService();
   final ReaderPreferencesService _prefsService = ReaderPreferencesService();
   final BookProgressRepository _progressRepository = BookProgressRepository();
-  late final ScrollController _scrollController;
-  final Map<String, GlobalKey> _verseKeys = {};
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener =
+      ItemPositionsListener.create();
   ChapterContent? _chapterContent;
   List<VerseWithTranslations> _verses = [];
   List<ChapterModel> _chapters = [];
@@ -77,7 +81,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   double _fontSize = 18.0;
   ReaderTheme _readerTheme = ReaderTheme.paper;
   ReaderFont _readerFont = ReaderFont.serif;
-  ReaderLayout _readerLayout = ReaderLayout.scroll;
+  ReaderLayout _readerLayout = ReaderLayout.card;
   Set<String> _bookmarkedVerseIds = {};
   bool _isLoading = true;
   bool _isLoadingVerses = false;
@@ -137,8 +141,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
+    _itemPositionsListener.itemPositions.addListener(_onItemPositionsChanged);
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -155,39 +158,28 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     _loadBookmarksAndNotes();
   }
 
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    // Determine which verse is currently most visible
-    _updateCurrentVerseFromScroll();
-  }
-
-  /// Determine current verse index by checking which verse GlobalKey is closest to viewport center
-  void _updateCurrentVerseFromScroll() {
-    if (_verses.isEmpty) return;
-    final viewportCenter = _scrollController.offset +
-        (_scrollController.position.viewportDimension / 2);
-
-    int closestIndex = 0;
-    double closestDistance = double.infinity;
-
-    for (int i = 0; i < _verses.length; i++) {
-      final key = _verseKeys[_verses[i].verse.id];
-      if (key?.currentContext == null) continue;
-      final box = key!.currentContext!.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) continue;
-      final position = box.localToGlobal(Offset.zero).dy +
-          _scrollController.offset -
-          MediaQuery.of(key.currentContext!).padding.top;
-      final center = position + (box.size.height / 2);
-      final distance = (center - viewportCenter).abs();
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = i;
+  /// Track which verse is most visible using [ScrollablePositionedList] geometry.
+  void _onItemPositionsChanged() {
+    if (_verses.isEmpty || !mounted) return;
+    final positions = _itemPositionsListener.itemPositions.value;
+    if (positions.isEmpty) return;
+    // Prefer verse whose vertical center is nearest upper third of viewport (readable).
+    const targetMid = 0.28;
+    int? best;
+    double bestDist = double.infinity;
+    for (final p in positions) {
+      if (p.index <= 0) continue;
+      final verseIdx = p.index - 1;
+      if (verseIdx < 0 || verseIdx >= _verses.length) continue;
+      final mid = (p.itemLeadingEdge + p.itemTrailingEdge) / 2;
+      final d = (mid - targetMid).abs();
+      if (d < bestDist) {
+        bestDist = d;
+        best = verseIdx;
       }
     }
-
-    if (closestIndex != _currentVerseIndex) {
-      setState(() => _currentVerseIndex = closestIndex);
+    if (best != null && best != _currentVerseIndex) {
+      setState(() => _currentVerseIndex = best!);
     }
   }
 
@@ -235,8 +227,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   @override
   void dispose() {
     _premiumSubscription?.cancel();
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    _itemPositionsListener.itemPositions.removeListener(_onItemPositionsChanged);
     _glowController.dispose();
     if (_verses.isNotEmpty &&
         _currentVerseIndex >= 0 &&
@@ -245,6 +236,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         bookId: widget.book.id,
         chapterId: _chapterId,
         lastReadVerseId: _verses[_currentVerseIndex].verse.id,
+        bookNameForReminder: widget.book.name,
       );
     }
     super.dispose();
@@ -273,7 +265,6 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       _isLoadingVerses = true;
       _loadError = null;
     });
-    _verseKeys.clear();
     try {
       final verses =
           await _verseRepository.getVersesWithAllTranslations(_chapterId);
@@ -587,14 +578,32 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
 
   void _scrollToVerse(int index) {
     if (_verses.isEmpty || index < 0 || index >= _verses.length) return;
-    final key = _verseKeys[_verses[index].verse.id];
-    if (key?.currentContext != null) {
-      Scrollable.ensureVisible(
-        key!.currentContext!,
-        duration: const Duration(milliseconds: 500),
+    final listIndex = index + 1;
+
+    void scroll() {
+      if (!_itemScrollController.isAttached) return;
+      _itemScrollController.scrollTo(
+        index: listIndex,
+        duration: const Duration(milliseconds: 450),
         curve: Curves.easeInOutCubic,
         alignment: 0.1,
       );
+      if (mounted) setState(() => _currentVerseIndex = index);
+    }
+
+    if (_itemScrollController.isAttached) {
+      scroll();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_itemScrollController.isAttached) {
+          scroll();
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) scroll();
+          });
+        }
+      });
     }
   }
 
@@ -699,6 +708,24 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       ),
       child: Row(
         children: [
+          Semantics(
+            button: true,
+            label: 'Back',
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).maybePop(),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _ShlokReaderColors.zinc800,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Icon(Icons.arrow_back, color: Colors.grey.shade300, size: 22),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           // Chapter selector pill
           Expanded(
             child: Semantics(
@@ -845,7 +872,9 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
                   return GestureDetector(
                     onTap: () {
                       Navigator.pop(ctx);
-                      _scrollToVerse(index);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _scrollToVerse(index);
+                      });
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -1034,8 +1063,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   }
 
   Widget _buildScrollLayout() {
-    return ListView.builder(
-      controller: _scrollController,
+    return ScrollablePositionedList.builder(
+      key: ValueKey<String>('scroll_${widget.book.id}_$_chapterId'),
+      itemScrollController: _itemScrollController,
+      itemPositionsListener: _itemPositionsListener,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       itemCount: _verses.length + 1,
@@ -1047,8 +1078,10 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
   }
 
   Widget _buildCardLayout() {
-    return ListView.builder(
-      controller: _scrollController,
+    return ScrollablePositionedList.builder(
+      key: ValueKey<String>('card_${widget.book.id}_$_chapterId'),
+      itemScrollController: _itemScrollController,
+      itemPositionsListener: _itemPositionsListener,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       itemCount: _verses.length + 1,
@@ -1209,31 +1242,50 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
         children: [
           _buildOrnamentalDivider(compact: true),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.auto_awesome,
-                size: 14,
-                color: _goldAccent.withValues(alpha: 0.7),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'AI Commentary',
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: _goldAccent.withValues(alpha: 0.6),
-                  letterSpacing: 1.5,
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: !_isPremium
+                    ? () => navigateToProfileForProUpgrade(
+                          context,
+                          message: 'Full AI commentary is included with Pro.',
+                        )
+                    : null,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (AppConfig.showProMarkForPremiumFeature(_isPremium)) ...[
+                        const ProGradientLabel(fontSize: 11),
+                        const SizedBox(width: 8),
+                      ],
+                      Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: _goldAccent.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'AI Commentary',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _goldAccent.withValues(alpha: 0.6),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
 
-          if (!_isPremium)
-            _buildCommentaryPremiumPrompt()
-          else ...[
+          if (_isPremium) ...[
             if (hindiCommentary.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -1269,79 +1321,12 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     );
   }
 
-  Widget _buildCommentaryPremiumPrompt() {
-    return GestureDetector(
-      onTap: () => PaywallScreen.showAsBottomSheet(context),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFFD4AF37).withValues(alpha: 0.12),
-              const Color(0xFFD4AF37).withValues(alpha: 0.04),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: const Color(0xFFD4AF37).withValues(alpha: 0.25),
-          ),
-        ),
-        child: Column(
-          children: [
-            const Icon(
-              Icons.lock_outline,
-              color: Color(0xFFD4AF37),
-              size: 24,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Buy Premium for Detailed\nAI Commentary',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.crimsonPro(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFFD4AF37),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Get in-depth explanations of every verse',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4AF37),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Upgrade to Pro',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Build a single verse section with ancient scroll styling (Scroll layout)
   Widget _buildVerseSection(BuildContext context, int index) {
     final v = _verses[index];
     final shlokaNum = index + 1;
     final totalShlokas = _verses.length;
     final verseId = v.verse.id;
-    _verseKeys[verseId] ??= GlobalKey();
     final isRead = _readVerseIds.contains(verseId);
     final verseNotes =
         _chapterNotes.where((n) => n.verseId == verseId).toList();
@@ -1350,7 +1335,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     final englishText = _getEnglishText(v);
 
     return GestureDetector(
-      key: _verseKeys[verseId],
+      key: ValueKey<String>(verseId),
       onLongPress: () => _showVerseContextMenu(
         context,
         verseId: verseId,
@@ -1497,14 +1482,13 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
     final shlokaNum = index + 1;
     final totalShlokas = _verses.length;
     final verseId = v.verse.id;
-    _verseKeys[verseId] ??= GlobalKey();
     final isRead = _readVerseIds.contains(verseId);
 
     final hindiText = _getHindiText(v);
     final englishText = _getEnglishText(v);
 
     return Padding(
-      key: _verseKeys[verseId],
+      key: ValueKey<String>(verseId),
       padding: const EdgeInsets.only(bottom: 24),
       child: GestureDetector(
         onLongPress: () => _showVerseContextMenu(
@@ -1692,7 +1676,11 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
           onVerseSelected: (verseId) {
             Navigator.pop(ctx);
             final idx = _verses.indexWhere((v) => v.verse.id == verseId);
-            if (idx >= 0) _scrollToVerse(idx);
+            if (idx >= 0) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _scrollToVerse(idx);
+              });
+            }
           },
           scrollController: scrollController,
         ),

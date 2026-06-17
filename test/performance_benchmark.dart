@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:ashrae_playground/features/books/data/models/verse_translation_model.dart';
+import 'package:antarmarg/features/books/data/models/verse_translation_model.dart';
 
 void main() {
   const int totalItems = 10000;

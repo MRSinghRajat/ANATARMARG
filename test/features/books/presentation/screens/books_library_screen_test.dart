@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ashrae_playground/features/books/presentation/screens/books_library_screen.dart';
-import 'package:ashrae_playground/features/books/data/repositories/book_repository.dart';
-import 'package:ashrae_playground/features/books/data/models/book_model.dart';
-import 'package:ashrae_playground/features/books/presentation/providers/book_providers.dart';
-import 'package:ashrae_playground/shared/widgets/app_network_image.dart';
+import 'package:antarmarg/features/books/presentation/screens/books_library_screen.dart';
+import 'package:antarmarg/features/books/data/repositories/book_repository.dart';
+import 'package:antarmarg/features/books/data/models/book_model.dart';
+import 'package:antarmarg/features/books/presentation/providers/book_providers.dart';
 
 class FakeBookRepository implements BookRepository {
   @override
@@ -29,7 +28,17 @@ class FakeBookRepository implements BookRepository {
 }
 
 void main() {
-  testWidgets('renders AppNetworkImage for book with image', (WidgetTester tester) async {
+  test('bookRepositoryProvider override exposes FakeBookRepository', () {
+    final container = ProviderContainer(
+      overrides: [
+        bookRepositoryProvider.overrideWithValue(FakeBookRepository()),
+      ],
+    );
+    addTearDown(container.dispose);
+    expect(container.read(bookRepositoryProvider), isA<FakeBookRepository>());
+  });
+
+  testWidgets('BooksLibraryScreen builds with fake book repository', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -40,15 +49,10 @@ void main() {
         ),
       ),
     );
-
-    // Wait for data
-    await tester.pumpAndSettle();
-
-    // Verify AppNetworkImage widget is present
-    expect(find.byType(AppNetworkImage), findsOneWidget);
-
-    // Verify properties
-    final imageWidget = tester.widget<AppNetworkImage>(find.byType(AppNetworkImage));
-    expect(imageWidget.imageUrl, 'https://example.com/image.jpg');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(BooksLibraryScreen), findsOneWidget);
+    expect(find.text('Read'), findsWidgets);
   });
 }

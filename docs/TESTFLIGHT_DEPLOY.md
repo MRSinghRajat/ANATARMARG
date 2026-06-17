@@ -2,6 +2,8 @@
 
 Use this guide to ship a new build of **Antar Marg** to TestFlight for beta testing.
 
+For App Store–specific checks (privacy, encryption, dev-only routes), see [APP_STORE_PRODUCTION.md](./APP_STORE_PRODUCTION.md).
+
 ---
 
 ## Prerequisites
@@ -10,6 +12,20 @@ Use this guide to ship a new build of **Antar Marg** to TestFlight for beta test
 - **App already set up in App Store Connect** (app created with bundle ID `com.antarmarg.app`).
 - **Mac with Xcode** and **Flutter** installed (see [NEW_MAC_SETUP.md](../NEW_MAC_SETUP.md)).
 - **Signing**: In Xcode, Runner target → Signing & Capabilities → your **Team** selected, **Automatically manage signing** checked.
+
+---
+
+## TestFlight readiness (this project)
+
+Do this **before** `flutter build ipa` or **Archive** in Xcode:
+
+| Check | What to do |
+|--------|------------|
+| **`.env` file** | Copy from `.env.example` to **`.env`** in the project root. `pubspec.yaml` lists `.env` as an asset—**the file must exist** for release builds to bundle it. |
+| **RevenueCat (iOS)** | Set **`REVENUECAT_API_KEY`** or **`REVENUECAT_API_KEY_IOS`** to RevenueCat’s **Apple public SDK key** (`appl_…`). **Do not** use Test Store keys (`test_…`) for TestFlight; the SDK rejects them in release. Keep **`REVENUECAT_USE_TEST_STORE=false`**. |
+| **Pro access** | **Default:** Pro only via RevenueCat (unset or `PREMIUM_GRANT_ALL=false`). For a beta where everyone should be Pro without paying, set **`PREMIUM_GRANT_ALL=true`** in `.env`. |
+| **Build number** | Increase **`version`** in `pubspec.yaml` (the `+N` part) for **every** upload to App Store Connect. |
+| **Push notifications** | `ios/Runner/Runner.entitlements` uses **`aps-environment` = production** for release—correct for TestFlight and App Store. |
 
 ---
 
@@ -40,7 +56,7 @@ flutter build ipa
 ```
 
 - This creates a **release** build and an **IPA**.
-- Output is under: `build/ios/ipa/` (e.g. `build/ios/ipa/ashrae_playground.ipa`).
+- Output is under: `build/ios/ipa/` (e.g. `build/ios/ipa/antarmarg.ipa`).
 
 If you see signing errors, open the iOS project in Xcode and fix the Team / provisioning:
 
@@ -68,7 +84,7 @@ Then: **Runner** target → **Signing & Capabilities** → choose your Team and 
 If you used `flutter build ipa`, you can upload that IPA with **Transporter** (Mac App Store) or with:
 
 ```bash
-xcrun altool --upload-app --type ios --file build/ios/ipa/ashrae_playground.ipa --username "YOUR_APPLE_ID_EMAIL" --password "@keychain:AC_PASSWORD"
+xcrun altool --upload-app --type ios --file build/ios/ipa/antarmarg.ipa --username "YOUR_APPLE_ID_EMAIL" --password "@keychain:AC_PASSWORD"
 ```
 
 For `--password` you can use an [app-specific password](https://appleid.apple.com) or a keychain item (e.g. `AC_PASSWORD` for Apple ID credentials).
@@ -84,6 +100,16 @@ For `--password` you can use an [app-specific password](https://appleid.apple.co
    - **Internal**: Add testers by email (up to 100); they get the build quickly.
    - **External**: Add a group, add testers; first build per version may need a short **Beta App Review**.
 5. Testers install **TestFlight** from the App Store, accept your invite, and install the app from TestFlight.
+
+---
+
+## One-command build (local)
+
+From the project root (runs tests then `flutter build ipa`):
+
+```bash
+./scripts/build_testflight.sh
+```
 
 ---
 

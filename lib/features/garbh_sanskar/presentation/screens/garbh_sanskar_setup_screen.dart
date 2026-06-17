@@ -418,7 +418,7 @@ class _GarbhSanskarSetupScreenState
           ),
           const SizedBox(height: 8),
           Text(
-            'Helps personalise lullabies and stories.',
+            'Helps personalise tips for your journey.',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(fontSize: 13, color: Colors.white54),
           ),

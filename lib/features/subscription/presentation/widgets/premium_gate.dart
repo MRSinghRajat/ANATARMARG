@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/services/premium_service.dart';
-import '../screens/paywall_screen.dart';
 
 /// A widget that gates content behind premium subscription.
 /// 
@@ -72,7 +72,7 @@ class PremiumGate extends StatelessWidget {
           top: 8,
           right: 8,
           child: GestureDetector(
-            onTap: () => _showPaywall(context),
+            onTap: () => navigateToProfileForProUpgrade(context),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -140,7 +140,7 @@ class PremiumGate extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Upgrade to Antar मार्ग Pro to unlock this feature',
+            'Open Profile to upgrade to Pro and unlock this feature',
             style: GoogleFonts.poppins(
               color: Colors.white54,
               fontSize: 14,
@@ -153,7 +153,7 @@ class PremiumGate extends StatelessWidget {
               if (onUpgradeTap != null) {
                 onUpgradeTap!();
               } else {
-                _showPaywall(context);
+                navigateToProfileForProUpgrade(context);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -164,7 +164,7 @@ class PremiumGate extends StatelessWidget {
               ),
             ),
             child: Text(
-              'Upgrade Now',
+              'Open Profile',
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 14,
@@ -175,10 +175,6 @@ class PremiumGate extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _showPaywall(BuildContext context) {
-    PaywallScreen.showAsBottomSheet(context);
   }
 }
 
@@ -209,10 +205,7 @@ class PremiumButton extends StatelessWidget {
     if (isPremium) {
       onTap();
     } else {
-      final result = await PaywallScreen.showAsBottomSheet(context);
-      if (result == true) {
-        onTap();
-      }
+      navigateToProfileForProUpgrade(context);
     }
   }
 }
@@ -244,8 +237,8 @@ mixin PremiumAwareMixin<T extends StatefulWidget> on State<T> {
     String? featureName,
   }) async {
     if (_isPremium) return true;
-    
-    final result = await PaywallScreen.showAsBottomSheet(context);
-    return result == true;
+
+    navigateToProfileForProUpgrade(context);
+    return false;
   }
 }

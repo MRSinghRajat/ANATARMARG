@@ -1264,6 +1264,7 @@ enum TempleGroundType {
   stone,
   wood,
   mosaic,
+  kailash,
 }
 
 extension TempleGroundTypeMeta on TempleGroundType {
@@ -1279,6 +1280,7 @@ extension TempleGroundTypeMeta on TempleGroundType {
       case TempleGroundType.stone: return 'Stone';
       case TempleGroundType.wood: return 'Wood';
       case TempleGroundType.mosaic: return 'Mosaic';
+      case TempleGroundType.kailash: return 'Kailash';
     }
   }
 
@@ -1294,6 +1296,7 @@ extension TempleGroundTypeMeta on TempleGroundType {
       case TempleGroundType.stone: return '🪨';
       case TempleGroundType.wood: return '🪵';
       case TempleGroundType.mosaic: return '🔶';
+      case TempleGroundType.kailash: return '⛰️';
     }
   }
 }
@@ -1303,6 +1306,9 @@ extension TempleGroundTypeMeta on TempleGroundType {
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum MandirCategory {
+  /// 3D sacred temple vs 2D Shiv Ling (Flutter layer; not 3D JS).
+  mandir,
+  deities,
   fx,
   decor,
   light,
@@ -1312,6 +1318,8 @@ enum MandirCategory {
 extension MandirCategoryMeta on MandirCategory {
   String get displayName {
     switch (this) {
+      case MandirCategory.mandir: return 'Mandir';
+      case MandirCategory.deities: return 'Deities';
       case MandirCategory.fx: return 'FX';
       case MandirCategory.decor: return 'Decor';
       case MandirCategory.light: return 'Light';
@@ -1321,6 +1329,8 @@ extension MandirCategoryMeta on MandirCategory {
 
   String get emoji {
     switch (this) {
+      case MandirCategory.mandir: return '🛕';
+      case MandirCategory.deities: return '🙏';
       case MandirCategory.fx: return '✨';
       case MandirCategory.decor: return '🏡';
       case MandirCategory.light: return '🕯️';
@@ -1346,6 +1356,39 @@ class MandirItem {
 }
 
 class MandirItems {
+  static const String idSacredTemple = 'mandir_3d';
+  static const String idShivLing = 'mandir_shiv_ling';
+
+  static String _shortDeityShopLabel(String displayName) {
+    if (displayName.startsWith('Lord ')) return displayName.substring(5);
+    if (displayName.startsWith('Goddess ')) return displayName.substring(8);
+    return displayName;
+  }
+
+  static bool isValidMandirViewId(String id) =>
+      id == idSacredTemple || id == idShivLing;
+
+  /// Passed to `setMandirStructureView` in [aangan_3d.html].
+  static String mandirStructureViewJsArg(String mandirViewItemId) {
+    if (mandirViewItemId == idShivLing) return idShivLing;
+    return idSacredTemple;
+  }
+
+  static const List<MandirItem> mandirView = [
+    MandirItem(
+      id: idSacredTemple,
+      name: 'Sacred Temple',
+      emoji: '🛕',
+      jsCall: '',
+    ),
+    MandirItem(
+      id: idShivLing,
+      name: 'Shiv Linga',
+      emoji: '🔱',
+      jsCall: '',
+    ),
+  ];
+
   static const List<MandirItem> omSymbols = [
     MandirItem(id: 'om_classic', name: 'Om', emoji: '\u0950', jsCall: "setOmSymbol('\u0950',null)"),
     MandirItem(id: 'swastik', name: 'Swastik', emoji: '\u5350', jsCall: "setOmSymbol('\u5350',null)"),
@@ -1427,6 +1470,24 @@ class MandirItems {
     MandirItem(id: 'dec_rangoli', name: 'Rangoli', emoji: '🎨', jsCall: "buy('rangoli','🎨','Rangoli',130)", cost: 130),
   ];
 
+  /// Deities: same slugs as [deityConfigs] → `assets/images/deities/{id}.png` in the 3D mandir.
+  static final List<MandirItem> deities = List<MandirItem>.unmodifiable([
+    ...deityConfigs.map(
+      (d) => MandirItem(
+        id: 'deity_${d.id}',
+        name: _shortDeityShopLabel(d.displayName),
+        emoji: d.emoji,
+        jsCall: "setDeityBackground('${d.id}')",
+      ),
+    ),
+    const MandirItem(
+      id: 'deity_none',
+      name: 'Default',
+      emoji: '◻️',
+      jsCall: "setDeityBackground('none')",
+    ),
+  ]);
+
   static const List<MandirItem> light = [
     MandirItem(id: 'mood_midday', name: 'Default', emoji: '☀️', jsCall: "mood('midday',null)"),
     MandirItem(id: 'mood_dawn', name: 'Dawn Puja', emoji: '🌅', jsCall: "mood('dawn',null)"),
@@ -1441,20 +1502,23 @@ class MandirItems {
   ];
 
   static const List<MandirItem> ground = [
+    MandirItem(id: 'ground_marble', name: 'Ashram Marble', emoji: '🏛️', jsCall: "setFloor('marble',null)"),
+    MandirItem(id: 'ground_water', name: 'Holy River', emoji: '🌊', jsCall: "setFloor('water',null)"),
+    MandirItem(id: 'ground_kailash', name: 'Kailash', emoji: '⛰️', jsCall: "setFloor('kailash',null)"),
+    MandirItem(id: 'ground_wood', name: 'Forest', emoji: '🪵', jsCall: "setFloor('wood',null)"),
     MandirItem(id: 'ground_mud', name: 'Mud', emoji: '🟫', jsCall: "setFloor('mud',null)"),
     MandirItem(id: 'ground_white', name: 'White', emoji: '⬜', jsCall: "setFloor('white',null)"),
     MandirItem(id: 'ground_sand', name: 'Sand', emoji: '🟨', jsCall: "setFloor('sand',null)"),
     MandirItem(id: 'ground_green', name: 'Green', emoji: '🟩', jsCall: "setFloor('green',null)"),
-    MandirItem(id: 'ground_water', name: 'Water', emoji: '💧', jsCall: "setFloor('water',null)"),
     MandirItem(id: 'ground_mountain', name: 'Mountain', emoji: '🏔️', jsCall: "setFloor('mountain',null)"),
-    MandirItem(id: 'ground_marble', name: 'Marble', emoji: '⬜', jsCall: "setFloor('marble',null)"),
     MandirItem(id: 'ground_stone', name: 'Stone', emoji: '🪨', jsCall: "setFloor('stone',null)"),
-    MandirItem(id: 'ground_wood', name: 'Wood', emoji: '🪵', jsCall: "setFloor('wood',null)"),
     MandirItem(id: 'ground_mosaic', name: 'Mosaic', emoji: '🔶', jsCall: "setFloor('mosaic',null)"),
   ];
 
   static List<MandirItem> getItemsForCategory(MandirCategory category) {
     switch (category) {
+      case MandirCategory.mandir: return mandirView;
+      case MandirCategory.deities: return deities;
       case MandirCategory.fx: return fx;
       case MandirCategory.decor: return decor;
       case MandirCategory.light: return light;

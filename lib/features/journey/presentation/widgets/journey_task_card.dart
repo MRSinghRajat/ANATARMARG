@@ -15,7 +15,6 @@ class JourneyTaskCard extends StatelessWidget {
     this.onTap,
   });
 
-  static const Color _surface = Color(0xFF252028);
   static const Color _text = Color(0xFFF5F0E8);
   static const Color _textMuted = Color(0xFFB8B2A8);
 
@@ -29,9 +28,9 @@ class JourneyTaskCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: _surface.withValues(alpha: 0.6),
+            color: AppColors.ashramCardDark.withValues(alpha: 0.9),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.journeyGold.withValues(alpha: 0.12)),
+            border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.15)),
           ),
           child: Row(
             children: [
@@ -42,11 +41,11 @@ class JourneyTaskCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   color: isCompleted
                       ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
-                      : AppColors.journeyGold.withValues(alpha: 0.15),
+                      : AppColors.primaryOrange.withValues(alpha: 0.15),
                   border: Border.all(
                     color: isCompleted
                         ? const Color(0xFF4CAF50).withValues(alpha: 0.4)
-                        : AppColors.journeyGold.withValues(alpha: 0.3),
+                        : AppColors.primaryOrange.withValues(alpha: 0.35),
                   ),
                 ),
                 child: Center(
@@ -91,7 +90,7 @@ class JourneyTaskCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.journeyGold.withValues(alpha: 0.15),
+                    color: AppColors.primaryOrange.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -99,7 +98,7 @@ class JourneyTaskCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.journeyGold,
+                      color: AppColors.primaryOrange,
                     ),
                   ),
                 )

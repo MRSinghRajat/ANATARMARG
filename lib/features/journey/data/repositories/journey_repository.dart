@@ -2,13 +2,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/journey_models.dart';
 
-/// Thrown when user already has an active journey; UI should show pause-then-start dialog.
-class ActiveJourneyExistsException implements Exception {
-  final UserJourney activeJourney;
-  ActiveJourneyExistsException(this.activeJourney);
-}
-
 /// Repository for journey catalog, user journeys, and completions.
+///
+/// Reporting / profile: use [getAllJourneys], task rows in `user_journey_task_completions`,
+/// and samskara rows in `user_milestone_completions` (plus milestone `is_required` from catalog).
 class JourneyRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
@@ -196,8 +193,28 @@ class JourneyRepository {
     }
   }
 
+  /// Wisdom pool rows (category = 'wisdom') for rotating Daily Wisdom card.
+  /// Generic: works for any journey type — just insert rows with that type's id.
+  Future<List<Map<String, dynamic>>> getWisdomPool(String journeyTypeId) async {
+    try {
+      final res = await _supabase
+          .from('journey_content_pool')
+          .select()
+          .eq('journey_type_id', journeyTypeId)
+          .eq('category', 'wisdom')
+          .order('display_order', ascending: true);
+      final list = res as List;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      print('JourneyRepository.getWisdomPool: $e');
+      return [];
+    }
+  }
+
   // ─── User journeys ───────────────────────────────────────────────────────
 
+  /// Returns the most recent active journey. Uses .limit(1) before .maybeSingle()
+  /// so it never throws when multiple active journeys exist (allowed since migration 25).
   Future<UserJourney?> getActiveJourney(String userId) async {
     try {
       final res = await _supabase
@@ -205,6 +222,8 @@ class JourneyRepository {
           .select()
           .eq('user_id', userId)
           .eq('status', 'active')
+          .order('start_date', ascending: false)
+          .limit(1)
           .maybeSingle();
       if (res == null) return null;
       return UserJourney.fromJson(res as Map<String, dynamic>);
@@ -226,6 +245,29 @@ class JourneyRepository {
     } catch (e) {
       print('JourneyRepository.getAllJourneys: $e');
       return [];
+    }
+  }
+
+  /// Active or paused journey for this catalog type (blocks starting the same journey again).
+  Future<UserJourney?> getActiveOrPausedJourneyForType({
+    required String userId,
+    required String journeyTypeId,
+  }) async {
+    try {
+      final res = await _supabase
+          .from('user_journeys')
+          .select()
+          .eq('user_id', userId)
+          .eq('journey_type_id', journeyTypeId)
+          .inFilter('status', ['active', 'paused'])
+          .order('start_date', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (res == null) return null;
+      return UserJourney.fromJson(res as Map<String, dynamic>);
+    } catch (e) {
+      print('JourneyRepository.getActiveOrPausedJourneyForType: $e');
+      return null;
     }
   }
 
@@ -266,6 +308,18 @@ class JourneyRepository {
           .select()
           .single();
       return UserJourney.fromJson(res as Map<String, dynamic>);
+    } on PostgrestException catch (e) {
+      print('JourneyRepository.startJourney: $e');
+      if (e.code == '23505' &&
+          (e.message.contains('idx_one_active_journey_per_user'))) {
+        throw StateError(
+          'Your Supabase database still enforces only one active journey per user. '
+          'Apply the migration '
+          'supabase/migrations/20240101000040_drop_one_active_journey_per_user_constraint.sql '
+          '(run `supabase db push` or execute that SQL in the SQL editor), then try again.',
+        );
+      }
+      rethrow;
     } catch (e) {
       print('JourneyRepository.startJourney: $e');
       rethrow;
@@ -345,6 +399,19 @@ class JourneyRepository {
     String? photoUrl,
     int? coinReward,
   }) async {
+    final uj = await getUserJourneyById(userJourneyId);
+    if (uj == null) {
+      throw StateError('Journey not found');
+    }
+    if (uj.status == 'completed') {
+      throw StateError('This journey is already complete');
+    }
+    if (uj.status != 'active') {
+      throw StateError('Journey is not active');
+    }
+    if (uj.userId != userId) {
+      throw StateError('Not authorized');
+    }
     final today = DateTime.now().toIso8601String().split('T').first;
     try {
       await _supabase.from('user_journey_task_completions').upsert({
@@ -361,6 +428,27 @@ class JourneyRepository {
       }, onConflict: 'user_id,task_id,completed_date');
     } catch (e) {
       print('JourneyRepository.completeTask: $e');
+      rethrow;
+    }
+  }
+
+  /// Removes today's completion row so the user can mark the task again the same day.
+  Future<void> uncompleteTaskToday({
+    required String userId,
+    required String userJourneyId,
+    required String taskId,
+  }) async {
+    final today = DateTime.now().toIso8601String().split('T').first;
+    try {
+      await _supabase
+          .from('user_journey_task_completions')
+          .delete()
+          .eq('user_id', userId)
+          .eq('user_journey_id', userJourneyId)
+          .eq('task_id', taskId)
+          .eq('completed_date', today);
+    } catch (e) {
+      print('JourneyRepository.uncompleteTaskToday: $e');
       rethrow;
     }
   }
@@ -416,6 +504,19 @@ class JourneyRepository {
     String? photoUrl,
     int? coinsEarned,
   }) async {
+    final uj = await getUserJourneyById(userJourneyId);
+    if (uj == null) {
+      throw StateError('Journey not found');
+    }
+    if (uj.status == 'completed') {
+      throw StateError('This journey is already complete');
+    }
+    if (uj.status != 'active') {
+      throw StateError('Journey is not active');
+    }
+    if (uj.userId != userId) {
+      throw StateError('Not authorized');
+    }
     try {
       await _supabase.from('user_milestone_completions').insert({
         'user_id': userId,

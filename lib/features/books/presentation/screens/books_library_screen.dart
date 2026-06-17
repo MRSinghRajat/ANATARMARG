@@ -22,10 +22,9 @@ import 'all_sacred_stories_screen.dart';
 import 'all_sacred_texts_screen.dart';
 import '../../data/services/granthalaya_recent_service.dart';
 import '../../../../shared/services/premium_service.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/widgets/upgrade_pro_banner.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../../../../core/utils/app_router.dart';
-import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../../../journey/data/models/journey_models.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
 
@@ -39,11 +38,14 @@ class BooksLibraryScreen extends ConsumerStatefulWidget {
 
 class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   final ScrollController _scrollController = ScrollController();
+  /// Journey tab: horizontal carousel for multiple in-progress journeys.
+  final PageController _journeyPageController = PageController(viewportFraction: 0.86);
+  int _journeyCarouselIndex = 0;
   List<BookModel> _books = [];
   bool _isLoading = true;
   bool _isPremium = false;
   StreamSubscription<bool>? _premiumSubscription;
-  /// 0 = Read, 1 = Listen, 2 = Journey, 3 = Video
+  /// 0 = Read, 1 = Listen, 2 = Journey
   int _granthalayaTabIndex = 0;
   int _sacredLibraryCategoryIndex = 0;
   // Audio (Listen mode) - mini player driven by nowPlayingProvider
@@ -103,7 +105,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       if (mounted) setState(() => _isPremium = v);
     });
     _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
-      if (mounted) setState(() => _isPremium = v);
+      if (!mounted) return;
+      setState(() {
+        _isPremium = v;
+        if (!v && _granthalayaTabIndex != 0) {
+          _granthalayaTabIndex = 0;
+          ref.read(granthalayaReadModeProvider.notifier).state = true;
+        }
+      });
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(granthalayaReadModeProvider.notifier).state =
@@ -115,6 +124,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   void dispose() {
     _premiumSubscription?.cancel();
     _scrollController.dispose();
+    _journeyPageController.dispose();
     super.dispose();
   }
 
@@ -130,7 +140,61 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  Future<void> _tryOpenJourneySetup(JourneyType t) async {
+    if (t.isPremium && !_isPremium) {
+      navigateToProfileForProUpgrade(context);
+      return;
+    }
+    final uid = ref.read(currentUserIdProvider);
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in')),
+        );
+      }
+      return;
+    }
+    final existing = await ref.read(journeyRepositoryProvider).getActiveOrPausedJourneyForType(
+          userId: uid,
+          journeyTypeId: t.id,
+        );
+    if (!mounted) return;
+    if (existing != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('This journey type is already in progress'),
+          content: const Text(
+            'You already have an active or paused path for this journey. Open it from Your journeys below or from Ashram. You can still start other journey types anytime.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+  }
+
   /// Pull-to-refresh: reload books and invalidate all Granthalaya providers so every section refetches.
+
+  void _selectGranthalayaTab(int index) {
+    if (!_isPremium && (index == 1 || index == 2)) {
+      final msg = index == 1
+          ? 'Listen mode and the full audio library are part of Pro. Open Profile to upgrade.'
+          : 'Spiritual journeys unlock with Pro. Open Profile to upgrade.';
+      navigateToProfileForProUpgrade(context, message: msg);
+      return;
+    }
+    setState(() => _granthalayaTabIndex = index);
+    ref.read(granthalayaReadModeProvider.notifier).state = index == 0;
+  }
+
   Future<void> _onGranthalayaRefresh() async {
     await _loadBooks();
     if (!mounted) return;
@@ -146,7 +210,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     ref.invalidate(audioInProgressProvider);
     ref.invalidate(userAudioProgressProvider);
     ref.invalidate(audioWisdomCardsProvider);
-    ref.invalidate(granthalayaVideosProvider);
   }
 
   String _getBookTag(BookModel book) {
@@ -175,13 +238,19 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepAsh,
       body: SafeArea(
-        child: _granthalayaTabIndex == 0
-            ? _buildReadContent()
-            : _granthalayaTabIndex == 1
-                ? _buildListenContent()
-                : _granthalayaTabIndex == 2
-                    ? _buildJourneyContent()
-                    : _buildVideoContent(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildModeToggle(),
+            Expanded(
+              child: _granthalayaTabIndex == 0
+                  ? _buildReadContent()
+                  : _granthalayaTabIndex == 1
+                      ? _buildListenContent()
+                      : _buildJourneyContent(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -204,7 +273,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         ),
         slivers: [
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          SliverToBoxAdapter(child: _buildModeToggle()),
           if (!_isPremium)
             const SliverToBoxAdapter(
               child: UpgradeProBanner(
@@ -238,47 +306,34 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() => _granthalayaTabIndex = 0);
-                  ref.read(granthalayaReadModeProvider.notifier).state = true;
-                },
+                onTap: () => _selectGranthalayaTab(0),
                 child: _buildModeToggleSegment(
                   index: 0,
                   icon: Icons.auto_stories,
                   label: 'Read',
+                  locked: false,
                 ),
               ),
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() => _granthalayaTabIndex = 1);
-                  ref.read(granthalayaReadModeProvider.notifier).state = false;
-                },
+                onTap: () => _selectGranthalayaTab(1),
                 child: _buildModeToggleSegment(
                   index: 1,
                   icon: Icons.headphones,
                   label: 'Listen',
+                  locked: !_isPremium,
                 ),
               ),
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _granthalayaTabIndex = 2),
+                onTap: () => _selectGranthalayaTab(2),
                 child: _buildModeToggleSegment(
                   index: 2,
                   icon: Icons.route,
                   label: 'Journey',
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _granthalayaTabIndex = 3),
-                child: _buildModeToggleSegment(
-                  index: 3,
-                  icon: Icons.video_library,
-                  label: 'Video',
+                  locked: !_isPremium,
                 ),
               ),
             ),
@@ -292,8 +347,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     required int index,
     required IconData icon,
     required String label,
+    required bool locked,
   }) {
     final selected = _granthalayaTabIndex == index;
+    final baseColor = locked && !selected ? AppColors.zinc500.withOpacity(0.65) : null;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -307,14 +364,22 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 18, color: selected ? AppColors.matteGold : AppColors.zinc500),
+          Icon(
+            icon,
+            size: 18,
+            color: baseColor ?? (selected ? AppColors.matteGold : AppColors.zinc500),
+          ),
+          if (locked) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.lock_outline_rounded, size: 14, color: baseColor ?? AppColors.zinc500),
+          ],
           const SizedBox(width: 8),
           Text(
             label,
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-              color: selected ? AppColors.matteGold : AppColors.zinc500,
+              color: baseColor ?? (selected ? AppColors.matteGold : AppColors.zinc500),
             ),
           ),
         ],
@@ -323,9 +388,13 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   Widget _buildJourneyContent() {
+    if (!_isPremium) {
+      return const SizedBox.shrink();
+    }
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(activeJourneyProvider);
+        ref.invalidate(activeJourneysProvider);
         ref.invalidate(allUserJourneysProvider);
         ref.invalidate(journeyTypesProvider);
         ref.invalidate(journeyTypeMemberCountsProvider);
@@ -334,9 +403,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         slivers: [
-          const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          SliverToBoxAdapter(child: _buildModeToggle()),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -354,7 +421,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sacred journeys for every stage of life',
+                    'Sacred journeys for every stage of life — run several paths at once.',
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       color: AppColors.zinc500,
@@ -435,54 +502,158 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               final startTypes = types.where((t) => !t.isComingSoon).toList();
               final comingSoonTypes = types.where((t) => t.isComingSoon).toList();
               final allUserJourneysForProgress = [...activeJourneys, ...pausedJourneys];
+              final jp = allUserJourneysForProgress.length;
+              if (jp > 1 && _journeyCarouselIndex >= jp) {
+                final last = jp - 1;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() => _journeyCarouselIndex = last);
+                  if (_journeyPageController.hasClients) {
+                    _journeyPageController.jumpToPage(last);
+                  }
+                });
+              }
               return SliverList(
                 delegate: SliverChildListDelegate([
                   if (allUserJourneysForProgress.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'CONTINUING TOGETHER',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.zinc500,
-                              letterSpacing: 1.2,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'YOUR JOURNEYS',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.zinc500,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              Text(
+                                'Global Progress',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.journeyPrimary,
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 6),
                           Text(
-                            'Global Progress',
+                            'Several journeys can run together — each path stays separate.',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.journeyPrimary,
+                              color: AppColors.zinc500.withValues(alpha: 0.95),
+                              height: 1.35,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 280,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
+                    const SizedBox(height: 14),
+                    if (allUserJourneysForProgress.length == 1)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                        child: allUserJourneysForProgress.first.isActive
+                            ? _buildJourneyContinuingCard(
+                                ref,
+                                allUserJourneysForProgress.first,
+                                types,
+                                memberCounts,
+                                listMode: true,
+                              )
+                            : _buildJourneyPausedCard(
+                                ref,
+                                allUserJourneysForProgress.first,
+                                types,
+                                listMode: true,
+                              ),
+                      )
+                    else ...[
+                      Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: allUserJourneysForProgress.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final uj = allUserJourneysForProgress[index];
-                          return SizedBox(
-                            width: 300,
-                            child: uj.isActive
-                                ? _buildJourneyContinuingCard(ref, uj, types, memberCounts, compact: true)
-                                : _buildJourneyPausedCard(ref, uj, types, compact: true),
-                          );
-                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(allUserJourneysForProgress.length, (i) {
+                            final active = i == _journeyCarouselIndex;
+                            return Semantics(
+                              label: 'Show journey ${i + 1} of ${allUserJourneysForProgress.length}',
+                              button: true,
+                              selected: active,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _journeyPageController.animateToPage(
+                                    i,
+                                    duration: const Duration(milliseconds: 280),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: active ? 20 : 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    color: active
+                                        ? AppColors.journeyGold
+                                        : AppColors.zinc600.withValues(alpha: 0.65),
+                                    boxShadow: active
+                                        ? [
+                                            BoxShadow(
+                                              color: AppColors.journeyGold.withValues(alpha: 0.35),
+                                              blurRadius: 6,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 300,
+                        child: PageView.builder(
+                          controller: _journeyPageController,
+                          onPageChanged: (i) {
+                            setState(() => _journeyCarouselIndex = i);
+                          },
+                          itemCount: allUserJourneysForProgress.length,
+                          padEnds: false,
+                          itemBuilder: (context, index) {
+                            final uj = allUserJourneysForProgress[index];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: uj.isActive
+                                  ? _buildJourneyContinuingCard(
+                                      ref,
+                                      uj,
+                                      types,
+                                      memberCounts,
+                                      compact: true,
+                                    )
+                                  : _buildJourneyPausedCard(
+                                      ref,
+                                      uj,
+                                      types,
+                                      compact: true,
+                                    ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const SizedBox(height: 16),
                   ],
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -519,216 +690,17 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  /// Video tab: YouTube videos from your channel (curated in Supabase granthalaya_videos).
-  Widget _buildVideoContent() {
-    return Container(
-      color: AppColors.deepAsh,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 8),
-          _buildModeToggle(),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Video',
-                  style: GoogleFonts.cormorantGaramond(
-                    fontSize: 28,
-                    color: AppColors.zinc100,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Videos from our YouTube channel',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: AppColors.zinc500,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: Consumer(
-              builder: (context, ref, _) {
-                final videosAsync = ref.watch(granthalayaVideosProvider);
-                return videosAsync.when(
-                  data: (videos) {
-                    if (videos.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.video_library_outlined, size: 64, color: AppColors.zinc500),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No videos yet',
-                                style: GoogleFonts.inter(color: AppColors.zinc400, fontSize: 16),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Add videos in Supabase granthalaya_videos table to show them here.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        ref.invalidate(granthalayaVideosProvider);
-                      },
-                      color: AppColors.matteGold,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-                        itemCount: videos.length,
-                        itemBuilder: (context, index) {
-                          final video = videos[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: _buildVideoCard(video),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                  loading: () => Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.matteGold),
-                        ),
-                        const SizedBox(height: 16),
-                        Text('Loading videos…', style: GoogleFonts.inter(color: AppColors.zinc500, fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                  error: (err, _) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: AppColors.zinc500),
-                          const SizedBox(height: 12),
-                          Text('Could not load videos', style: GoogleFonts.inter(color: AppColors.zinc400, fontSize: 14)),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Full-width vertical list card: thumbnail on left, title and duration on right.
-  /// Fixed height (102) so list item has definite size and avoids SliverMultiBoxAdaptor layout errors.
-  Widget _buildVideoCard(GranthalayaVideoModel video) {
-    const cardHeight = 102.0;
-    return SizedBox(
-      height: cardHeight,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () async {
-            final url = video.youtubeWatchUrl;
-            if (url.isEmpty) return;
-            final uri = Uri.tryParse(url);
-            if (uri != null && await url_launcher.canLaunchUrl(uri)) {
-              await url_launcher.launchUrl(uri, mode: url_launcher.LaunchMode.externalApplication);
-            }
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              color: AppColors.manuscriptDark.withOpacity(0.6),
-              border: Border.all(color: AppColors.matteGold.withOpacity(0.2)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
-                  child: SizedBox(
-                    width: 180,
-                    height: cardHeight,
-                    child: AppNetworkImage(
-                      imageUrl: video.effectiveThumbnailUrl,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          video.title.isNotEmpty ? video.title : 'Video',
-                          style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.zinc100,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (video.durationFormatted.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Icon(Icons.access_time, size: 14, color: AppColors.zinc500),
-                              const SizedBox(width: 6),
-                              Text(
-                                video.durationFormatted,
-                                style: GoogleFonts.inter(fontSize: 13, color: AppColors.zinc500),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Icon(Icons.play_circle_outline, size: 32, color: AppColors.matteGold.withOpacity(0.8)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Big "Continuing Together" card: active journey with Joined by X, progress, Continue CTA.
   /// [compact] when true uses tighter padding for horizontal list to avoid overflow.
-  Widget _buildJourneyContinuingCard(WidgetRef ref, UserJourney active, List<JourneyType> types, Map<String, int> memberCounts, {bool compact = false}) {
+  /// [listMode] full-width vertical list (Granthalaya Journey tab).
+  Widget _buildJourneyContinuingCard(
+    WidgetRef ref,
+    UserJourney active,
+    List<JourneyType> types,
+    Map<String, int> memberCounts, {
+    bool compact = false,
+    bool listMode = false,
+  }) {
     final typeList = types.where((t) => t.id == active.journeyTypeId).toList();
     final journeyType = typeList.isNotEmpty ? typeList.first : (types.isNotEmpty ? types.first : null);
     final phaseAsync = ref.watch(currentPhaseProvider(active.id));
@@ -744,10 +716,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ? 'Joined by $memberCount'
             : null;
     // Black–gold gradient theme for Journey progress cards
-    const gradientStart = AppColors.journeyBlack;
-    const gradientEnd = AppColors.journeyGold;
-    final outerPadding = compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20);
-    final innerPadding = compact ? const EdgeInsets.all(12) : const EdgeInsets.all(20);
+    final outerPadding = listMode
+        ? EdgeInsets.zero
+        : (compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20));
+    final innerPadding = listMode
+        ? const EdgeInsets.all(16)
+        : (compact ? const EdgeInsets.all(12) : const EdgeInsets.all(20));
     return Padding(
       padding: outerPadding,
       child: Material(
@@ -1093,11 +1067,20 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   /// [compact] when true uses tighter padding and min height for horizontal list to avoid overflow.
-  Widget _buildJourneyPausedCard(WidgetRef ref, UserJourney uj, List<JourneyType> types, {bool compact = false}) {
+  /// [listMode] full-width card for vertical list layout.
+  Widget _buildJourneyPausedCard(
+    WidgetRef ref,
+    UserJourney uj,
+    List<JourneyType> types, {
+    bool compact = false,
+    bool listMode = false,
+  }) {
     final typeList = types.where((t) => t.id == uj.journeyTypeId).toList();
     final journeyType = typeList.isNotEmpty ? typeList.first : null;
     final repo = ref.read(journeyRepositoryProvider);
-    final cardPadding = compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20, vertical: 6);
+    final cardPadding = listMode
+        ? EdgeInsets.zero
+        : (compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 20, vertical: 6));
     return Padding(
       padding: cardPadding,
       child: Material(
@@ -1107,8 +1090,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             try {
               await repo.resumeJourney(uj.id);
               ref.invalidate(activeJourneyProvider);
+              ref.invalidate(activeJourneysProvider);
               ref.invalidate(allUserJourneysProvider);
               ref.invalidate(todaysJourneyTasksProvider(uj.id));
+              ref.invalidate(allJourneyTasksWithTodayCompletionProvider(uj.id));
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1348,6 +1333,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   /// Single row card in "Popular in your Circle": icon, title, subtitle, Joined by X, lock/chevron. Matches HTML layout.
   Widget _buildJourneyPopularCard(WidgetRef ref, JourneyType t, Map<String, int> memberCounts, {bool isTrending = false, bool isComingSoon = false, bool showPill = false}) {
+    final allJourneys = ref.watch(allUserJourneysProvider).valueOrNull ?? [];
+    final journeyInProgress = allJourneys.any(
+      (j) => j.journeyTypeId == t.id && (j.isActive || j.isPaused),
+    );
     final memberCount = memberCounts[t.id] ?? 0;
     final startedText = memberCount >= 1000
         ? '${(memberCount / 1000).toStringAsFixed(1)}k people started this week'
@@ -1373,10 +1362,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               return;
             }
             if (isPremiumLocked) {
-              PaywallScreen.showAsBottomSheet(context);
+              navigateToProfileForProUpgrade(context);
               return;
             }
-            Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+            _tryOpenJourneySetup(t);
           },
           borderRadius: BorderRadius.circular(20),
           child: SizedBox(
@@ -1407,6 +1396,30 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
+                    if (journeyInProgress && !isComingSoon)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade700,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              bottomRight: Radius.circular(8),
+                            ),
+                          ),
+                          child: Text(
+                            'IN PROGRESS',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ),
                     if (isTrending)
                       Positioned(
                       top: 0,
@@ -1767,22 +1780,26 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           if (isComingSoon) {
             return _buildComingSoonCard(t);
           }
-          return _buildStartJourneyCard(t, isPremiumLocked, color);
+          return _buildStartJourneyCard(ref, t, isPremiumLocked, color);
         },
       ),
     );
   }
 
-  Widget _buildStartJourneyCard(JourneyType t, bool isPremiumLocked, Color color) {
+  Widget _buildStartJourneyCard(WidgetRef ref, JourneyType t, bool isPremiumLocked, Color color) {
+    final allJourneys = ref.watch(allUserJourneysProvider).valueOrNull ?? [];
+    final journeyInProgress = allJourneys.any(
+      (j) => j.journeyTypeId == t.id && (j.isActive || j.isPaused),
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
           if (isPremiumLocked) {
-            PaywallScreen.showAsBottomSheet(context);
+            navigateToProfileForProUpgrade(context);
             return;
           }
-          Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+          _tryOpenJourneySetup(t);
         },
         borderRadius: BorderRadius.circular(18),
         child: Container(
@@ -1847,6 +1864,27 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                 ],
               ),
+              if (journeyInProgress)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade700,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'IN PROGRESS',
+                      style: GoogleFonts.inter(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ),
               if (isPremiumLocked)
                 Positioned(
                   top: 10,
@@ -1937,8 +1975,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               recentTexts: recentTexts,
               recentStories: recentStories,
               recentDeities: recentDeities,
-              isLoading: !snapshot.hasData &&
-                  snapshot.connectionState == ConnectionState.waiting,
             );
           },
         );
@@ -1989,12 +2025,15 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     required List<SacredTextModel> recentTexts,
     required List<SacredStoryModel> recentStories,
     required List<DeityModel> recentDeities,
-    bool isLoading = false,
   }) {
     final hasAny = recentBooks.isNotEmpty ||
         recentTexts.isNotEmpty ||
         recentStories.isNotEmpty ||
         recentDeities.isNotEmpty;
+
+    if (!hasAny) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 48),
@@ -2031,88 +2070,29 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           const SizedBox(height: 20),
           SizedBox(
             height: 320,
-            child: isLoading
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: AppColors.matteGold,
-                          strokeWidth: 2,
-                        ),
-                      ),
-                    ),
-                  )
-                : hasAny
-                    ? ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        scrollDirection: Axis.horizontal,
-                        physics: const ClampingScrollPhysics(),
-                        children: [
-                          ...recentBooks.map((b) => Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: _buildInProgressCard(b),
-                              )),
-                          ...recentTexts.map((t) => Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: _buildInProgressSacredTextCard(t),
-                              )),
-                          ...recentStories.map((s) => Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: _buildInProgressStoryCard(s),
-                              )),
-                          ...recentDeities.map((d) => Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: _buildInProgressDeityCard(d),
-                              )),
-                        ],
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 32),
-                          decoration: BoxDecoration(
-                            color: AppColors.charcoalCard.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppColors.matteGold.withOpacity(0.15),
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.auto_stories_outlined,
-                                size: 48,
-                                color: AppColors.matteGold.withOpacity(0.5),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Nothing viewed yet',
-                                style: GoogleFonts.inter(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Open a book, sacred text or story, or explore a deity—they’ll show up here.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: AppColors.zinc500,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              children: [
+                ...recentBooks.map((b) => Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _buildInProgressCard(b),
+                    )),
+                ...recentTexts.map((t) => Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _buildInProgressSacredTextCard(t),
+                    )),
+                ...recentStories.map((s) => Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _buildInProgressStoryCard(s),
+                    )),
+                ...recentDeities.map((d) => Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _buildInProgressDeityCard(d),
+                    )),
+              ],
+            ),
           ),
         ],
       ),
@@ -2410,7 +2390,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: isLocked
-            ? () => PaywallScreen.showAsBottomSheet(context)
+            ? () => navigateToProfileForProUpgrade(context)
             : () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -2619,14 +2599,15 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   Widget _buildListenContent() {
+    if (!_isPremium) {
+      return const SizedBox.shrink();
+    }
     return Stack(
       children: [
         GranthalayaAudioProgressSync(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 8),
-              _buildListenModeToggle(),
               Expanded(
                 child: GranthalayaAudioContent(
                   onPlay: (info) async {
@@ -2665,70 +2646,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _buildListenModeToggle() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _granthalayaTabIndex = 0);
-                  ref.read(granthalayaReadModeProvider.notifier).state = true;
-                },
-                child: _buildModeToggleSegment(
-                  index: 0,
-                  icon: Icons.auto_stories,
-                  label: 'Read',
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _granthalayaTabIndex = 1);
-                  ref.read(granthalayaReadModeProvider.notifier).state = false;
-                },
-                child: _buildModeToggleSegment(
-                  index: 1,
-                  icon: Icons.headphones,
-                  label: 'Listen',
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _granthalayaTabIndex = 2),
-                child: _buildModeToggleSegment(
-                  index: 2,
-                  icon: Icons.route,
-                  label: 'Journey',
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _granthalayaTabIndex = 3),
-                child: _buildModeToggleSegment(
-                  index: 3,
-                  icon: Icons.video_library,
-                  label: 'Video',
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   static const _sacredCategories = [
     'All Texts',
     'Puranas',
@@ -2753,6 +2670,62 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                 (b.id.toLowerCase().contains('upanishad') ||
                     b.name.toLowerCase().contains('upanishad'))))
         .toList();
+  }
+
+  Widget _buildSacredLibraryBooksRow() {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 175,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.matteGold),
+        ),
+      );
+    }
+    if (_sacredLibraryCategoryIndex > 0 && _filteredBooks.isEmpty) {
+      final categoryName = _sacredCategories[_sacredLibraryCategoryIndex];
+      return SizedBox(
+        height: 175,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Coming soon',
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.matteGold.withOpacity(0.9),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$categoryName texts will appear here when available.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.zinc500,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 175,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        physics: const ClampingScrollPhysics(),
+        itemCount: _filteredBooks.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 16),
+        itemBuilder: (_, i) => _buildSacredLibraryCard(_filteredBooks[i]),
+      ),
+    );
   }
 
   Widget _buildSacredLibrarySection() {
@@ -2853,22 +2826,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 175,
-            child: _isLoading
-                ? const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.matteGold))
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    scrollDirection: Axis.horizontal,
-                    physics: const ClampingScrollPhysics(),
-                    itemCount: _filteredBooks.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 16),
-                    itemBuilder: (_, i) =>
-                        _buildSacredLibraryCard(_filteredBooks[i]),
-                  ),
-          ),
+          _buildSacredLibraryBooksRow(),
         ],
       ),
     );
@@ -3107,7 +3065,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: isLocked
-            ? () => PaywallScreen.showAsBottomSheet(context)
+            ? () => navigateToProfileForProUpgrade(context)
             : () {
                 Navigator.push(
                   context,
@@ -3437,7 +3395,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: isLocked
-            ? () => PaywallScreen.showAsBottomSheet(context)
+            ? () => navigateToProfileForProUpgrade(context)
             : () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -4158,15 +4116,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     ],
                   ),
                   borderRadius: BorderRadius.circular(32),
-                  border: Border(
-                    top: BorderSide(
-                        color: AppColors.matteGold.withOpacity(0.3), width: 2),
-                    left:
-                        BorderSide(color: AppColors.matteGold.withOpacity(0.1)),
-                    right:
-                        BorderSide(color: AppColors.matteGold.withOpacity(0.1)),
-                    bottom:
-                        BorderSide(color: AppColors.matteGold.withOpacity(0.1)),
+                  border: Border.all(
+                    color: AppColors.matteGold.withOpacity(0.18),
+                    width: 1.5,
                   ),
                 ),
                 child: Stack(

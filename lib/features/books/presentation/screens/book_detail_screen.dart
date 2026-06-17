@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart'
+    show navigateToProfileForProUpgrade, openProfileTabForProUpgrade;
 import '../../../../shared/services/premium_service.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../shared/widgets/pro_gradient_badge.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/chapter_model.dart';
 import '../../data/repositories/chapter_repository.dart';
@@ -154,23 +156,72 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   }
 
   void _onLockedChapterTap() {
-    PaywallScreen.showAsBottomSheet(context);
+    navigateToProfileForProUpgrade(context);
   }
 
   @override
   Widget build(BuildContext context) {
     // If book itself is premium and user is free, show paywall and pop back
     if (widget.book.isPremium && !_isPremium) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          PaywallScreen.showAsBottomSheet(context);
-          Navigator.of(context).pop();
-        }
-      });
       return Scaffold(
         backgroundColor: _ProgressHubColors.backgroundDeep,
-        body: const Center(
-          child: CircularProgressIndicator(color: _ProgressHubColors.primary),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const ProGradientPremiumIcon(size: 48),
+                const SizedBox(height: 16),
+                const ProGradientLabel(fontSize: 22),
+                const SizedBox(height: 20),
+                Text(
+                  'This book is available with Pro.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 15,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Open Profile to upgrade.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white54,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      openProfileTabForProUpgrade(context);
+                      Navigator.of(context).pop();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _ProgressHubColors.primary,
+                      side: const BorderSide(color: _ProgressHubColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(
+                      'Go to Profile',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Back',
+                    style: GoogleFonts.poppins(color: Colors.white54),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }

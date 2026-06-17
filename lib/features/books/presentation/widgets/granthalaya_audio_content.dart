@@ -7,12 +7,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../../shared/services/feature_gate_config.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../providers/book_providers.dart';
 import '../providers/now_playing_provider.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../../data/models/book_model.dart';
-import '../../data/models/meditation_guide_model.dart';
 
 class AudioItemInfo {
   final String title;
@@ -81,17 +80,24 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
   }
 
   void _showPaywall() {
-    PaywallScreen.showAsBottomSheet(context);
+    navigateToProfileForProUpgrade(context);
   }
 
   @override
   Widget build(BuildContext context) {
+    final userProgressAsync = ref.watch(userAudioProgressProvider);
+    final nowPlaying = ref.watch(nowPlayingProvider);
+    final userItems = userProgressAsync.valueOrNull ?? [];
+    final hasInProgress = nowPlaying != null || userItems.isNotEmpty;
+
     return ListView(
       physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      padding: const EdgeInsets.only(bottom: 140),
+      padding: const EdgeInsets.only(top: 8, bottom: 140),
       children: [
-        _buildInProgressSection(),
-        const SizedBox(height: 48),
+        if (hasInProgress) ...[
+          _buildInProgressSection(),
+          const SizedBox(height: 48),
+        ],
         _buildSacredTextsAudioSection(),
         const SizedBox(height: 48),
         _buildAudiobooksSection(),
@@ -99,8 +105,6 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
         _buildSacredStoriesAudioSection(),
         const SizedBox(height: 48),
         _buildChantsSection(),
-        const SizedBox(height: 48),
-        _buildMeditationSection(),
         const SizedBox(height: 48),
         _buildDivinePresenceSection(),
         const SizedBox(height: 48),
@@ -618,44 +622,6 @@ class _GranthalayaAudioContentState extends ConsumerState<GranthalayaAudioConten
         audioUrl: chant.effectiveAudioUrl.isNotEmpty ? chant.effectiveAudioUrl : null,
       )),
       audioUrl: chant.effectiveAudioUrl.isNotEmpty ? chant.effectiveAudioUrl : null,
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────
-  // MEDITATION SECTION
-  // ──────────────────────────────────────────────────────────
-
-  Widget _buildMeditationSection() {
-    return Consumer(
-      builder: (context, ref, _) {
-        final medsAsync = ref.watch(meditationGuidesProvider);
-        final allMeds = medsAsync.valueOrNull ?? [];
-        final meds = allMeds.take(5).toList();
-
-        return _buildAudioSection(
-          title: 'Meditation',
-          subtitle: '${allMeds.length} guided sessions',
-          showViewAll: allMeds.length > 5,
-          onViewAll: () => Navigator.pushNamed(context, '/listen/all-meditation'),
-          isLoading: medsAsync.isLoading,
-          isEmpty: meds.isEmpty,
-          cardHeight: 200,
-          itemCount: meds.length,
-          itemBuilder: (i) => _buildMeditationCard(meds[i]),
-        );
-      },
-    );
-  }
-
-  Widget _buildMeditationCard(MeditationGuideModel guide) {
-    return _buildAudioCardTile(
-      title: guide.guideName,
-      subtitle: '${guide.typeLabel} · ${guide.durationFormatted} · ${guide.difficulty}',
-      imageUrl: guide.coverImageUrl,
-      deitySlug: null,
-      deityName: '',
-      onTap: () => Navigator.pushNamed(context, '/listen/meditation', arguments: guide),
-      audioUrl: guide.audioUrl,
     );
   }
 

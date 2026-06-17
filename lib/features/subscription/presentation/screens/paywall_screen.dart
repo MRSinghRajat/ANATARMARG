@@ -7,15 +7,16 @@ import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../../../../core/services/revenuecat_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_router.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../data/models/subscription_models.dart';
 import 'customer_center_screen.dart';
 
 /// Paywall screen that displays subscription options.
-/// 
-/// This screen can use either:
-/// 1. RevenueCat's built-in Paywall UI (if configured in dashboard)
-/// 2. Custom paywall UI (fallback)
+///
+/// **RevenueCat dashboard paywalls** use [RevenueCatUI.presentPaywall] (see
+/// [showRevenueCatPaywallOrCustom]). [showAsBottomSheet] / [PaywallScreen] alone
+/// is the **custom Flutter** UI built in this file, not the RC Paywalls v2 UI.
 class PaywallScreen extends StatefulWidget {
   /// If true, shows a close button to dismiss the paywall
   final bool showCloseButton;
@@ -72,6 +73,65 @@ class PaywallScreen extends StatefulWidget {
     );
   }
 
+  /// Presents the **RevenueCat Paywall** (designed in the RC dashboard) first.
+  /// Falls back to [showAsBottomSheet] (custom UI) if RevenueCat is not
+  /// initialized, throws, or returns [PaywallResult.error].
+  ///
+  /// **Dashboard:** The template you edit in RevenueCat is tied to the **Offering**
+  /// that has your products. Set that Offering as **Current** and attach your
+  /// Paywall to it — otherwise the SDK may show an older template or fallback UI.
+  ///
+  /// Returns `true` if the user purchased or restored; `false` if they
+  /// dismissed without a new purchase; `null` if the sheet was dismissed
+  /// without a result.
+  static Future<bool?> showRevenueCatPaywallOrCustom(BuildContext context) async {
+    final rc = RevenueCatService.instance;
+    if (!rc.isInitialized) {
+      try {
+        await rc.initialize();
+      } catch (e) {
+        debugPrint('Paywall: RevenueCat init before native paywall: $e');
+      }
+    }
+
+    if (rc.isInitialized) {
+      try {
+        await rc.refreshOfferings();
+        final offering = rc.effectiveOffering;
+        debugPrint(
+          'Paywall: RevenueCat native UI — offering="${offering?.identifier}" '
+          'packages=${offering?.availablePackages.length ?? 0}',
+        );
+        if (offering == null || offering.availablePackages.isEmpty) {
+          debugPrint(
+            'Paywall: No offering or packages — Store prices will not load. '
+            'Check RevenueCat Offering (Current) and App Store product IDs.',
+          );
+        }
+        final result = await RevenueCatUI.presentPaywall(
+          displayCloseButton: true,
+          offering: offering,
+        );
+        await PremiumService.instance.refreshPremiumStatus();
+        if (result == PaywallResult.purchased ||
+            result == PaywallResult.restored) {
+          return true;
+        }
+        if (result == PaywallResult.error) {
+          debugPrint('Paywall: Native paywall error, showing custom UI');
+          if (!context.mounted) return false;
+          return showAsBottomSheet(context);
+        }
+        return false;
+      } catch (e, st) {
+        debugPrint('Paywall: Native paywall exception: $e\n$st');
+      }
+    }
+
+    if (!context.mounted) return null;
+    return showAsBottomSheet(context);
+  }
+
   /// Present RevenueCat's native paywall (if configured in dashboard)
   static Future<PaywallResult> presentRevenueCatPaywall() async {
     try {
@@ -97,6 +157,14 @@ class PaywallScreen extends StatefulWidget {
   @override
   State<PaywallScreen> createState() => _PaywallScreenState();
 }
+
+/// Shown when RevenueCat returns no packages (dashboard / App Store Connect setup).
+const String _kEmptyOfferingsMessage =
+    'No subscription plans are available yet.\n\n'
+    'For TestFlight: in App Store Connect, create subscriptions with the same '
+    'product IDs as in RevenueCat → Product catalog, sign the Paid Applications '
+    'Agreement, and attach those products to an Offering (set it as Current). '
+    'Then try again.';
 
 class _PaywallScreenState extends State<PaywallScreen> {
   final RevenueCatService _revenueCat = RevenueCatService.instance;
@@ -136,12 +204,19 @@ class _PaywallScreenState extends State<PaywallScreen> {
     });
 
     try {
+      if (!_revenueCat.isInitialized) {
+        try {
+          await RevenueCatService.instance.initialize();
+        } catch (e) {
+          debugPrint('Paywall: RevenueCat init before offerings: $e');
+        }
+      }
       await _revenueCat.refreshOfferings();
       final packages = _revenueCat.availablePackages;
-      
+
       if (packages.isEmpty) {
         setState(() {
-          _error = 'No subscription plans available';
+          _error = _kEmptyOfferingsMessage;
           _isLoading = false;
         });
         return;
@@ -824,7 +899,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
           children: [
             TextButton(
               onPressed: () {
-                // Open terms URL
+                Navigator.of(context).pushNamed(AppRouter.termsOfService);
               },
               child: Text(
                 'Terms of Use',
@@ -844,7 +919,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             ),
             TextButton(
               onPressed: () {
-                // Open privacy URL
+                Navigator.of(context).pushNamed(AppRouter.privacyPolicy);
               },
               child: Text(
                 'Privacy Policy',
@@ -858,6 +933,50 @@ class _PaywallScreenState extends State<PaywallScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Route used by [AppRouter.paywall]: presents RevenueCat’s dashboard paywall (then pops).
+///
+/// Navigating to `/paywall` used to build [PaywallScreen] directly, which is **only** the old
+/// custom Flutter UI and **never** loads your RevenueCat Paywall v2 design.
+class PaywallRouteScreen extends StatefulWidget {
+  const PaywallRouteScreen({super.key});
+
+  @override
+  State<PaywallRouteScreen> createState() => _PaywallRouteScreenState();
+}
+
+class _PaywallRouteScreenState extends State<PaywallRouteScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    final result = await PaywallScreen.showRevenueCatPaywallOrCustom(context);
+    if (!mounted) return;
+    nav.pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundDark,
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primaryOrange.withValues(alpha: 0.85),
+          ),
+        ),
+      ),
     );
   }
 }

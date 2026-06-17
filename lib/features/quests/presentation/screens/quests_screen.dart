@@ -5,7 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../../shared/services/feature_gate_config.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../data/models/parva_model.dart';
 import '../../data/repositories/parva_repository.dart';
 import '../widgets/parva_card.dart';
@@ -318,7 +318,7 @@ class _QuestsScreenState extends ConsumerState<QuestsScreen> {
               ParvaCard(
                 parva: parva,
                 onTap: isLocked
-                    ? () => PaywallScreen.showAsBottomSheet(context)
+                    ? () => navigateToProfileForProUpgrade(context)
                     : () => _onParvaTap(parva.id),
               ),
               if (isLocked)

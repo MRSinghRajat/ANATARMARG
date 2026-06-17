@@ -28,7 +28,7 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
   double _fontSize = 18.0;
   ReaderFont _readerFont = ReaderFont.serif;
   ReaderTheme _readerTheme = ReaderTheme.paper;
-  ReaderLayout _readerLayout = ReaderLayout.scroll;
+  ReaderLayout _readerLayout = ReaderLayout.card;
 
   static const _bg1 = Color(0xFF0D0B08);
   static const _bg2 = Color(0xFF1A1510);

@@ -7,12 +7,20 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:ashrae_playground/main.dart';
+import 'package:antarmarg/main.dart';
+import 'package:antarmarg/features/onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('App initializes and shows login screen',
       (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      SpiritualOnboardingScreen.onboardingCompleteKey: true,
+    });
+
     // Build our app and trigger a frame.
     await tester.pumpWidget(
       const ProviderScope(
@@ -20,25 +28,27 @@ void main() {
       ),
     );
 
-    // Wait for the app to fully initialize
-    await tester.pumpAndSettle();
-
-    // Verify that the app title is correct
-
+    // Splash + async prefs; avoid pumpAndSettle (login screen has endless animations).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
 
     // Verify that login screen elements are present (Google Sign-In button)
-    // The login screen should be the initial route
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 
   testWidgets('App has correct title', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      SpiritualOnboardingScreen.onboardingCompleteKey: true,
+    });
+
     await tester.pumpWidget(
       const ProviderScope(
         child: AntarMargApp(),
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
 
     // Verify app name appears somewhere in the UI
 

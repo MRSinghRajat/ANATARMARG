@@ -1,5 +1,5 @@
-# Uncomment this line to define a global platform for your project
-platform :ios, '13.0'
+# RevenueCat 9.x / PurchasesHybridCommon 17.x + RevenueCat iOS SDK need a modern floor; 15 avoids pod resolution errors.
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -37,14 +37,119 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # macOS Finder duplicates (e.g. "pb 2.h", "Headers 2", "Sources 2") under Pods break
+  # includes and often cause "duplicate symbols" at link time. Strip them after every pod install.
+  pods_root = installer.sandbox.root
+  Dir.glob(File.join(pods_root, '**', '*')).sort_by { |p| -p.length }.each do |abs|
+    base = File.basename(abs)
+    next unless base =~ /\s2(\.|$)/ || base.end_with?(' 2')
+    FileUtils.rm_rf(abs)
+  rescue StandardError => e
+    warn "[Podfile] could not remove macOS duplicate #{abs}: #{e}"
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['CODE_SIGN_IDENTITY[sdk=iphonesimulator*]'] = ''
       config.build_settings['CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]'] = ''
       config.build_settings['OTHER_CODE_SIGN_FLAGS'] = '--strip-disallowed-xattrs'
     end
   end
+
+  # GoogleUtilities: CocoaPods tarball sometimes omits third_party/IsAppEncrypted/Public/IsAppEncrypted.h
+  # (IsAppEncrypted.m still #imports it) → Xcode "file not found". Also remove a stray "third_party 2" folder
+  # that breaks resolution. Matches google/GoogleUtilities on GitHub.
+  # https://github.com/google/GoogleUtilities/tree/main/third_party/IsAppEncrypted
+  gu_root = File.join(installer.sandbox.root, 'GoogleUtilities')
+  if File.directory?(gu_root)
+    bad_dup = File.join(gu_root, 'third_party 2')
+    FileUtils.rm_rf(bad_dup) if File.directory?(bad_dup)
+    is_enc_h = File.join(gu_root, 'third_party', 'IsAppEncrypted', 'Public', 'IsAppEncrypted.h')
+    unless File.exist?(is_enc_h)
+      FileUtils.mkdir_p(File.dirname(is_enc_h))
+      File.write(is_enc_h, <<~'HDR')
+        // Copyright (c) 2017 Landon J. Fuller <landon@landonf.org>
+        // All rights reserved.
+        //
+        // Permission is hereby granted, free of charge, to any person obtaining a copy
+        // of this software and associated documentation files (the "Software"), to
+        // deal in the Software without restriction, including without limitation the
+        // rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+        // sell copies of the Software, and to permit persons to whom the Software is
+        // furnished to do so, subject to the following conditions:
+        //
+        // The above copyright notice and this permission notice shall be included in
+        // all copies or substantial portions of the Software.
+        //
+        // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+        // IN THE SOFTWARE.
+
+        #import <objc/objc.h>
+
+        BOOL IsAppEncrypted(void);
+      HDR
+    end
+  end
+
+  # GoogleUtilities pod tarball can omit Logger/UserDefaults .m files (headers only) → undefined GULOSLog* / kGULLogSubsystem.
+  # Restore from upstream tag matching Podfile.lock (~8.1.0) and add compile entries to the GoogleUtilities native target.
+  require 'open-uri'
+  gu_internal = File.join(installer.sandbox.root, 'GoogleUtilities', 'GoogleUtilities')
+  logger_m = File.join(gu_internal, 'Logger', 'GULLogger.m')
+  ud_m = File.join(gu_internal, 'UserDefaults', 'GULUserDefaults.m')
+  gu_logger_url = 'https://raw.githubusercontent.com/google/GoogleUtilities/8.1.0/GoogleUtilities/Logger/GULLogger.m'
+  gu_ud_url = 'https://raw.githubusercontent.com/google/GoogleUtilities/8.1.0/GoogleUtilities/UserDefaults/GULUserDefaults.m'
+  if File.directory?(gu_internal)
+    FileUtils.mkdir_p(File.dirname(logger_m))
+    FileUtils.mkdir_p(File.dirname(ud_m))
+    unless File.exist?(logger_m) && File.size(logger_m) > 1000
+      File.write(logger_m, URI.parse(gu_logger_url).open('r:UTF-8', &:read))
+    end
+    unless File.exist?(ud_m) && File.size(ud_m) > 500
+      File.write(ud_m, URI.parse(gu_ud_url).open('r:UTF-8', &:read))
+    end
+  end
+
+  pbx_gu = File.join(installer.sandbox.root, 'Pods.xcodeproj', 'project.pbxproj')
+  if File.exist?(pbx_gu)
+    pbx = File.read(pbx_gu)
+    unless pbx.include?('GULLogger.m in Sources')
+      ref_log = 'C1D2E3F4A5B6071829ABCDEF01'
+      bld_log = 'C1D2E3F4A5B6071829ABCDEF02'
+      ref_ud = 'C1D2E3F4A5B6071829ABCDEF03'
+      bld_ud = 'C1D2E3F4A5B6071829ABCDEF04'
+      pfx = "\t\t"
+      pbx.sub!(
+        "/* Begin PBXBuildFile section */\n",
+        "/* Begin PBXBuildFile section */\n#{pfx}#{bld_log} /* GULLogger.m in Sources */ = {isa = PBXBuildFile; fileRef = #{ref_log} /* GULLogger.m */; };\n#{pfx}#{bld_ud} /* GULUserDefaults.m in Sources */ = {isa = PBXBuildFile; fileRef = #{ref_ud} /* GULUserDefaults.m */; };\n"
+      )
+      pbx.sub!(
+        "/* Begin PBXFileReference section */\n",
+        "/* Begin PBXFileReference section */\n#{pfx}#{ref_log} /* GULLogger.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = GULLogger.m; path = GoogleUtilities/Logger/GULLogger.m; sourceTree = \"<group>\"; };\n#{pfx}#{ref_ud} /* GULUserDefaults.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = GULUserDefaults.m; path = GoogleUtilities/UserDefaults/GULUserDefaults.m; sourceTree = \"<group>\"; };\n"
+      )
+      pbx.sub!(
+        "\t\t\t\tCCCED5E6F9680D8489AD32BD4894A0EC /* GULLoggerLevel.h */,\n\t\t\t);\n\t\t\tname = Logger;",
+        "\t\t\t\tCCCED5E6F9680D8489AD32BD4894A0EC /* GULLoggerLevel.h */,\n\t\t\t\t#{ref_log} /* GULLogger.m */,\n\t\t\t);\n\t\t\tname = Logger;"
+      )
+      pbx.sub!(
+        "\t\t\t\t35A1A5174FC31243D778EBFA03CC8DF5 /* GULUserDefaults.h */,\n\t\t\t);\n\t\t\tname = UserDefaults;",
+        "\t\t\t\t35A1A5174FC31243D778EBFA03CC8DF5 /* GULUserDefaults.h */,\n\t\t\t\t#{ref_ud} /* GULUserDefaults.m */,\n\t\t\t);\n\t\t\tname = UserDefaults;"
+      )
+      pbx.sub!(
+        "\t\t\t\t16B4B1350343A02FEF275596850003B2 /* GULSceneDelegateSwizzler.m in Sources */,\n\t\t\t\t64D7DB2FDF1F40E2D81C7DE71DF3F766 /* IsAppEncrypted.m in Sources */,",
+        "\t\t\t\t16B4B1350343A02FEF275596850003B2 /* GULSceneDelegateSwizzler.m in Sources */,\n\t\t\t\t#{bld_log} /* GULLogger.m in Sources */,\n\t\t\t\t#{bld_ud} /* GULUserDefaults.m in Sources */,\n\t\t\t\t64D7DB2FDF1F40E2D81C7DE71DF3F766 /* IsAppEncrypted.m in Sources */,"
+      )
+      File.write(pbx_gu, pbx)
+    end
+  end
+
   # AppCheckCore 11.2 pod tarball omits GACAppCheckSettings.m and GACAppCheck.m. Add both from official source so build and link succeed.
   # https://github.com/google/app-check
   core_dir = File.join(installer.sandbox.root, 'AppCheckCore', 'AppCheckCore', 'Sources', 'Core')

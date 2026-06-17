@@ -1,7 +1,7 @@
-name: ashrae_playground
-description: Ashrae Playground - A copy of the original project.
+name: antarmarg
+description: Antar Marg — spiritual journey, Aangan sanctuary, Granthalaya, and daily practice.
 publish_to: 'none'
-version: 1.0.0+4
+version: 1.0.0+12
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -53,9 +53,9 @@ dependencies:
   app_links: ^6.3.2
   image_picker: ^1.0.7
   
-  # In-App Purchases (RevenueCat)
-  purchases_flutter: ^8.10.1
-  purchases_ui_flutter: ^8.10.1
+  # In-App Purchases (RevenueCat) — 9.8+ required for Test Store API key
+  purchases_flutter: ^9.8.0
+  purchases_ui_flutter: ^9.8.0
   
   # URL Launcher (for subscription management)
   url_launcher: ^6.2.0
@@ -77,12 +77,18 @@ dependencies:
   # Location for day/night (Aangan sky)
   geolocator: ^13.0.2
   permission_handler: ^11.3.1
+  scrollable_positioned_list: ^0.3.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.4
+
+# 2.6.0+ pulls in `objective_c` (Dart code assets / hooks). That path can fail on iOS with
+# "lipo: can't open ... objective_c.dylib" when hooks output is missing. 2.5.1 uses the classic plugin.
+dependency_overrides:
+  path_provider_foundation: 2.5.1
 
 flutter:
   uses-material-design: true
@@ -91,9 +97,11 @@ flutter:
     - assets/images/
     - assets/images/deities/
     - assets/animations/
-    - assets/sounds/
+    # Only startup / Profile background loop is bundled; all other audio comes from Supabase (URLs).
+    - assets/sounds/backgroundmusic.mp3
     - assets/fonts/
     - assets/html/   # includes temple.glb for 3D Mandir (~64 MB)
+    - assets/onboarding_intro/
     - .env
 
   fonts:
@@ -143,4 +151,12 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
+  # Match logo canvas; adaptive foreground is centered in the safe zone on Android.
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon.png"
   min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icon.png"
+    background_color: "#000000"
+    theme_color: "#000000"

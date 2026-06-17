@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_router.dart';
 import '../../../../shared/services/coin_service.dart';
-import '../../../../shared/widgets/app_network_image.dart';
 import '../../../../shared/widgets/flying_coins_animation.dart';
 import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/journey_logic.dart';
@@ -29,15 +30,44 @@ class JourneyTaskDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<JourneyTaskDetailScreen> createState() => _JourneyTaskDetailScreenState();
 }
 
-/// Predefined Karma points for every journey task completion.
-const int _kJourneyTaskCoinReward = 3;
+/// Fallback coin reward when task.coinReward is 0 (DB not yet updated).
+const int _kJourneyTaskCoinReward = 5;
 
 class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScreen> {
   int _mantraCount = 0;
   bool _isCompleting = false;
   final GlobalKey _completeButtonKey = GlobalKey();
-  /// When true, show Hindi inline content; when false, show English. Only used when both are available.
   bool _showHindiContent = false;
+
+  Widget _appBarTitleWidget() {
+    // Unconditional watches — never put ref.watch inside AsyncValue.when branches (Riverpod rule).
+    final uj = ref.watch(userJourneyProvider(widget.userJourneyId)).valueOrNull;
+    final typeId = uj?.journeyTypeId ?? '';
+    final tasksAsync = ref.watch(journeyTasksProvider(typeId));
+    if (uj == null) {
+      return _appBarTitleText('Task');
+    }
+    return tasksAsync.when(
+      data: (tasks) {
+        final task = tasks.where((t) => t.id == widget.taskId).firstOrNull;
+        return _appBarTitleText(task?.title ?? 'Task');
+      },
+      loading: () => _appBarTitleText('Task'),
+      error: (_, __) => _appBarTitleText('Task'),
+    );
+  }
+
+  Widget _appBarTitleText(String title) {
+    return Text(
+      title,
+      style: GoogleFonts.inter(
+        fontWeight: FontWeight.w700,
+        fontSize: 16,
+        color: AppColors.zinc100,
+      ),
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,10 +76,11 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     return Scaffold(
       backgroundColor: AppColors.ashramBackgroundDark,
       appBar: AppBar(
-        title: const Text('Task'),
+        title: _appBarTitleWidget(),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: AppColors.zinc100,
+        surfaceTintColor: Colors.transparent,
       ),
       body: journeyAsync.when(
         data: (userJourney) {
@@ -58,7 +89,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           }
           return _buildTaskContent(userJourney);
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryOrange),
+        ),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
     );
@@ -66,12 +99,14 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
 
   Widget _buildTaskContent(UserJourney userJourney) {
     final tasksAsync = ref.watch(journeyTasksProvider(userJourney.journeyTypeId));
+    final completedTodayAsync =
+        ref.watch(journeyCompletedTaskIdsTodayProvider(widget.userJourneyId));
+    final completedToday = completedTodayAsync.valueOrNull ?? {};
     return tasksAsync.when(
       data: (tasks) {
         final task = tasks.where((t) => t.id == widget.taskId).firstOrNull;
         if (task == null) return const Center(child: Text('Task not found'));
 
-        // One table, one query: journey_content_pool by task_slug
         final poolAsync = ref.watch(contentPoolByTaskSlugProvider(ContentPoolParams(
           taskSlug: task.slug,
           journeyTypeId: userJourney.journeyTypeId,
@@ -80,7 +115,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
         return poolAsync.when(
           data: (poolList) {
             if (poolList.isEmpty) {
-              return _buildNoContent(task, userJourney);
+              return _buildNoContent(task, userJourney, tasks, completedToday);
             }
             final rotationType = poolList.first['rotation_type'] as String? ?? 'sequential';
             final picked = JourneyRepository.pickFromPool(
@@ -89,22 +124,32 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               rotationType,
             );
             if (picked != null) {
-              return _buildUnifiedContentTask(task, picked, userJourney);
+              return _buildUnifiedContentTask(task, picked, userJourney, tasks, completedToday);
             }
-            return _buildNoContent(task, userJourney);
+            return _buildNoContent(task, userJourney, tasks, completedToday);
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _buildNoContent(task, userJourney),
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.primaryOrange),
+          ),
+          error: (e, _) => _buildNoContent(task, userJourney, tasks, completedToday),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryOrange),
+      ),
       error: (e, _) => Center(child: Text('Error: $e')),
     );
   }
 
   /// Renders content from one row: content, content_hindi, instruction (or transliteration+translation+benefits), audio_url, ref_type+ref_id.
   /// UI matches reference: icon + title + Hindi + duration, subtitle + language toggle, mantra box, INSTRUCTION with subsections, Mark Complete.
-  Widget _buildUnifiedContentTask(JourneyTask task, Map<String, dynamic> row, UserJourney userJourney) {
+  Widget _buildUnifiedContentTask(
+    JourneyTask task,
+    Map<String, dynamic> row,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
     final content = _str(row['content']);
     final contentHindi = _str(row['content_hindi']);
     final instruction = _str(row['instruction']);
@@ -112,20 +157,25 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     final transliteration = _str(row['transliteration']);
     final translation = _str(row['translation']);
     final benefits = row['benefits'];
-    final audioUrl = _str(row['audio_url']);
     final refType = _str(row['ref_type']);
     final refId = _str(row['ref_id']);
+    final refSlug = _str(row['ref_slug']);
+    final refForLink = (refId != null && refId.isNotEmpty) ? refId : refSlug;
     final title = _str(row['title']) ?? task.title;
     final titleHindi = _str(row['title_hindi']) ?? task.titleHindi;
-    final durationMinutes = row['duration_seconds'] is int
-        ? (row['duration_seconds'] as int) ~/ 60
-        : (row['duration_seconds'] as num?)?.toInt()?.clamp(0, 999) ?? task.durationMinutes ?? 0;
+    final rawSecs = row['duration_seconds'];
+    final durationMinutes = rawSecs is int
+        ? rawSecs ~/ 60
+        : rawSecs is num
+            ? rawSecs.toInt().clamp(0, 999) ~/ 60
+            : task.durationMinutes ?? 0;
 
     final useHindi = _showHindiContent && (contentHindi != null || instructionHindi != null);
     final mainText = _cleanContentText(useHindi ? (contentHindi ?? content ?? '') : (content ?? contentHindi ?? ''));
     final instructionText = _cleanContentText(useHindi ? (instructionHindi ?? instruction ?? '') : (instruction ?? instructionHindi ?? ''));
 
-    final hasRef = refType != null && refType.isNotEmpty && refId != null && refId.isNotEmpty;
+    final hasRef =
+        refType != null && refType.isNotEmpty && refForLink != null && refForLink.isNotEmpty;
     final hasStructuredInstruction = (transliteration != null && transliteration.isNotEmpty) ||
         (translation != null && translation.isNotEmpty) ||
         (benefits is List && benefits.isNotEmpty);
@@ -152,17 +202,19 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               ],
             ),
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.25), width: 1),
-              ),
-              child: Text(
-                mainText,
-                style: GoogleFonts.crimsonPro(fontSize: 18, color: Colors.white.withValues(alpha: 0.9), height: 1.9),
+            RepaintBoundary(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.25), width: 1),
+                ),
+                child: _JourneyLongMantraText(
+                  text: mainText,
+                  style: GoogleFonts.crimsonPro(fontSize: 18, color: Colors.white.withValues(alpha: 0.9), height: 1.9),
+                ),
               ),
             ),
           ],
@@ -212,7 +264,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('• ', style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold)),
+                        Text('• ', style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange)),
                         Expanded(
                           child: Text(
                             _cleanContentText(s),
@@ -230,22 +282,24 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 style: GoogleFonts.inter(fontSize: 14, color: Colors.white.withValues(alpha: 0.85), height: 1.5),
               ),
           ],
-          if (audioUrl != null && audioUrl.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(Icons.audiotrack_rounded, size: 20, color: AppColors.matteGold),
-                const SizedBox(width: 8),
-                Text('Audio available', style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.9))),
-              ],
-            ),
+          // Meditation timer — shown when task type is meditation + duration > 0
+          if ((task.taskType == 'meditation' || task.taskType == 'yoga') &&
+              durationMinutes > 0) ...[
+            const SizedBox(height: 24),
+            _MeditationTimerButton(durationMinutes: durationMinutes),
           ],
+          // Mantra counter — shown for mantra tasks with a target count
+          if (task.taskType == 'mantra' && (task.mantraCount ?? 0) > 0) ...[
+            const SizedBox(height: 24),
+            _buildMantraCounter(task.mantraCount!),
+          ],
+          // Open in Granthalaya link
           if (hasRef) ...[
             const SizedBox(height: 16),
-            _buildRefLink(refType!, refId!),
+            _buildRefLink(refType, refForLink),
           ],
           const SizedBox(height: 32),
-          _buildCompleteButton(task, userJourney),
+          _buildCompleteButton(task, userJourney, allTasks, completedTaskIdsToday),
           const SizedBox(height: 48),
         ],
       ),
@@ -269,9 +323,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFF2D1B4D),
+                color: AppColors.journeyDeepPurple.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.2)),
+                border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.2)),
               ),
               child: Center(
                 child: Text(icon, style: GoogleFonts.crimsonPro(fontSize: 24, color: Colors.white)),
@@ -297,11 +351,11 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.timer_outlined, size: 16, color: AppColors.matteGold.withValues(alpha: 0.9)),
+                        Icon(Icons.timer_outlined, size: 16, color: AppColors.primaryOrange.withValues(alpha: 0.9)),
                         const SizedBox(width: 4),
                         Text(
                           '$durationMinutes min',
-                          style: GoogleFonts.inter(fontSize: 13, color: AppColors.matteGold.withValues(alpha: 0.9)),
+                          style: GoogleFonts.inter(fontSize: 13, color: AppColors.primaryOrange.withValues(alpha: 0.9)),
                         ),
                       ],
                     ),
@@ -321,7 +375,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -335,7 +389,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
 
   Widget _segmentChip({required String label, required bool selected, required VoidCallback onTap}) {
     return Material(
-      color: selected ? AppColors.matteGold : Colors.transparent,
+      color: selected ? AppColors.primaryOrange : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
@@ -355,26 +409,58 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     );
   }
 
-  Widget _buildRefLink(String refType, String refId) {
+  Widget _buildRefLink(String refType, String refIdOrSlug) {
+    if (refType == 'lullaby') {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.primaryOrange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.22)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.nightlight_round, color: AppColors.primaryOrange, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Pick any calm song or lullaby you love and sing it yourself — in your own voice. '
+                'No playback in the app; your live singing is what nurtures your baby.',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.88),
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final label = switch (refType) {
+      'sacred_text' => 'Open in Granthalaya',
+      _ => 'Read in Granthalaya',
+    };
     return Material(
-      color: AppColors.matteGold.withValues(alpha: 0.1),
+      color: AppColors.primaryOrange.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: () => _navigateToRef(refType, refId),
+        onTap: () => _navigateToRef(refType, refIdOrSlug),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Icon(refType == 'lullaby' ? Icons.library_music_rounded : Icons.menu_book_rounded, color: AppColors.matteGold, size: 22),
+              Icon(Icons.menu_book_rounded, color: AppColors.primaryOrange, size: 22),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  refType == 'lullaby' ? 'Play Lullaby' : 'Read Story',
-                  style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.matteGold),
+                  label,
+                  style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryOrange),
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: AppColors.matteGold.withValues(alpha: 0.8)),
+              Icon(Icons.chevron_right_rounded, color: AppColors.primaryOrange.withValues(alpha: 0.8)),
             ],
           ),
         ),
@@ -383,14 +469,22 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
   }
 
   void _navigateToRef(String refType, String refId) {
-    if (refType == 'lullaby') {
-      Navigator.of(context).pushNamed('/audio/lullaby', arguments: refId);
-    } else if (refType == 'sacred_story' || refType == 'story') {
-      Navigator.of(context).pushNamed('/sacred-story', arguments: refId);
-    }
+    if (refType == 'lullaby') return;
+    Navigator.of(context).pushNamed(
+      AppRouter.journeyOpenContent,
+      arguments: {
+        'refType': refType,
+        'refIdOrSlug': refId,
+      },
+    );
   }
 
-  Widget _buildNoContent(JourneyTask task, UserJourney userJourney) {
+  Widget _buildNoContent(
+    JourneyTask task,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -405,7 +499,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             ),
           ),
           const SizedBox(height: 32),
-          _buildCompleteButton(task, userJourney),
+          _buildCompleteButton(task, userJourney, allTasks, completedTaskIdsToday),
           const SizedBox(height: 48),
         ],
       ),
@@ -414,7 +508,13 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
 
   /// Universal rendering: show content from resolved map using standard keys.
   /// Handles body_text, lyrics, description, name, ritual_steps, transliteration, translation, audio, duration.
-  Widget _buildResolvedContentTask(JourneyTask task, Map<String, dynamic> resolved, UserJourney userJourney) {
+  Widget _buildResolvedContentTask(
+    JourneyTask task,
+    Map<String, dynamic> resolved,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
     final title = _str(resolved['title']) ?? _str(resolved['name']) ?? _str(resolved['name_sanskrit']) ?? task.title;
     final body = _str(resolved['body_text']) ?? _str(resolved['content']) ?? _str(resolved['lyrics']) ?? _str(resolved['description']) ?? _str(resolved['subtitle']);
     final transliteration = _str(resolved['transliteration']);
@@ -454,7 +554,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
                 _cleanContentText(significance),
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.85), height: 1.5),
+                style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange.withValues(alpha: 0.85), height: 1.5),
               ),
             ),
           if (hasMainText)
@@ -463,7 +563,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.1)),
+                border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.1)),
               ),
               child: Text(
                 _cleanContentText(body!),
@@ -474,7 +574,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             const SizedBox(height: 12),
             Text(
               _cleanContentText(transliteration),
-              style: GoogleFonts.crimsonPro(fontSize: 15, fontStyle: FontStyle.italic, color: AppColors.matteGold.withValues(alpha: 0.9)),
+              style: GoogleFonts.crimsonPro(fontSize: 15, fontStyle: FontStyle.italic, color: AppColors.primaryOrange.withValues(alpha: 0.9)),
             ),
           ],
           if (translation != null && translation.isNotEmpty) ...[
@@ -499,19 +599,19 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.15)),
+                    border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.15)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_cleanContentText(stepTitle), style: GoogleFonts.crimsonPro(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.matteGold)),
+                      Text(_cleanContentText(stepTitle), style: GoogleFonts.crimsonPro(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.primaryOrange)),
                       if (desc.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(_cleanContentText(desc), style: GoogleFonts.inter(fontSize: 14, color: Colors.white.withValues(alpha: 0.8), height: 1.5)),
                       ],
                       if (mantra != null && mantra.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text(_cleanContentText(mantra), style: GoogleFonts.crimsonPro(fontSize: 14, fontStyle: FontStyle.italic, color: AppColors.matteGold.withValues(alpha: 0.9))),
+                        Text(_cleanContentText(mantra), style: GoogleFonts.crimsonPro(fontSize: 14, fontStyle: FontStyle.italic, color: AppColors.primaryOrange.withValues(alpha: 0.9))),
                       ],
                     ],
                   ),
@@ -523,9 +623,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.timer_outlined, size: 18, color: AppColors.matteGold.withValues(alpha: 0.8)),
+                Icon(Icons.timer_outlined, size: 18, color: AppColors.primaryOrange.withValues(alpha: 0.8)),
                 const SizedBox(width: 6),
-                Text('${durationSeconds ~/ 60} min', style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.8))),
+                Text('${durationSeconds ~/ 60} min', style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange.withValues(alpha: 0.8))),
               ],
             ),
           ],
@@ -533,7 +633,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             const SizedBox(height: 16),
             Text(
               'Audio available',
-              style: GoogleFonts.inter(fontSize: 12, color: AppColors.matteGold.withValues(alpha: 0.7)),
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.primaryOrange.withValues(alpha: 0.7)),
             ),
           ],
           if (hasNothing && inlineMap != null) ...[
@@ -550,7 +650,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               ),
             ),
           const SizedBox(height: 32),
-          _buildCompleteButton(task, userJourney),
+          _buildCompleteButton(task, userJourney, allTasks, completedTaskIdsToday),
           const SizedBox(height: 48),
         ],
       ),
@@ -577,7 +677,12 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
         .trim();
   }
 
-  Widget _buildInlineTask(JourneyTask task, UserJourney userJourney) {
+  Widget _buildInlineTask(
+    JourneyTask task,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
     final contentMapEn = _parseInlineContentJson(task.inlineContent);
     final contentMapHi = _parseInlineContentJson(task.inlineContentHindi);
     final hasBoth = contentMapEn != null && contentMapHi != null;
@@ -601,16 +706,16 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                   label: const Text('English'),
                   selected: !_showHindiContent,
                   onSelected: (v) => setState(() => _showHindiContent = false),
-                  selectedColor: AppColors.matteGold.withValues(alpha: 0.3),
-                  labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.zinc500 : AppColors.matteGold),
+                  selectedColor: AppColors.primaryOrange.withValues(alpha: 0.3),
+                  labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.zinc500 : AppColors.primaryOrange),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
                   label: const Text('हिंदी'),
                   selected: _showHindiContent,
                   onSelected: (v) => setState(() => _showHindiContent = true),
-                  selectedColor: AppColors.matteGold.withValues(alpha: 0.3),
-                  labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.matteGold : AppColors.zinc500),
+                  selectedColor: AppColors.primaryOrange.withValues(alpha: 0.3),
+                  labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.primaryOrange : AppColors.zinc500),
                 ),
               ],
             ),
@@ -625,7 +730,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.1)),
+                border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.1)),
               ),
               child: Text(
                 task.inlineContent!,
@@ -638,7 +743,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             _buildMantraCounter(task.mantraCount!),
           ],
           const SizedBox(height: 32),
-          _buildCompleteButton(task, userJourney),
+          _buildCompleteButton(task, userJourney, allTasks, completedTaskIdsToday),
           const SizedBox(height: 48),
         ],
       ),
@@ -689,7 +794,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           padding: const EdgeInsets.only(bottom: 16),
           child: Text(
             _cleanContentText(subtitle),
-            style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.9)),
+            style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange.withValues(alpha: 0.9)),
           ),
         ),
       );
@@ -701,7 +806,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.1)),
+            border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.1)),
           ),
           child: Text(
             _cleanContentText(bodyText),
@@ -715,7 +820,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
         const SizedBox(height: 12),
         Text(
           _cleanContentText(transliteration),
-          style: GoogleFonts.crimsonPro(fontSize: 15, fontStyle: FontStyle.italic, color: AppColors.matteGold.withValues(alpha: 0.9)),
+          style: GoogleFonts.crimsonPro(fontSize: 15, fontStyle: FontStyle.italic, color: AppColors.primaryOrange.withValues(alpha: 0.9)),
         ),
       ]);
     }
@@ -740,7 +845,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     if (benefits is List && benefits.isNotEmpty) {
       children.addAll([
         const SizedBox(height: 16),
-        Text('Benefits', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.matteGold)),
+        Text('Benefits', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryOrange)),
         const SizedBox(height: 6),
         ...(benefits as List).map((e) {
           final s = _str(e);
@@ -750,7 +855,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('• ', style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.8))),
+                Text('• ', style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange.withValues(alpha: 0.8))),
                 Expanded(child: Text(_cleanContentText(s), style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.8)))),
               ],
             ),
@@ -763,9 +868,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
         const SizedBox(height: 12),
         Row(
           children: [
-            Icon(Icons.timer_outlined, size: 18, color: AppColors.matteGold.withValues(alpha: 0.8)),
+            Icon(Icons.timer_outlined, size: 18, color: AppColors.primaryOrange.withValues(alpha: 0.8)),
             const SizedBox(width: 6),
-            Text('${durationSeconds ~/ 60} min', style: GoogleFonts.inter(fontSize: 14, color: AppColors.matteGold.withValues(alpha: 0.8))),
+            Text('${durationSeconds ~/ 60} min', style: GoogleFonts.inter(fontSize: 14, color: AppColors.primaryOrange.withValues(alpha: 0.8))),
           ],
         ),
       ]);
@@ -773,7 +878,13 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     return children;
   }
 
-  Widget _buildPoolTask(JourneyTask task, JourneyContentItem? item, UserJourney userJourney) {
+  Widget _buildPoolTask(
+    JourneyTask task,
+    JourneyContentItem? item,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -797,7 +908,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.1)),
+                  border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.1)),
                 ),
                 child: Text(
                   item.content!,
@@ -814,7 +925,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             Center(child: Text('No content available today', style: GoogleFonts.inter(color: Colors.white38))),
           ],
           const SizedBox(height: 32),
-          _buildCompleteButton(task, userJourney),
+          _buildCompleteButton(task, userJourney, allTasks, completedTaskIdsToday),
           const SizedBox(height: 48),
         ],
       ),
@@ -846,9 +957,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.timer_outlined, size: 16, color: AppColors.matteGold.withValues(alpha: 0.6)),
+              Icon(Icons.timer_outlined, size: 16, color: AppColors.primaryOrange.withValues(alpha: 0.6)),
               const SizedBox(width: 4),
-              Text('${task.durationMinutes} min', style: GoogleFonts.inter(fontSize: 12, color: AppColors.matteGold.withValues(alpha: 0.6))),
+              Text('${task.durationMinutes} min', style: GoogleFonts.inter(fontSize: 12, color: AppColors.primaryOrange.withValues(alpha: 0.6))),
             ],
           ),
         ],
@@ -857,7 +968,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
   }
 
   Widget _buildContentCard(JourneyContentItem item) {
-    final hasNavigation = item.refType != null && item.refType!.isNotEmpty;
+    final hasNavigation = item.refType != null &&
+        item.refType!.isNotEmpty &&
+        item.refType != 'lullaby';
     final coverImage = item.resolvedCoverImage;
 
     return Material(
@@ -870,7 +983,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.15)),
+            border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.15)),
           ),
           child: Row(
             children: [
@@ -879,7 +992,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                   padding: const EdgeInsets.only(right: 14),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(width: 56, height: 56, child: AppNetworkImage(imageUrl: coverImage, fit: BoxFit.cover)),
+                    child: SizedBox(width: 56, height: 56, child: Image.network(coverImage, fit: BoxFit.cover)),
                   ),
                 )
               else
@@ -888,7 +1001,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                   child: Container(
                     width: 56, height: 56,
                     decoration: BoxDecoration(
-                      color: AppColors.matteGold.withValues(alpha: 0.1),
+                      color: AppColors.primaryOrange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(child: Text(item.icon.isNotEmpty ? item.icon : '📖', style: const TextStyle(fontSize: 24))),
@@ -907,14 +1020,14 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                       const SizedBox(height: 2),
                       Text(
                         _refTypeLabel(item.refType!),
-                        style: GoogleFonts.inter(fontSize: 11, color: AppColors.matteGold.withValues(alpha: 0.6)),
+                        style: GoogleFonts.inter(fontSize: 11, color: AppColors.primaryOrange.withValues(alpha: 0.6)),
                       ),
                     ],
                   ],
                 ),
               ),
               if (hasNavigation)
-                Icon(Icons.chevron_right, color: AppColors.matteGold.withValues(alpha: 0.4)),
+                Icon(Icons.chevron_right, color: AppColors.primaryOrange.withValues(alpha: 0.4)),
             ],
           ),
         ),
@@ -926,7 +1039,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     switch (refType) {
       case 'story': return 'Sacred Story';
       case 'sacred_text': return 'Sacred Text';
-      case 'lullaby': return 'Lullaby';
+      case 'lullaby': return 'Sing your favourite song';
       case 'chapter': return 'Chapter';
       case 'verse': return 'Verse';
       default: return refType;
@@ -934,32 +1047,28 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
   }
 
   void _navigateToContent(JourneyContentItem item) {
+    final slug = item.refSlug ?? item.refId ?? '';
+    if (slug.isEmpty) return;
+    if (item.refType == 'lullaby') return;
     switch (item.refType) {
       case 'story':
-        if (item.refSlug != null) {
-          Navigator.of(context).pushNamed('/sacred-story', arguments: item.refSlug);
-        }
-        break;
+      case 'sacred_story':
+        Navigator.of(context).pushNamed(
+          AppRouter.journeyOpenContent,
+          arguments: {'refType': 'sacred_story', 'refIdOrSlug': slug},
+        );
+        return;
       case 'sacred_text':
-        if (item.refSlug != null) {
-          Navigator.of(context).pushNamed('/sacred-text', arguments: item.refSlug);
-        }
-        break;
-      case 'lullaby':
-        if (item.refId != null) {
-          Navigator.of(context).pushNamed('/audio/lullaby', arguments: item.refId);
-        }
-        break;
-      case 'chapter':
-        if (item.refId != null) {
-          Navigator.of(context).pushNamed('/books/chapter', arguments: item.refId);
-        }
-        break;
-      case 'verse':
-        if (item.refId != null) {
-          Navigator.of(context).pushNamed('/verses', arguments: item.refId);
-        }
-        break;
+        Navigator.of(context).pushNamed(
+          AppRouter.journeyOpenContent,
+          arguments: {'refType': 'sacred_text', 'refIdOrSlug': slug},
+        );
+        return;
+      default:
+        Navigator.of(context).pushNamed(
+          AppRouter.journeyOpenContent,
+          arguments: {'refType': 'sacred_story', 'refIdOrSlug': slug},
+        );
     }
   }
 
@@ -967,13 +1076,13 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.matteGold.withValues(alpha: 0.05),
+        color: AppColors.primaryOrange.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.15)),
+        border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.15)),
       ),
       child: Column(
         children: [
-          Text('MANTRA COUNT', style: GoogleFonts.cinzel(fontSize: 10, color: AppColors.matteGold, letterSpacing: 2)),
+          Text('MANTRA COUNT', style: GoogleFonts.cinzel(fontSize: 10, color: AppColors.primaryOrange, letterSpacing: 2)),
           const SizedBox(height: 16),
           GestureDetector(
             onTap: () {
@@ -991,16 +1100,16 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.matteGold.withValues(alpha: _mantraCount >= target ? 0.4 : 0.15),
-                    AppColors.matteGold.withValues(alpha: _mantraCount >= target ? 0.2 : 0.05),
+                    AppColors.primaryOrange.withValues(alpha: _mantraCount >= target ? 0.4 : 0.15),
+                    AppColors.primaryOrange.withValues(alpha: _mantraCount >= target ? 0.2 : 0.05),
                   ],
                 ),
-                border: Border.all(color: AppColors.matteGold.withValues(alpha: 0.3), width: 2),
+                border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.3), width: 2),
               ),
               child: Center(
                 child: Text(
                   '$_mantraCount',
-                  style: GoogleFonts.crimsonPro(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.matteGold),
+                  style: GoogleFonts.crimsonPro(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryOrange),
                 ),
               ),
             ),
@@ -1013,36 +1122,91 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           const SizedBox(height: 4),
           Text(
             _mantraCount >= target ? 'Complete!' : 'Tap to count',
-            style: GoogleFonts.inter(fontSize: 12, color: _mantraCount >= target ? AppColors.matteGold : Colors.white.withValues(alpha: 0.3)),
+            style: GoogleFonts.inter(fontSize: 12, color: _mantraCount >= target ? AppColors.primaryOrange : Colors.white.withValues(alpha: 0.3)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCompleteButton(JourneyTask task, UserJourney userJourney) {
+  Widget _buildCompleteButton(
+    JourneyTask task,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) {
+    final calendarPhase = JourneyLogic.getCurrentPhaseFromTasks(userJourney, allTasks);
+    final reason = JourneyLogic.taskCompletionBlockedReason(
+      userJourney: userJourney,
+      task: task,
+      calendarPhase: calendarPhase,
+      allTasks: allTasks,
+      completedTaskIdsToday: completedTaskIdsToday,
+    );
+    final canComplete = reason == null;
     return KeyedSubtree(
       key: _completeButtonKey,
-      child: ElevatedButton(
-        onPressed: _isCompleting ? null : () => _completeTask(task, userJourney),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.matteGold,
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-        child: _isCompleting
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-            : Text('Mark Complete', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (reason != null) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.zinc500.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                reason,
+                style: GoogleFonts.inter(fontSize: 13, height: 1.4, color: AppColors.zinc500),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          ElevatedButton(
+            onPressed: (_isCompleting || !canComplete) ? null : () => _completeTask(task, userJourney, allTasks, completedTaskIdsToday),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryOrange,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              disabledBackgroundColor: AppColors.zinc500.withValues(alpha: 0.35),
+              disabledForegroundColor: Colors.black54,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: _isCompleting
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                : Text(
+                    canComplete ? 'Mark Complete' : 'Complete unavailable',
+                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _completeTask(JourneyTask task, UserJourney userJourney) async {
+  Future<void> _completeTask(
+    JourneyTask task,
+    UserJourney userJourney,
+    List<JourneyTask> allTasks,
+    Set<String> completedTaskIdsToday,
+  ) async {
+    final calendarPhase = JourneyLogic.getCurrentPhaseFromTasks(userJourney, allTasks);
+    if (!JourneyLogic.canCompleteTaskToday(
+      userJourney: userJourney,
+      task: task,
+      calendarPhase: calendarPhase,
+      allTasks: allTasks,
+      completedTaskIdsToday: completedTaskIdsToday,
+    )) {
+      return;
+    }
     setState(() => _isCompleting = true);
     try {
       final repo = ref.read(journeyRepositoryProvider);
-      final coins = _kJourneyTaskCoinReward;
+      // Use coin reward from DB; fall back to constant only if 0/null
+      final coins = (task.coinReward > 0) ? task.coinReward : _kJourneyTaskCoinReward;
       await repo.completeTask(
         userId: userJourney.userId,
         userJourneyId: widget.userJourneyId,
@@ -1052,6 +1216,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
       );
       await CoinService().addCoins(coins);
       ref.invalidate(todaysJourneyTasksProvider(widget.userJourneyId));
+      ref.invalidate(displayedJourneyTasksProvider(widget.userJourneyId));
+      ref.invalidate(journeyCompletedTaskIdsTodayProvider(widget.userJourneyId));
+      ref.invalidate(allJourneyTasksWithTodayCompletionProvider(widget.userJourneyId));
       if (mounted) {
         await FlyingCoinsAnimation.show(
           context,
@@ -1067,7 +1234,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${task.title} completed! +$coins $currencyName'),
-              backgroundColor: AppColors.matteGold.withValues(alpha: 0.9),
+              backgroundColor: AppColors.primaryOrange.withValues(alpha: 0.9),
             ),
           );
           Navigator.of(context).pop();
@@ -1082,5 +1249,199 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     } finally {
       if (mounted) setState(() => _isCompleting = false);
     }
+  }
+}
+
+// ─── Meditation Timer ─────────────────────────────────────────────────────────
+
+class _MeditationTimerButton extends StatefulWidget {
+  final int durationMinutes;
+
+  const _MeditationTimerButton({required this.durationMinutes});
+
+  @override
+  State<_MeditationTimerButton> createState() => _MeditationTimerButtonState();
+}
+
+class _MeditationTimerButtonState extends State<_MeditationTimerButton> {
+  Timer? _timer;
+  int _secondsRemaining = 0;
+  bool _running = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsRemaining = widget.durationMinutes * 60;
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startPause() {
+    if (_running) {
+      _timer?.cancel();
+      setState(() => _running = false);
+    } else {
+      if (_secondsRemaining <= 0) {
+        _secondsRemaining = widget.durationMinutes * 60;
+      }
+      setState(() => _running = true);
+      _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() {
+          _secondsRemaining--;
+          if (_secondsRemaining <= 0) {
+            _running = false;
+            t.cancel();
+            HapticFeedback.heavyImpact();
+          }
+        });
+      });
+    }
+  }
+
+  void _reset() {
+    _timer?.cancel();
+    setState(() {
+      _running = false;
+      _secondsRemaining = widget.durationMinutes * 60;
+    });
+  }
+
+  String get _display {
+    final m = _secondsRemaining ~/ 60;
+    final s = _secondsRemaining % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final done = _secondsRemaining <= 0;
+    final total = widget.durationMinutes * 60;
+    final progress = done ? 1.0 : 1.0 - (_secondsRemaining / total);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.ashramCardDark,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'MEDITATION TIMER',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryOrange,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 90,
+                height: 90,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 4,
+                  backgroundColor: AppColors.charcoalCard,
+                  valueColor: AlwaysStoppedAnimation(
+                    done ? Colors.greenAccent : AppColors.primaryOrange,
+                  ),
+                ),
+              ),
+              Text(
+                done ? '✓' : _display,
+                style: GoogleFonts.inter(
+                  fontSize: done ? 28 : 22,
+                  fontWeight: FontWeight.w700,
+                  color: done ? Colors.greenAccent : AppColors.zinc100,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: done ? _reset : _startPause,
+                icon: Icon(
+                  done
+                      ? Icons.refresh_rounded
+                      : (_running ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                  size: 20,
+                ),
+                label: Text(done ? 'Restart' : (_running ? 'Pause' : 'Start')),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryOrange,
+                  foregroundColor: Colors.black87,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              if (_running || (!done && _secondsRemaining < widget.durationMinutes * 60)) ...[
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: _reset,
+                  child: Text('Reset', style: GoogleFonts.inter(color: AppColors.zinc500)),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Avoids layout jank from multi‑KB Devanagari blocks: show a preview first, expand on demand.
+class _JourneyLongMantraText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _JourneyLongMantraText({required this.text, required this.style});
+
+  @override
+  State<_JourneyLongMantraText> createState() => _JourneyLongMantraTextState();
+}
+
+class _JourneyLongMantraTextState extends State<_JourneyLongMantraText> {
+  static const int _previewChars = 2200;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.text;
+    if (t.length <= _previewChars) {
+      return Text(t, style: widget.style);
+    }
+    final shown = _expanded ? t : '${t.substring(0, _previewChars).trim()}…';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(shown, style: widget.style),
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          child: Text(
+            _expanded ? 'Show less' : 'Show full text (${t.length} characters)',
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryOrange,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

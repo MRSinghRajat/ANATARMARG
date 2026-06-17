@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../shared/services/premium_service.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../data/models/garbh_sanskar_models.dart';
 import '../../data/repositories/garbh_sanskar_repository.dart';
 import '../providers/garbh_sanskar_providers.dart';
@@ -102,7 +102,7 @@ class GarbhSanskarContentListScreen extends ConsumerWidget {
                     final isPremium =
                         await PremiumService.instance.isPremium;
                     if (!isPremium && context.mounted) {
-                      PaywallScreen.showAsBottomSheet(context);
+                      navigateToProfileForProUpgrade(context);
                       return;
                     }
                   }

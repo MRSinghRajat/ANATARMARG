@@ -4,18 +4,18 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../../../core/theme/app_colors.dart';
 import '../../../data/panchang/panchang_models.dart';
 
-/// Today pill: tithi/details on left, date/day on right, calendar icon. Tap pill → details; tap icon → month view.
+/// Today pill: tithi/details on left, date/day on right. Tap pill → details. Calendar is in Practice Tools.
 class TodayPill extends StatelessWidget {
   const TodayPill({
     super.key,
     required this.day,
     required this.onTapDetails,
-    required this.onTapCalendar,
+    this.onTapCalendar,
   });
 
   final PanchangDay day;
   final VoidCallback onTapDetails;
-  final VoidCallback onTapCalendar;
+  final VoidCallback? onTapCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -164,28 +164,30 @@ class TodayPill extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Material(
-            color: AppColors.panchangGlass,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              onTap: onTapCalendar,
+          if (onTapCalendar != null) ...[
+            const SizedBox(width: 8),
+            Material(
+              color: AppColors.panchangGlass,
               borderRadius: BorderRadius.circular(10),
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.panchangBorder),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.calendar_month_rounded,
-                  color: AppColors.panchangGold,
-                  size: 24,
+              child: InkWell(
+                onTap: onTapCalendar,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.panchangBorder),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.calendar_month_rounded,
+                    color: AppColors.panchangGold,
+                    size: 24,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/services/premium_service.dart';
 import '../../../profile/presentation/providers/language_provider.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../data/models/custom_habit_model.dart';
 import '../../data/services/custom_habit_service.dart';
 
@@ -32,6 +36,8 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
   String _selectedIcon = 'check_circle';
   int? _targetStreak;
   bool _isLoading = false;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
   final _habitService = CustomHabitService.instance;
 
@@ -40,6 +46,12 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
   @override
   void initState() {
     super.initState();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
     if (widget.editingHabit != null) {
       _titleController.text = widget.editingHabit!.title;
       _descriptionController.text = widget.editingHabit!.description ?? '';
@@ -52,172 +64,208 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      behavior: HitTestBehavior.translucent,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.cardDark,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+  Widget _buildSubmitButton() {
+    final lang = ref.watch(languageProvider);
+    return _isPremium
+        ? ElevatedButton(
+            onPressed: _isLoading ? null : _saveHabit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryOrange,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 16),
-              
-              // Title + Close button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
                     isEditing
-                        ? AppStrings.get('edit_habit', ref.watch(languageProvider))
-                        : AppStrings.get('create_new_habit', ref.watch(languageProvider)),
+                        ? AppStrings.get('save_changes', lang)
+                        : AppStrings.get('create_habit', lang),
                     style: GoogleFonts.poppins(
                       color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close, color: Colors.white54, size: 18),
-                    ),
-                  ),
-                ],
+          )
+        : OutlinedButton(
+            onPressed: () => navigateToProfileForProUpgrade(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primaryOrange,
+              side: BorderSide(color: AppColors.primaryOrange.withValues(alpha: 0.5)),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 20),
-              
-              // Habit name
-              _buildTextField(
-                controller: _titleController,
-                label: 'Habit Name',
-                hint: 'e.g., Drink 8 glasses of water',
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a habit name';
-                  }
-                  return null;
-                },
+            ),
+            child: Text(
+              'Upgrade to Pro',
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 16),
-              
-              // Description (optional)
-              _buildTextField(
-                controller: _descriptionController,
-                label: 'Description (optional)',
-                hint: 'Add more details about this habit',
-                maxLines: 2,
-              ),
-              const SizedBox(height: 20),
-              
-              // Icon selection
-              _buildSectionLabel('Choose Icon'),
-              const SizedBox(height: 8),
-              _buildIconSelector(),
-              const SizedBox(height: 20),
-              
-              // Frequency
-              _buildSectionLabel('Frequency'),
-              const SizedBox(height: 8),
-              _buildFrequencySelector(),
-              
-              // Day selector (for specific days)
-              if (_frequency == HabitFrequency.specificDays) ...[
-                const SizedBox(height: 16),
-                _buildDaySelector(),
-              ],
-              const SizedBox(height: 20),
-              
-              // Target streak (optional)
-              _buildSectionLabel('Target Streak (optional)'),
-              const SizedBox(height: 8),
-              _buildTargetStreakSelector(),
-              const SizedBox(height: 24),
-              
-              // Suggestions
-              if (!isEditing) ...[
-                _buildSectionLabel('Quick Add'),
-                const SizedBox(height: 8),
-                _buildSuggestions(),
-                const SizedBox(height: 24),
-              ],
-              
-              // Submit button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveHabit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryOrange,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : Text(
-                          isEditing
-                              ? AppStrings.get('save_changes', ref.watch(languageProvider))
-                              : AppStrings.get('create_habit', ref.watch(languageProvider)),
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+            ),
+          );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: mq.size.height * 0.92),
+          decoration: const BoxDecoration(
+            color: AppColors.cardDark,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                isEditing
+                                    ? AppStrings.get('edit_habit', ref.watch(languageProvider))
+                                    : AppStrings.get('create_new_habit', ref.watch(languageProvider)),
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.08),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        _buildTextField(
+                          controller: _titleController,
+                          label: 'Habit Name',
+                          hint: 'e.g., Drink 8 glasses of water',
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a habit name';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: _descriptionController,
+                          label: 'Description (optional)',
+                          hint: 'Add more details about this habit',
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildSectionLabel('Choose Icon'),
+                        const SizedBox(height: 8),
+                        _buildIconSelector(),
+                        const SizedBox(height: 20),
+                        _buildSectionLabel('Frequency'),
+                        const SizedBox(height: 8),
+                        _buildFrequencySelector(),
+                        if (_frequency == HabitFrequency.specificDays) ...[
+                          const SizedBox(height: 16),
+                          _buildDaySelector(),
+                        ],
+                        const SizedBox(height: 20),
+                        _buildSectionLabel('Target Streak (optional)'),
+                        const SizedBox(height: 8),
+                        _buildTargetStreakSelector(),
+                        const SizedBox(height: 24),
+                        if (!isEditing) ...[
+                          _buildSectionLabel('Quick Add'),
+                          const SizedBox(height: 8),
+                          _buildSuggestions(),
+                          const SizedBox(height: 16),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
+              Material(
+                color: AppColors.cardDark,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardDark,
+                    border: Border(
+                      top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: _buildSubmitButton(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -528,6 +576,10 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
 
   Future<void> _saveHabit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!await PremiumService.instance.isPremium) {
+      if (mounted) navigateToProfileForProUpgrade(context);
+      return;
+    }
 
     setState(() => _isLoading = true);
 

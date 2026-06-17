@@ -193,12 +193,14 @@ class DailyTaskRepository {
     return selectedTasks;
   }
 
-  /// Complete a task
-  Future<bool> completeTask(String taskId) async {
-    if (_userId == null) return false;
+  /// Complete a task. [DailyTaskCompleteOutcome.grantedNewRewards] is false if this row was
+  /// already rewarded (re-check after un-check) — caller must not add coins/XP again.
+  Future<DailyTaskCompleteOutcome> completeTask(String taskId) async {
+    if (_userId == null) {
+      return const DailyTaskCompleteOutcome(success: false);
+    }
 
     try {
-      // Get the task to calculate rewards
       final taskResponse = await _supabase
           .from('user_daily_tasks')
           .select('*, daily_task_templates(*)')
@@ -206,26 +208,58 @@ class DailyTaskRepository {
           .eq('user_id', _userId!)
           .single();
 
+      final rawGranted = taskResponse['rewards_granted_at'];
+      final priorGranted = rawGranted != null
+          ? DateTime.tryParse(rawGranted.toString())
+          : null;
+      final alreadyRewarded = priorGranted != null;
+
       final templateJson = taskResponse['daily_task_templates'];
       final coinReward = templateJson?['coin_reward'] as int? ?? 5;
       final karmaReward = templateJson?['karma_reward'] as int? ?? 1;
 
-      // Update task status
+      final nowIso = AppClock.now().toIso8601String();
+
+      if (alreadyRewarded) {
+        await _supabase
+            .from('user_daily_tasks')
+            .update({
+              'status': 'completed',
+              'completed_at': nowIso,
+              'coins_earned': coinReward,
+              'karma_earned': karmaReward,
+            })
+            .eq('id', taskId)
+            .eq('user_id', _userId!);
+
+        return DailyTaskCompleteOutcome(
+          success: true,
+          grantedNewRewards: false,
+          rewardsGrantedAt: priorGranted,
+        );
+      }
+
       await _supabase
           .from('user_daily_tasks')
           .update({
             'status': 'completed',
-            'completed_at': AppClock.now().toIso8601String(),
+            'completed_at': nowIso,
             'coins_earned': coinReward,
             'karma_earned': karmaReward,
+            'rewards_granted_at': nowIso,
           })
           .eq('id', taskId)
           .eq('user_id', _userId!);
 
-      return true;
+      final grantedAt = DateTime.tryParse(nowIso) ?? DateTime.now();
+      return DailyTaskCompleteOutcome(
+        success: true,
+        grantedNewRewards: true,
+        rewardsGrantedAt: grantedAt,
+      );
     } catch (e) {
       print('Error completing task: $e');
-      return false;
+      return const DailyTaskCompleteOutcome(success: false);
     }
   }
 

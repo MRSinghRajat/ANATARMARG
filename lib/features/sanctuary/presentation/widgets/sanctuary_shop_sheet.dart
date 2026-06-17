@@ -44,6 +44,9 @@ typedef GroundTypeCallback = void Function(TempleGroundType type);
 /// Callback when a Mandir item is tapped (parent calls WebView JS)
 typedef MandirActionCallback = void Function(String jsCall);
 
+/// Mandir tab focal view (same 3D WebView): [MandirItems.mandirView] ids via [onMandirViewSelected].
+typedef MandirViewCallback = void Function(String mandirViewItemId);
+
 /// Which Aangan tab is active
 enum AanganTab { aatma, mandir }
 
@@ -60,6 +63,9 @@ class SanctuaryShopSheet extends StatefulWidget {
   final AppliedCallback? onApplied;
   final GroundTypeCallback? onGroundTypeChange;
   final MandirActionCallback? onMandirAction;
+  /// When [aanganTab] is Mandir: which layout is shown (3D vs Shiv Ling).
+  final String? mandirViewSelectionId;
+  final MandirViewCallback? onMandirViewSelected;
 
   const SanctuaryShopSheet({
     super.key,
@@ -73,6 +79,8 @@ class SanctuaryShopSheet extends StatefulWidget {
     this.onApplied,
     this.onGroundTypeChange,
     this.onMandirAction,
+    this.mandirViewSelectionId,
+    this.onMandirViewSelected,
   });
 
   @override
@@ -100,7 +108,13 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   // Track which Mandir item is selected per category (single-select tabs only)
   final Map<MandirCategory, String> _selectedMandirItems = {
     MandirCategory.light: 'mood_midday',
+    MandirCategory.deities: 'deity_none',
   };
+
+  // Mandir preview/apply (same pattern as Aatma: preview then Apply or Cancel)
+  MandirItem? _previewMandirItem;
+  MandirCategory? _previewMandirCategory;
+  bool _showMandirApplyOverlay = false;
 
   // Decor items that are currently active (toggleable, multiple allowed)
   final Set<String> _activeMandirDecor = {'dec_mandir', 'dec_diyas'};
@@ -115,7 +129,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
   int get _tabCount => widget.aanganTab == AanganTab.aatma
       ? _aatmaCategories.length
-      : MandirCategory.values.length + 1;
+      : MandirCategory.values.length;
 
   void _rebuildTabController() {
     _tabController = TabController(length: _tabCount, vsync: this);
@@ -132,11 +146,30 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   void initState() {
     super.initState();
     _rebuildTabController();
+    _syncMandirSelectionFromService();
     PremiumService.instance.isPremium.then((v) {
       if (mounted) setState(() => _isPremium = v);
     });
     _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
       if (mounted) setState(() => _isPremium = v);
+    });
+  }
+
+  void _syncMandirSelectionFromService() {
+    _customizationService.ensureInitialized().then((_) {
+      if (!mounted) return;
+      var updated = false;
+      final deityBg = _customizationService.mandirDeityBackground;
+      if (deityBg != null && deityBg.isNotEmpty && deityBg != 'none') {
+        _selectedMandirItems[MandirCategory.deities] = 'deity_$deityBg';
+        updated = true;
+      }
+      final lightId = _customizationService.mandirLightId;
+      if (lightId.isNotEmpty) {
+        _selectedMandirItems[MandirCategory.light] = lightId;
+        updated = true;
+      }
+      if (updated) setState(() {});
     });
   }
 
@@ -182,14 +215,16 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                           controller: _tabController,
                           children: widget.aanganTab == AanganTab.aatma
                               ? _aatmaCategories.map(_buildCategoryGrid).toList()
-                              : [
-                                  ...MandirCategory.values
-                                      .map(_buildMandirCategoryGrid),
-                                  _buildMandirOwnedView(),
-                                ],
+                              : MandirCategory.values
+                                  .map(_buildMandirCategoryGrid)
+                                  .toList(),
                         ),
                         if (_showApplyButton && _previewItem != null)
                           _buildApplyOverlay(),
+                        if (widget.aanganTab == AanganTab.mandir &&
+                            _showMandirApplyOverlay &&
+                            _previewMandirItem != null)
+                          _buildMandirApplyOverlay(),
                       ],
                     ),
                   ),
@@ -297,33 +332,20 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
                   );
                 }),
               ]
-            : [
-                ...MandirCategory.values.map((category) {
-                  return Tab(
-                    height: 28,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(category.emoji,
-                            style: const TextStyle(fontSize: 11)),
-                        const SizedBox(width: 3),
-                        Text(category.displayName),
-                      ],
-                    ),
-                  );
-                }),
-                const Tab(
+            : MandirCategory.values.map((category) {
+                return Tab(
                   height: 28,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('📦', style: TextStyle(fontSize: 11)),
-                      SizedBox(width: 3),
-                      Text('Owned'),
+                      Text(category.emoji,
+                          style: const TextStyle(fontSize: 11)),
+                      const SizedBox(width: 3),
+                      Text(category.displayName),
                     ],
                   ),
-                ),
-              ],
+                );
+              }).toList(),
       ),
     );
   }
@@ -348,6 +370,46 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
 
   Widget _buildMandirCategoryGrid(MandirCategory category) {
     final items = MandirItems.getItemsForCategory(category);
+    if (category == MandirCategory.mandir) {
+      return CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 0.80,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final item = items[index];
+                  final isSelected = _isMandirItemSelected(item, category);
+                  return _buildMandirItemCard(item, category, isSelected);
+                },
+                childCount: items.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 88),
+              child: Text(
+                'More items coming soon',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.tenorSans(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.38),
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 80),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -366,6 +428,7 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
   }
 
   bool _isMandirItemSelected(MandirItem item, MandirCategory category) {
+    final isPreview = _previewMandirItem?.id == item.id && _previewMandirCategory == category;
     if (category == MandirCategory.decor) {
       return _activeMandirDecor.contains(item.id);
     }
@@ -373,15 +436,28 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
       return _activeMandirFx.contains(item.id);
     }
     if (category == MandirCategory.ground) {
-      return 'ground_${_customizationService.templeGroundType.name}' == item.id;
+      final saved = 'ground_${_customizationService.templeGroundType.name}' == item.id;
+      return saved || isPreview;
     }
-    return _selectedMandirItems[category] == item.id;
+    if (category == MandirCategory.deities) {
+      final saved = (_selectedMandirItems[MandirCategory.deities] ?? 'deity_none') == item.id;
+      return saved || isPreview;
+    }
+    if (category == MandirCategory.mandir) {
+      final sel = widget.mandirViewSelectionId ?? MandirItems.idSacredTemple;
+      return item.id == sel;
+    }
+    return _selectedMandirItems[category] == item.id || isPreview;
   }
 
   Widget _buildMandirItemCard(
       MandirItem item, MandirCategory category, bool isSelected) {
     return GestureDetector(
       onTap: () async {
+        if (category == MandirCategory.mandir) {
+          widget.onMandirViewSelected?.call(item.id);
+          return;
+        }
         if (category == MandirCategory.ground) {
           final groundId = item.id.replaceFirst('ground_', '');
           TempleGroundType? type;
@@ -392,11 +468,31 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
             }
           }
           if (type != null) {
-            await _customizationService.setTempleGroundType(type);
-            widget.onGroundTypeChange?.call(type);
             widget.onMandirAction?.call(item.jsCall);
-            setState(() {});
+            setState(() {
+              _previewMandirItem = item;
+              _previewMandirCategory = MandirCategory.ground;
+              _showMandirApplyOverlay = true;
+            });
           }
+          return;
+        }
+        if (category == MandirCategory.deities) {
+          widget.onMandirAction?.call(item.jsCall);
+          setState(() {
+            _previewMandirItem = item;
+            _previewMandirCategory = MandirCategory.deities;
+            _showMandirApplyOverlay = true;
+          });
+          return;
+        }
+        if (category == MandirCategory.light) {
+          widget.onMandirAction?.call(item.jsCall);
+          setState(() {
+            _previewMandirItem = item;
+            _previewMandirCategory = MandirCategory.light;
+            _showMandirApplyOverlay = true;
+          });
           return;
         }
         setState(() {
@@ -406,17 +502,28 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
             } else {
               _activeMandirDecor.add(item.id);
             }
-          } else if (category == MandirCategory.fx) {
+            widget.onMandirAction?.call(item.jsCall);
+            return;
+          }
+          if (category == MandirCategory.fx) {
             if (_activeMandirFx.contains(item.id)) {
               _activeMandirFx.remove(item.id);
+              if (item.id == 'fx_dust') {
+                widget.onMandirAction?.call('toggleDust(null)');
+              } else {
+                widget.onMandirAction?.call("setSpecialFX('none',null)");
+              }
             } else {
               _activeMandirFx.add(item.id);
+              widget.onMandirAction?.call(item.jsCall);
             }
+            setState(() {});
+            return;
           } else {
             _selectedMandirItems[category] = item.id;
+            widget.onMandirAction?.call(item.jsCall);
           }
         });
-        widget.onMandirAction?.call(item.jsCall);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -1188,6 +1295,141 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
         ),
       ),
     );
+  }
+
+  Widget _buildMandirApplyOverlay() {
+    final item = _previewMandirItem!;
+    final category = _previewMandirCategory!;
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              AppColors.ashramBackgroundDark.withValues(alpha: 0.95),
+              AppColors.ashramBackgroundDark,
+            ],
+            stops: const [0.0, 0.3, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _cancelMandirPreview,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.tenorSans(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: _applyMandirPreview,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.ashramAccentGold,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 4,
+                  ),
+                  child: Text(
+                    'Apply',
+                    style: GoogleFonts.tenorSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _cancelMandirPreview() {
+    final category = _previewMandirCategory;
+    if (category == MandirCategory.deities) {
+      final saved = _customizationService.mandirDeityBackground;
+      final slug = (saved != null && saved.isNotEmpty && saved != 'none') ? saved : 'none';
+      widget.onMandirAction?.call("setDeityBackground('$slug')");
+    }
+    if (category == MandirCategory.ground) {
+      final saved = _customizationService.templeGroundType;
+      widget.onMandirAction?.call("setFloor('${saved.name}',null)");
+      widget.onGroundTypeChange?.call(saved);
+    }
+    if (category == MandirCategory.light) {
+      final savedId = _customizationService.mandirLightId;
+      final match = MandirItems.light.where((e) => e.id == savedId).toList();
+      if (match.isNotEmpty) {
+        widget.onMandirAction?.call(match.first.jsCall);
+      } else {
+        widget.onMandirAction?.call("mood('midday',null)");
+      }
+    }
+    setState(() {
+      _previewMandirItem = null;
+      _previewMandirCategory = null;
+      _showMandirApplyOverlay = false;
+    });
+  }
+
+  Future<void> _applyMandirPreview() async {
+    final item = _previewMandirItem!;
+    final category = _previewMandirCategory!;
+    if (category == MandirCategory.deities) {
+      final slug = item.id == 'deity_none' ? 'none' : item.id.replaceFirst('deity_', '');
+      await _customizationService.setMandirDeityBackground(
+          slug == 'none' ? null : slug);
+      _selectedMandirItems[MandirCategory.deities] = item.id;
+    }
+    if (category == MandirCategory.ground) {
+      final groundId = item.id.replaceFirst('ground_', '');
+      for (final t in TempleGroundType.values) {
+        if (t.name == groundId) {
+          await _customizationService.setTempleGroundType(t);
+          widget.onGroundTypeChange?.call(t);
+          break;
+        }
+      }
+    }
+    if (category == MandirCategory.light) {
+      await _customizationService.setMandirLight(item.id);
+      _selectedMandirItems[MandirCategory.light] = item.id;
+    }
+    setState(() {
+      _previewMandirItem = null;
+      _previewMandirCategory = null;
+      _showMandirApplyOverlay = false;
+    });
   }
 
   Widget _buildDeityZoomFitControls() {

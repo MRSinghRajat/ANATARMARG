@@ -145,7 +145,10 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0B1623;font-famil
   .card .ce{font-size:0.8rem!important;}
   .strip{gap:4px!important;padding:0 8px 4px!important;}
 }
-
+.pooja-btn{position:fixed;top:50%;right:12px;transform:translateY(-50%);z-index:100;background:rgba(212,175,55,0.15);border:1px solid rgba(212,175,55,0.5);color:#1a1a1a;padding:6px 10px;border-radius:8px;font-family:'Cormorant Garamond',serif;font-size:0.75rem;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);transition:all 0.3s;box-shadow:0 0 10px rgba(212,175,55,0.2);letter-spacing:0.5px;display:none;pointer-events:all;}
+.pooja-btn.show{display:flex;}
+.pooja-btn:active{transform:translateY(-50%) scale(0.95);}
+.pooja-btn.active{background:rgba(212,175,55,0.35);box-shadow:0 0 20px rgba(212,175,55,0.5);color:#1a1a1a;border-color:#D4AF37;}
 </style>
 </head>
 <body>
@@ -159,10 +162,12 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0B1623;font-famil
 
 <div id="hud" style="display:none"></div>
 <div id="hint" style="display:none"></div>
+<div id="pooja-btn" class="pooja-btn show" onclick="startPooja()">START ARTI</div>
 
 <div id="panel" class="show">
   <div class="tabs">
     <div class="tab on" onclick="switchTab('om',this)"><span class="ti">🕉</span><span class="tl">OM</span></div>
+    <div class="tab" onclick="switchTab('deities',this)"><span class="ti">🙏</span><span class="tl">DEITY</span></div>
     <div class="tab" onclick="switchTab('rings',this)"><span class="ti">💫</span><span class="tl">RINGS</span></div>
     <div class="tab" onclick="switchTab('color',this)"><span class="ti">🎨</span><span class="tl">COLOR</span></div>
     <div class="tab" onclick="switchTab('glow',this)"><span class="ti">🔆</span><span class="tl">GLOW</span></div>
@@ -170,6 +175,27 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0B1623;font-famil
     <div class="tab" onclick="switchTab('fx',this)"><span class="ti">✨</span><span class="tl">FX</span></div>
     <div class="tab" onclick="switchTab('decor',this)"><span class="ti">🏡</span><span class="tl">DECOR</span></div>
     <div class="tab" onclick="switchTab('light',this)"><span class="ti">🕯️</span><span class="tl">LIGHT</span></div>
+    <div class="tab" onclick="switchTab('settings',this)"><span class="ti">⚙️</span><span class="tl">PREFS</span></div>
+  </div>
+
+  <!-- DEITIES TAB -->
+  <div class="tc" id="tc-deities">
+    <div class="slbl">Select Deity Background</div>
+    <div class="strip" id="deities-strip">
+      <div class="card on" onclick="setDeityBackground('none', this)"><span class="ce" style="font-size:1.3rem">∅</span><span class="cn">None</span></div>
+      <div class="card" onclick="setDeityBackground('shiva', this)"><img src="assets/images/deities/shiva.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Shiva</span></div>
+      <div class="card" onclick="setDeityBackground('krishna', this)"><img src="assets/images/deities/krishna.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Krishna</span></div>
+      <div class="card" onclick="setDeityBackground('hanuman', this)"><img src="assets/images/deities/hanuman.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Hanuman</span></div>
+      <div class="card" onclick="setDeityBackground('durga', this)"><img src="assets/images/deities/durga.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Durga</span></div>
+      <div class="card" onclick="setDeityBackground('ganesha', this)"><img src="assets/images/deities/ganesha.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Ganesha</span></div>
+      <div class="card" onclick="setDeityBackground('saraswati', this)"><img src="assets/images/deities/saraswati.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Saraswati</span></div>
+      <div class="card" onclick="setDeityBackground('rama', this)"><img src="assets/images/deities/rama.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Rama</span></div>
+      <div class="card" onclick="setDeityBackground('vishnu', this)"><img src="assets/images/deities/vishnu.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Vishnu</span></div>
+      <div class="card" onclick="setDeityBackground('lakshmi', this)"><img src="assets/images/deities/lakshmi.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Lakshmi</span></div>
+      <div class="card" onclick="setDeityBackground('kartikeya', this)"><img src="assets/images/deities/kartikeya.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Kartikeya</span></div>
+      <div class="card" onclick="setDeityBackground('narasimha', this)"><img src="assets/images/deities/narasimha.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Narasimha</span></div>
+      <div class="card" onclick="setDeityBackground('indra', this)"><img src="assets/images/deities/indra.png" style="width:30px;height:30px;object-fit:cover;border-radius:50%;margin-bottom:4px;"/><span class="cn">Indra</span></div>
+    </div>
   </div>
 
   <!-- OM TAB -->
@@ -354,6 +380,14 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0B1623;font-famil
     </div>
   </div>
 
+  <!-- RATINGS / SETTINGS TAB -->
+  <div class="tc" id="tc-settings">
+    <div class="slbl">Preferences & Setup</div>
+    <div class="strip">
+      <div class="card" onclick="resetDefaults()"><span class="ce" style="font-size:1.3rem">🔄</span><span class="cn">Reset Defaults</span></div>
+    </div>
+  </div>
+
   <!-- LIGHT TAB -->
   <div class="tc" id="tc-light">
     <div class="slbl">Mood</div>
@@ -420,7 +454,7 @@ const cam = new THREE.PerspectiveCamera(90,W()/H(),0.05,60);
 let FIXED_THETA_cur = 0.0, FIXED_PHI_cur = 0.28;
 const FIXED_THETA = 0.0, FIXED_PHI = 0.28;
 let theta=0.0, phi=0.28, radius=5.5;
-const target=new THREE.Vector3(0.0,0.5,-1.0);
+const target=new THREE.Vector3(0.0,0.28,-2.4);
 function updateCam(){
   const cosP = Math.cos(FIXED_PHI_cur);
   const sinP = Math.sin(FIXED_PHI_cur);
@@ -630,6 +664,7 @@ scene.add(wallFrames);
 // Ring controls – from RINGS tab only
 var ringColor = { r: 212, g: 175, b: 55 };
 var ringType = 'minimal';
+var ringThinMode = true;
 var ringMotionSpeed = 1;
 var ringFrame = 'rings';
 function setRingColor(r, g, b, el) {
@@ -734,7 +769,7 @@ function paintRingsToCtx(ctx, w, h, t) {
     const radius = (baseR + i * step + pulse * (ringType === 'double' ? 4 : 8)) * (w / 1024);
     const opacity = Math.max(0.12, (ringType === 'double' ? 0.22 : 0.32) - i * (ringType === 'double' ? 0.02 : 0.04));
     ctx.strokeStyle = 'rgba(' + ringColor.r + ',' + ringColor.g + ',' + ringColor.b + ',' + opacity + ')';
-    ctx.lineWidth = (ringType === 'double' ? 1 : 1.5) * (w / 1024);
+    ctx.lineWidth = (ringThinMode ? 0.45 : (ringType === 'double' ? 1 : 1.5)) * (w / 1024);
     ctx.beginPath(); ctx.arc(cx, cy, radius, 0, twoPi); ctx.stroke();
   }
 }
@@ -1229,12 +1264,15 @@ ringWallPlane.position.set(0, RH/2, -RD/2 + 0.55);
 ringWallPlane.renderOrder = 0;
 scene.add(ringWallPlane);
 
+var deityBackdropPlane = null;
+
 /* Trim & pillars hidden for black-night mode */
 
 const objs={};
 
 let templeLoaded = false;
 let templeGroup = null;
+let shivlingStructureGroup = null;
 
 function mkMandir() {
   const g = new THREE.Group();
@@ -1270,6 +1308,7 @@ function mkMandir() {
         tBounce.position.set(g.position.x+tcenter.x, g.position.y+tbox.min.y+0.3, g.position.z+tcenter.z);
         tHalo.position.set(g.position.x+tcenter.x, g.position.y+tbox.max.y+0.5, g.position.z+tcenter.z);
         toast('✨ Temple loaded!');
+        if (typeof window !== 'undefined' && window.__mandirStructureViewId && window.__mandirStructureViewId !== 'mandir_3d') setMandirStructureView(window.__mandirStructureViewId);
       },
       function(progress) { if(progress.total > 0) console.log('Temple loading:', Math.round(progress.loaded / progress.total * 100) + '%'); },
       function(error) {
@@ -1278,10 +1317,99 @@ function mkMandir() {
         const fallback = mkMandirFallback();
         while(g.children.length) g.remove(g.children[0]);
         fallback.children.forEach(c => g.add(c.clone()));
+        if (typeof window !== 'undefined' && window.__mandirStructureViewId && window.__mandirStructureViewId !== 'mandir_3d') setMandirStructureView(window.__mandirStructureViewId);
       }
     );
-  } catch(e) { const fallback = mkMandirFallback(); while(g.children.length) g.remove(g.children[0]); fallback.children.forEach(c => g.add(c)); }
+  } catch(e) { const fallback = mkMandirFallback(); while(g.children.length) g.remove(g.children[0]); fallback.children.forEach(c => g.add(c)); if (typeof window !== 'undefined' && window.__mandirStructureViewId && window.__mandirStructureViewId !== 'mandir_3d') setMandirStructureView(window.__mandirStructureViewId); }
   return g;
+}
+
+/** Procedural Shivling in the same scene as the mandir (floor, fog, lighting unchanged). */
+function mkShivlingStructure() {
+  const g = new THREE.Group();
+  g.name = 'shivlingStructureGroup';
+  const stone = new THREE.MeshStandardMaterial({ color: 0x6a6560, roughness: 0.82, metalness: 0.06 });
+  const stoneDark = new THREE.MeshStandardMaterial({ color: 0x4a4540, roughness: 0.88, metalness: 0.04 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xd4a017, roughness: 0.42, metalness: 0.4, emissive: 0x332200, emissiveIntensity: 0.12 });
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x1a3048, roughness: 0.35, metalness: 0.25 });
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.68, 0.14, 40), stoneDark);
+  base.position.y = 0.07;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  g.add(base);
+
+  const baseRim = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.018, 8, 48), gold);
+  baseRim.rotation.x = Math.PI / 2;
+  baseRim.position.y = 0.01;
+  g.add(baseRim);
+
+  const pool = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.05, 32), waterMat);
+  pool.position.y = 0.12;
+  g.add(pool);
+
+  const ling = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.21, 0.92, 24), stone);
+  ling.position.y = 0.65;
+  ling.castShadow = true;
+  ling.receiveShadow = true;
+  g.add(ling);
+
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 16), stone);
+  cap.position.y = 1.08;
+  cap.scale.set(1, 0.78, 1);
+  cap.castShadow = true;
+  g.add(cap);
+
+  const tripY = 0.58;
+  for (let i = 0; i < 3; i++) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.018, 0.025), gold);
+    line.position.set(0, tripY + i * 0.048, 0.21);
+    g.add(line);
+  }
+
+  const bindu = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 10), gold);
+  bindu.position.set(0, tripY - 0.06, 0.22);
+  g.add(bindu);
+
+  return g;
+}
+
+/** Flutter Mandir tab: only Sacred Temple (mandir_3d) and Shiv Ling (mandir_shiv_ling). */
+function setMandirStructureView(viewId) {
+  var id = viewId;
+  if (id === 'shivling') id = 'mandir_shiv_ling';
+  if (id === 'temple' || !id) id = 'mandir_3d';
+  if (typeof id === 'string' && (id.indexOf('mandir_murti_') === 0 || id.indexOf('mandir_focal_') === 0)) id = 'mandir_3d';
+  if (typeof window !== 'undefined') window.__mandirStructureViewId = id;
+
+  const temple = objs.mandir;
+  if (!temple) return;
+
+  const isTemple = id === 'mandir_3d';
+  const isShivling = id === 'mandir_shiv_ling';
+
+  if (isTemple) {
+    if (shivlingStructureGroup) shivlingStructureGroup.visible = false;
+    temple.visible = true;
+    return;
+  }
+
+  if (isShivling) {
+    temple.visible = false;
+    if (!shivlingStructureGroup) {
+      shivlingStructureGroup = mkShivlingStructure();
+      scene.add(shivlingStructureGroup);
+    }
+    shivlingStructureGroup.position.copy(temple.position);
+    shivlingStructureGroup.rotation.copy(temple.rotation);
+    var sc = templeLoaded ? 1.12 : 0.92;
+    shivlingStructureGroup.scale.setScalar(sc);
+    shivlingStructureGroup.visible = true;
+    return;
+  }
+
+  if (shivlingStructureGroup) shivlingStructureGroup.visible = false;
+  temple.visible = true;
 }
 
 function mkMandirFallback(){
@@ -1417,12 +1545,154 @@ function mood(id,el){
 const clock=new THREE.Clock();
 let pts2=650;
 
+const ripples = [];
+const rippleGeo = new THREE.TorusGeometry(0.15, 0.012, 4, 32);
+function spawnRipple(pt) {
+  const rm = new THREE.MeshBasicMaterial({color: 0xffcc44, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending});
+  const r = new THREE.Mesh(rippleGeo, rm);
+  r.position.copy(pt);
+  r.position.y += 0.015;
+  r.rotation.x = -Math.PI/2;
+  scene.add(r);
+  ripples.push({mesh: r, life: 0});
+}
+
+var poojaActive = false;
+var poojaAudio = null;
+var aartiThali = null;
+var hangingBellsGrp = null;
+
+/** Synced from Flutter Profile → Background Sound (Mandir WebView). */
+window.__mandirBgSoundDesired = true;
+window.__mandirBgVolume = 0.5;
+function setMandirBackgroundMusicVolume(v) {
+  var x = parseFloat(v);
+  if (isNaN(x)) x = 1;
+  window.__mandirBgVolume = Math.max(0, Math.min(1, x));
+  if (poojaAudio) {
+    try { poojaAudio.volume = window.__mandirBgVolume; } catch (e) {}
+  }
+}
+function setMandirBackgroundMusicEnabled(enabled) {
+  window.__mandirBgSoundDesired = !!enabled;
+  if (!enabled) {
+    if (poojaAudio) {
+      try { poojaAudio.pause(); poojaAudio.currentTime = 0; } catch (e) {}
+    }
+  } else if (poojaActive && poojaAudio) {
+    try { poojaAudio.volume = (typeof window.__mandirBgVolume === 'number' && !isNaN(window.__mandirBgVolume)) ? window.__mandirBgVolume : 1; } catch (e2) {}
+    poojaAudio.play().catch(function(e){ toast('Audio playback blocked - Please interact first'); });
+  }
+}
+
+function startPooja() {
+  poojaActive = !poojaActive;
+  var btn = document.getElementById('pooja-btn');
+  if(poojaActive) {
+    btn.innerHTML = 'END ARTI';
+    btn.classList.add('active');
+
+    if(!poojaAudio) {
+      var audioUrl = 'assets/sounds/backgroundmusic.mp3';
+      poojaAudio = new Audio(audioUrl);
+      poojaAudio.loop = true;
+      try {
+        poojaAudio.volume = (typeof window.__mandirBgVolume === 'number' && !isNaN(window.__mandirBgVolume)) ? window.__mandirBgVolume : 1;
+      } catch (ev) {}
+    }
+    if (typeof window.__mandirBgSoundDesired === 'undefined' || window.__mandirBgSoundDesired) {
+      poojaAudio.play().catch(function(e){ toast('Audio playback blocked - Please interact first'); });
+    }
+
+    if(!aartiThali) {
+      aartiThali = new THREE.Group();
+      var thaliMesh = new THREE.Group();
+      var base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.04, 32), new THREE.MeshStandardMaterial({color: 0xffcc44, metalness: 0.8, roughness: 0.2}));
+      var poojaFlame = new THREE.PointLight(0xffa500, 3.5, 9);
+      poojaFlame.position.set(0, 0.1, 0);
+
+      var flameCore = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+      flameCore.position.set(0, 0.08, 0);
+      var flameGlow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), new THREE.MeshBasicMaterial({color: 0xffa500, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending}));
+      flameGlow.position.set(0, 0.1, 0);
+
+      thaliMesh.add(base, poojaFlame, flameCore, flameGlow);
+
+      for(var i=0; i<5; i++) {
+        var angle = (i/5)*Math.PI*2;
+        var dx = Math.cos(angle)*0.35;
+        var dz = Math.sin(angle)*0.35;
+        var df = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+        var dg = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshBasicMaterial({color: 0xffa500, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending}));
+        df.position.set(dx, 0.05, dz);
+        dg.position.set(dx, 0.06, dz);
+        thaliMesh.add(df, dg);
+      }
+      aartiThali.add(thaliMesh);
+      scene.add(aartiThali);
+
+      hangingBellsGrp = new THREE.Group();
+      var bMat = new THREE.MeshStandardMaterial({color: 0xd4a853, metalness: 0.8, roughness: 0.2});
+      var ropeMat = new THREE.MeshBasicMaterial({color: 0x880000});
+      var bellGeo = new THREE.CylinderGeometry(0.06, 0.2, 0.3, 16);
+      var clapperGeo = new THREE.SphereGeometry(0.04, 8, 8);
+
+      var basePositions = [
+        {x: -1.7, z: -1.5},
+        {x:  1.7, z: -1.5},
+        {x: -3.2, z: -2.0},
+        {x:  3.2, z: -2.0},
+        {x: -2.4, z: -3.0},
+        {x:  2.4, z: -3.0}
+      ];
+      basePositions.forEach(p => {
+        var g = new THREE.Group();
+        g.position.set(0, 0, 0);
+        var ropeLen = 1.0 + Math.random()*2.0;
+        var r = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, ropeLen), ropeMat);
+        r.position.y = -ropeLen/2;
+        var b = new THREE.Mesh(bellGeo, bMat);
+        b.position.y = -ropeLen - 0.15;
+        var c = new THREE.Mesh(clapperGeo, bMat);
+        c.position.y = -ropeLen - 0.32;
+        g.add(r, b, c);
+
+        var pivot = new THREE.Group();
+        pivot.position.set(p.x, 5.5, p.z);
+        pivot.add(g);
+        pivot.userData.swingOffset = Math.random()*Math.PI*2;
+        hangingBellsGrp.add(pivot);
+      });
+      scene.add(hangingBellsGrp);
+    }
+    aartiThali.visible = true;
+    hangingBellsGrp.visible = true;
+    toast('🙏 Arti commenced. Om Shanti.');
+
+    if (typeof godRays !== 'undefined') { godRays.forEach(function(g){ g.visible = true; }); godRaysOn = true; }
+    ringBell();
+  } else {
+    btn.innerHTML = 'START ARTI';
+    btn.classList.remove('active');
+    if(poojaAudio) poojaAudio.pause();
+    if(aartiThali) aartiThali.visible = false;
+    if(hangingBellsGrp) hangingBellsGrp.visible = false;
+    toast('✨ Arti concluded.');
+  }
+}
+
 function animate(){
   requestAnimationFrame(animate);
   const dt=clock.getDelta(); const t=clock.getElapsedTime();
   if(introSweep){ sweepT+=dt; const p=Math.min(1,sweepT/sweepDuration); const e=1-(1-p)*(1-p)*(1-p); theta=startTheta+(endTheta-startTheta)*e; phi=startPhi+(endPhi-startPhi)*e; radius=startR+(endR-startR)*e; updateCam(); if(p>=1) introSweep=false; }
   const dp=dustGeo.attributes.position;
-  for(let i=0;i<dustCount;i++){ dp.array[i*3]+=dustVel[i*3]; dp.array[i*3+1]+=dustVel[i*3+1]; dp.array[i*3+2]+=dustVel[i*3+2]; if(dp.array[i*3+1]>6.8){dp.array[i*3+1]=0;dp.array[i*3]=(Math.random()-0.5)*RW*0.9;} if(Math.abs(dp.array[i*3])>RW/2||Math.abs(dp.array[i*3+2])>RD/2){dp.array[i*3]=(Math.random()-0.5)*RW*0.9;dp.array[i*3+2]=(Math.random()-0.5)*RD*0.9;} }
+  let pOff = 0, tOff = 0;
+  if(!dragging && typeof introSweep !== 'undefined' && !introSweep && !viewTween) {
+    pOff = Math.sin(t * 0.7) * 0.012;
+    tOff = Math.sin(t * 0.4) * 0.015;
+    updateCam(pOff, tOff);
+  }
+  for(let i=0;i<dustCount;i++){ dp.array[i*3]+=dustVel[i*3]+Math.sin(t*0.6+i)*0.0015; dp.array[i*3+1]+=dustVel[i*3+1]; dp.array[i*3+2]+=dustVel[i*3+2]+Math.cos(t*0.5+i)*0.0015; if(dp.array[i*3+1]>6.8){dp.array[i*3+1]=0;dp.array[i*3]=(Math.random()-0.5)*RW*0.9;} if(Math.abs(dp.array[i*3])>RW/2||Math.abs(dp.array[i*3+2])>RD/2){dp.array[i*3]=(Math.random()-0.5)*RW*0.9;dp.array[i*3+2]=(Math.random()-0.5)*RD*0.9;} }
   dp.needsUpdate=true;
   if (typeof godRays !== 'undefined') godRays.forEach(function(g){ g.visible = godRaysOn; });
   if (typeof godRays !== 'undefined') godRays.forEach((g,i)=>{const c=g.children[0];if(c)c.material.opacity=0.03+Math.sin(t*0.5+i)*0.02;});
@@ -1443,7 +1713,32 @@ function animate(){
   if(objs.bell){ const bd=objs.bell.userData; if(bd.ringing>0){ const swing=Math.sin(t*22)*Math.exp(-bd.ringing*0.8)*0.35; objs.bell.rotation.z=swing; if(bd.clapper)bd.clapper.position.x=Math.sin(t*22+0.3)*0.06*Math.exp(-bd.ringing*0.8); bd.ringing=Math.max(0,bd.ringing-dt*0.8); } else { objs.bell.rotation.z=Math.sin(t*0.6)*0.012; } }
   if(objs.sparrow && active.has('sparrow')){ const sd=objs.sparrow.userData; sd.hopTimer+=dt; objs.sparrow.rotation.y=Math.sin(t*0.4)*0.3; objs.sparrow.position.y=sd.basePos.y+Math.abs(Math.sin(t*3.5))*0.015; if(sd.hopTimer>3.5){ sd.hopTimer=0; const nx=(Math.random()-0.5)*3; sd.basePos.x=nx; objs.sparrow.position.x=Math.max(-5.8,Math.min(-4.8,nx)); objs.sparrow.position.y=2.0; } }
   if(firefliesActive){ const fd=fireflies.userData; const fp=fd.geo.attributes.position.array; for(let i=0;i<fd.count;i++){ fp[i*3]+=fd.vel[i*3]+Math.sin(t*1.1+fd.phase[i])*0.004; fp[i*3+1]+=fd.vel[i*3+1]+Math.cos(t*0.8+fd.phase[i])*0.002; fp[i*3+2]+=fd.vel[i*3+2]+Math.sin(t*0.9+fd.phase[i]*1.3)*0.003; if(Math.abs(fp[i*3])>3.5)fd.vel[i*3]*=-1; if(fp[i*3+1]<0.2||fp[i*3+1]>3.2)fd.vel[i*3+1]*=-1; if(Math.abs(fp[i*3+2])>3.5)fd.vel[i*3+2]*=-1; } fd.geo.attributes.position.needsUpdate=true; fireflies.material.opacity=0.6+Math.sin(t*4.5)*0.3+Math.sin(t*11.3)*0.1; }
-  if(rainActive){ const rd=rain.userData; const rp=rd.geo.attributes.position.array; for(let i=0;i<rd.count;i++){ rp[i*3+1]-=rd.vel[i]; rp[i*3]+=0.005; if(rp[i*3+1]<0){rp[i*3]=(Math.random()-0.5)*8;rp[i*3+1]=4.8;rp[i*3+2]=(Math.random()-0.5)*8;} } rd.geo.attributes.position.needsUpdate=true; }
+  if(rainActive){ const rd=rain.userData; const rp=rd.geo.attributes.position.array; const wind = Math.sin(t*0.5)*0.008 + 0.015; for(let i=0;i<rd.count;i++){ rp[i*3+1]-=rd.vel[i]; rp[i*3]+=wind; rp[i*3+2]+=0.002; if(rp[i*3+1]<0){rp[i*3]=(Math.random()-0.5)*12;rp[i*3+1]=6;rp[i*3+2]=(Math.random()-0.5)*12-1;} } rd.geo.attributes.position.needsUpdate=true; }
+
+  for(let i=ripples.length-1; i>=0; i--) {
+    let r = ripples[i]; r.life += dt; let p = r.life / 1.5;
+    if (p > 1) { scene.remove(r.mesh); r.mesh.material.dispose(); ripples.splice(i, 1); continue; }
+    r.mesh.scale.setScalar(1 + p * 15);
+    r.mesh.material.opacity = (1 - p) * 0.9;
+  }
+
+  if(poojaActive && aartiThali) {
+    aartiThali.position.x = Math.sin(t * 2.0) * 1.5;
+    aartiThali.position.y = 1.6 + Math.sin(t * 3.5) * 0.5;
+    aartiThali.position.z = -1.5 + Math.cos(t * 2.0) * 0.5;
+    aartiThali.rotation.z = Math.sin(t * 4.0) * 0.2;
+    aartiThali.rotation.x = Math.cos(t * 4.0) * 0.2;
+    aartiThali.children[0].children[1].intensity = 3.5 + Math.sin(t * 25) * 1.5;
+
+    if(hangingBellsGrp) {
+      hangingBellsGrp.children.forEach(function(p, i) {
+        var swingRate = i % 2 === 0 ? 3.0 : 4.0;
+        p.rotation.z = Math.sin(t * swingRate + p.userData.swingOffset) * 0.12;
+        p.rotation.x = Math.cos(t * (swingRate - 0.8) + p.userData.swingOffset) * 0.1;
+      });
+    }
+  }
+
   if(typeof paintWallComposite==='function' && ringWallCtx){ paintWallComposite(ringWallCtx, ringWallW, ringWallH, t); ringWallTexture.needsUpdate = true; }
   if (auroraOn && typeof paintAuroraBG === 'function') {
     var ac = document.getElementById('aurora-canvas');
@@ -1495,8 +1790,58 @@ function toggleWallArt(id){ if(wallArts[id]){scene.remove(wallArts[id]);delete w
 
 function setDiya(col1,col2,el){ dl[0].color.setHex(col1);dl[1].color.setHex(col1);dl[2].color.setHex(col2); document.querySelectorAll('.diya-sw').forEach(s=>s.classList.remove('on')); if(el) el.classList.add('on');toast('🪔 Flame color updated'); }
 
-const floorC={white:0xf5f5f0,mud:0xa0714a,water:0x4488aa,mountain:0x6b6b6b,sand:0xe0c090,green:0x4a7c59,marble:0xf0f0f0,stone:0x888880,wood:0x7a4a22,mosaic:0x4488bb};
-function setFloor(id,el){ const rough={white:0.2,mud:0.92,water:0.1,mountain:0.88,sand:0.9,green:0.85,marble:0.15,stone:0.88,wood:0.78,mosaic:0.55}; const metal={white:0.02,mud:0.0,water:0.05,mountain:0.02,sand:0.0,green:0.0,marble:0.05,stone:0.02,wood:0.0,mosaic:0.1}; if(!floorC[id]) return; floorMat.color.setHex(floorC[id]); floorMat.roughness=rough[id]||0.85; floorMat.metalness=metal[id]||0; floorMat.needsUpdate=true; var strip=document.getElementById('floorstrip'); if(strip) strip.querySelectorAll('.card').forEach(function(c){c.classList.remove('on');}); if(el) el.classList.add('on'); toast('🪵 Floor: '+id.charAt(0).toUpperCase()+id.slice(1)); }
+const floorC={white:0xf5f5f0,mud:0xa0714a,water:0x4488aa,mountain:0x6b6b6b,sand:0xe0c090,green:0x4a7c59,marble:0xf0f0f0,stone:0x888880,wood:0x7a4a22,mosaic:0x4488bb,kailash:0xd0e0f0};
+function setFloor(id,el){ const rough={white:0.2,mud:0.92,water:0.1,mountain:0.88,sand:0.9,green:0.85,marble:0.15,stone:0.88,wood:0.78,mosaic:0.55,kailash:0.4}; const metal={white:0.02,mud:0.0,water:0.05,mountain:0.02,sand:0.0,green:0.0,marble:0.05,stone:0.02,wood:0.0,mosaic:0.1,kailash:0.1}; if(!floorC[id]) return; floorMat.color.setHex(floorC[id]); floorMat.roughness=rough[id]||0.85; floorMat.metalness=metal[id]||0; floorMat.needsUpdate=true; var strip=document.getElementById('floorstrip'); if(strip) strip.querySelectorAll('.card').forEach(function(c){c.classList.remove('on');}); if(el) el.classList.add('on'); toast('Environment: '+id.charAt(0).toUpperCase()+id.slice(1));
+  if(id==='water') { ringWallPlane.visible = false; ringThinMode = false; scene.background = new THREE.Color(0x0a1e3f); toast('🌊 Holy River Environment Active'); }
+  else if(id==='kailash') { ringWallPlane.visible = false; ringThinMode = false; scene.background = new THREE.Color(0xaaccff); toast('⛰️ Mount Kailash Environment Active'); }
+  else if(id==='wood') { ringWallPlane.visible = false; ringThinMode = false; scene.background = new THREE.Color(0x1a3020); toast('🪵 Forest Environment Active'); }
+  else { ringWallPlane.visible = true; ringThinMode = true; scene.background = null; }
+}
+
+function setDeityBackground(slug, el) {
+  var strip = document.getElementById('deities-strip');
+  if(strip && el) {
+    strip.querySelectorAll('.card').forEach(function(c){ c.classList.remove('on'); });
+    el.classList.add('on');
+  }
+  if(slug==='none'||!slug){
+    if(deityBackdropPlane){ scene.remove(deityBackdropPlane); if(deityBackdropPlane.material && deityBackdropPlane.material.map) deityBackdropPlane.material.map.dispose(); if(deityBackdropPlane.material) deityBackdropPlane.material.dispose(); deityBackdropPlane = null; }
+    ringWallPlane.visible = true;
+    scene.background = null;
+    toast('Background: Default/Clear');
+    return;
+  }
+  ringWallPlane.visible = true;
+  scene.background = null;
+  if(deityBackdropPlane){ scene.remove(deityBackdropPlane); if(deityBackdropPlane.material && deityBackdropPlane.material.map) deityBackdropPlane.material.map.dispose(); if(deityBackdropPlane.material) deityBackdropPlane.material.dispose(); deityBackdropPlane = null; }
+  var url = 'assets/images/deities/' + slug + '.png';
+  var loader = new THREE.TextureLoader();
+  loader.load(url, function(tex){
+    tex.colorSpace = THREE.SRGBColorSpace;
+    var slotW = 2.65, slotH = 3.1;
+    var planeAspect = slotW / slotH;
+    var iw = tex.image && tex.image.width, ih = tex.image && tex.image.height;
+    if(iw && ih){
+      var imgAspect = iw / ih;
+      if(imgAspect >= planeAspect){
+        tex.repeat.set(imgAspect / planeAspect, 1);
+        tex.offset.set((1 - imgAspect / planeAspect) / 2, 0);
+      } else {
+        tex.repeat.set(1, planeAspect / imgAspect);
+        tex.offset.set(0, (1 - imgAspect / planeAspect) / 2);
+      }
+    }
+    tex.needsUpdate = true;
+    var mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, side: THREE.FrontSide });
+    deityBackdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(slotW, slotH), mat);
+    deityBackdropPlane.position.set(0, 4.2, -3.95);
+    deityBackdropPlane.renderOrder = 1;
+    scene.add(deityBackdropPlane);
+    toast('Background: ' + slug);
+  }, undefined, function(){
+    toast('Deity image not found');
+  });
+}
 
 const shopData=[{id:'peacock',e:'🦚',n:'Peacock',c:100},{id:'cow',e:'🐄',n:'Gau Mata',c:180},{id:'parrot',e:'🦜',n:'Parrot',c:80},{id:'jhula',e:'🪑',n:'Jhula',c:220},{id:'rangoli',e:'🎨',n:'Rangoli',c:130}];
 function openShop(){ document.getElementById('sg').innerHTML=shopData.map(s=>`<div class="si ${owned.has(s.id)?'owned':''}" id="sgi-${s.id}" onclick="buy('${s.id}','${s.e}','${s.n}',${s.c})"><span class="se">${s.e}</span><div class="sn">${s.n}</div><div class="sc">${owned.has(s.id)?'✅ Owned':'💎 '+s.c}</div></div>`).join(''); document.getElementById('drawer').classList.add('open'); document.getElementById('ov').classList.add('show'); }
@@ -1506,10 +1851,10 @@ function showApp(){ const intro=document.getElementById('intro'); if(intro) intr
 
 function toggleEffect(id, el){ if(id==='fireflies'){ firefliesActive=!firefliesActive; fireflies.visible=firefliesActive; if(el) el.classList.toggle('on',firefliesActive); if(typeof updateEffectLabel==='function') updateEffectLabel('fireflies'); toast(firefliesActive?'✨ Fireflies appear!':'✨ Fireflies gone'); } else if(id==='rain'){ rainActive=!rainActive; rain.visible=rainActive; if(el) el.classList.toggle('on',rainActive); if(typeof updateEffectLabel==='function') updateEffectLabel('rain'); toast(rainActive?'🌧️ Sawan rain begins...':'☀️ Rain has stopped'); } }
 function ringBell(){ if(objs.bell){ objs.bell.userData.ringing=3.0; toast('🔔 Jai Shri Ram!'); } }
-function onTap(cx,cy){ const rect=renderer.domElement.getBoundingClientRect(); const mouse=new THREE.Vector2(((cx-rect.left)/rect.width)*2-1,-((cy-rect.top)/rect.height)*2+1); const rc=new THREE.Raycaster(); rc.setFromCamera(mouse,cam); if(objs.bell&&rc.intersectObject(objs.bell,true).length>0){ringBell();return;} if(objs.agarbatti&&rc.intersectObject(objs.agarbatti,true).length>0){toast('🕯️ Peace and blessings...');return;} if(objs.sparrow&&rc.intersectObject(objs.sparrow,true).length>0){toast('🐦 Chirp! The little sparrow sings...');return;} }
+function onTap(cx,cy){ const rect=renderer.domElement.getBoundingClientRect(); const mouse=new THREE.Vector2(((cx-rect.left)/rect.width)*2-1,-((cy-rect.top)/rect.height)*2+1); const rc=new THREE.Raycaster(); rc.setFromCamera(mouse,cam); if(objs.bell&&rc.intersectObject(objs.bell,true).length>0){ringBell();return;} if(objs.agarbatti&&rc.intersectObject(objs.agarbatti,true).length>0){toast('🕯️ Peace and blessings...');return;} if(objs.sparrow&&rc.intersectObject(objs.sparrow,true).length>0){toast('🐦 Chirp! The little sparrow sings...');return;} const floorHits = rc.intersectObject(floorMesh, false); if(floorHits.length > 0) { spawnRipple(floorHits[0].point); } }
 
 let viewTween = null;
-const VIEWS = { center: {theta:0.0,phi:0.28,tx:0.0,ty:0.5,tz:-1.0}, left: {theta:-0.55,phi:0.28,tx:1.5,ty:0.5,tz:-0.5}, right: {theta:0.55,phi:0.28,tx:-1.5,ty:0.5,tz:-0.5} };
+const VIEWS = { center: {theta:0.0,phi:0.28,tx:0.0,ty:0.28,tz:-2.4}, left: {theta:-0.55,phi:0.28,tx:1.5,ty:0.28,tz:-1.8}, right: {theta:0.55,phi:0.28,tx:-1.5,ty:0.28,tz:-1.8} };
 let currentView = 'center';
 function setView(id){
   if(currentView === id) return; currentView = id;
@@ -1556,8 +1901,28 @@ function mandirEntryZoom(){
   tick();
 }
 
+function resetDefaults() {
+  setFloor('marble', document.querySelector('#floorstrip .card:nth-child(1)'));
+  setDeityBackground('none', document.querySelector('#deities-strip .card:nth-child(1)'));
+  if(rainActive) { rainActive = false; rain.visible = false; var rc=document.getElementById('cd-rain-eff'); if(rc) rc.classList.remove('on'); updateEffectLabel('rain'); }
+  if(firefliesActive) { firefliesActive = false; fireflies.visible = false; var fc=document.getElementById('cd-fireflies-eff'); if(fc) fc.classList.remove('on'); updateEffectLabel('fireflies'); }
+  godRaysOn = false; if(typeof godRays !== 'undefined') godRays.forEach(function(g){ g.visible = false; }); var grc=document.getElementById('eff-godrays'); if(grc) { grc.querySelector('.cc').textContent='Off'; grc.classList.remove('on'); }
+  auroraOn = false; document.getElementById('aurora-overlay').style.display = 'none'; var au=document.getElementById('eff-aurora'); if(au) { au.querySelector('.cc').textContent='Off'; au.classList.remove('on'); }
+  setAnimStyle('gentle', document.querySelector('#tab-motion .card:nth-child(1)'));
+  setSpecialFX('none', document.querySelector('#tc-fx .strip:nth-child(4) .card:last-child'));
+  setRingMotion('medium', document.querySelector('#ringmotionrow .card:nth-child(2)'));
+  setRingType('minimal', document.querySelector('#ringtyperow .card:nth-child(2)'));
+  setRingFrame('rings', document.querySelector('#ringframerow .card:nth-child(1)'));
+  setRingColor(212,175,55, document.querySelector('#ringrow .sw:nth-child(1)'));
+  mood('midday', document.querySelector('#moodrow .card:nth-child(3)'));
+  if(poojaActive) { startPooja(); }
+  toast('🔄 Environment restored to Default');
+}
+
+  window.__mandirStructureViewId = 'mandir_3d';
   window.mood=mood;
-  window.mandirEntryZoom=mandirEntryZoom; window.toast=toast; window.ptPop=ptPop; window.switchTab=switchTab; window.setRingColor=setRingColor; window.setRingType=setRingType; window.setRingMotion=setRingMotion; window.setRingFrame=setRingFrame; window.toggleAurora=toggleAurora; window.toggleGodRays=toggleGodRays; window.cycleTempleGlow=cycleTempleGlow; window.toggleDust=toggleDust; window.updateEffectLabel=updateEffectLabel; window.toggleObj=toggleObj; window.buy=buy; window.setWall=setWall; window.toggleWallArt=toggleWallArt; window.setDiya=setDiya; window.setFloor=setFloor; window.openShop=openShop; window.closeShop=closeShop; window.showApp=showApp; window.toggleEffect=toggleEffect; window.ringBell=ringBell; window.setView=setView; window.setOmSymbol=setOmSymbol; window.setOmRingStyle=setOmRingStyle; window.setGlowColor=setGlowColor; window.setAnimStyle=setAnimStyle; window.setSpecialFX=setSpecialFX;
+  window.setMandirStructureView=setMandirStructureView;
+  window.mandirEntryZoom=mandirEntryZoom; window.toast=toast; window.ptPop=ptPop; window.switchTab=switchTab; window.setRingColor=setRingColor; window.setRingType=setRingType; window.setRingMotion=setRingMotion; window.setRingFrame=setRingFrame; window.toggleAurora=toggleAurora; window.toggleGodRays=toggleGodRays; window.cycleTempleGlow=cycleTempleGlow; window.toggleDust=toggleDust; window.updateEffectLabel=updateEffectLabel; window.toggleObj=toggleObj; window.buy=buy; window.setWall=setWall; window.toggleWallArt=toggleWallArt; window.setDiya=setDiya; window.setFloor=setFloor; window.setDeityBackground=setDeityBackground; window.openShop=openShop; window.closeShop=closeShop; window.showApp=showApp; window.toggleEffect=toggleEffect; window.ringBell=ringBell; window.setView=setView; window.setOmSymbol=setOmSymbol; window.setOmRingStyle=setOmRingStyle; window.setGlowColor=setGlowColor; window.setAnimStyle=setAnimStyle; window.setSpecialFX=setSpecialFX; window.startPooja=startPooja; window.resetDefaults=resetDefaults;
 
 })();
 </script>

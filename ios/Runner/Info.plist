@@ -2,8 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Antar Marg uses the local network to connect the debugger from your computer for development (hot reload, DevTools).</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Antar Marg needs camera access to set your profile photo and attach images when you choose.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Antar Marg needs photo library access to set your profile photo and attach images when you choose.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- Lets WKWebView load http://127.0.0.1 (Mandir asset server). No NSLocalNetworkUsageDescription = no Local Network permission sheet. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -86,8 +91,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
@@ -103,5 +106,7 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Antar Marg uses your location to show day or night sky in the sanctuary.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Antar Marg uses your location only while you use the app to show day or night sky in the sanctuary. We do not track your location in the background.</string>
 </dict>
 </plist>

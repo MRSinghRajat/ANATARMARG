@@ -12,7 +12,7 @@ import '../../../ashram/data/repositories/spiritual_progress_repository.dart';
 import '../../../ashram/presentation/widgets/streak_stats_card.dart';
 import '../../../journey/data/models/journey_models.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// My Growth - level, streak, practice stats, journeys, monthly overview, insights, daily task timeline.
@@ -497,7 +497,7 @@ class _MyGrowthScreenState extends ConsumerState<MyGrowthScreen> {
               if (!_isPremium) ...[
                 const SizedBox(height: 10),
                 GestureDetector(
-                  onTap: () => PaywallScreen.showAsBottomSheet(context),
+                  onTap: () => navigateToProfileForProUpgrade(context),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1020,7 +1020,7 @@ class _MyGrowthScreenState extends ConsumerState<MyGrowthScreen> {
         if (!_isPremium) ...[
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => PaywallScreen.showAsBottomSheet(context),
+            onTap: () => navigateToProfileForProUpgrade(context),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: _streakCardDecoration,
@@ -1241,7 +1241,7 @@ class _MyGrowthScreenState extends ConsumerState<MyGrowthScreen> {
             ),
             if (!_isPremium && dates.length > 7)
               GestureDetector(
-                onTap: () => PaywallScreen.showAsBottomSheet(context),
+                onTap: () => navigateToProfileForProUpgrade(context),
                 child: Text(
                   'See full history',
                   style: GoogleFonts.poppins(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/services/revenuecat_service.dart';
 import '../../features/subscription/data/models/subscription_models.dart';
 
@@ -40,6 +41,12 @@ class PremiumService {
 
   /// Initialize the premium service
   Future<void> initialize() async {
+    if (AppConfig.premiumGrantAll) {
+      _cachedIsPremium = true;
+      _premiumStatusController.add(true);
+      debugPrint('PremiumService: PREMIUM_GRANT_ALL — all users treated as Pro');
+    }
+
     // Check if dev mode is enabled
     final prefs = await SharedPreferences.getInstance();
     _devModeEnabled = prefs.getBool(_keyDevModeEnabled) ?? false;
@@ -64,8 +71,9 @@ class PremiumService {
 
   /// Update cached premium status and notify listeners
   void _updatePremiumStatus(bool isPremium) {
-    _cachedIsPremium = isPremium;
-    _premiumStatusController.add(isPremium);
+    final effective = AppConfig.premiumGrantAll || isPremium;
+    _cachedIsPremium = effective;
+    _premiumStatusController.add(effective);
   }
 
   /// Check if user has premium access.
@@ -75,6 +83,8 @@ class PremiumService {
   /// 2. Local override (for testing)
   /// 3. RevenueCat entitlement check
   Future<bool> get isPremium async {
+    if (AppConfig.premiumGrantAll) return true;
+
     // Check dev mode override first
     if (_devModeEnabled) {
       final prefs = await SharedPreferences.getInstance();
@@ -96,10 +106,17 @@ class PremiumService {
 
   /// Synchronous check using cached value.
   /// Returns false if not yet initialized.
-  bool get isPremiumSync => _cachedIsPremium ?? false;
+  bool get isPremiumSync =>
+      AppConfig.premiumGrantAll ? true : (_cachedIsPremium ?? false);
 
   /// Refresh premium status from RevenueCat
   Future<bool> refreshPremiumStatus() async {
+    if (AppConfig.premiumGrantAll) {
+      _cachedIsPremium = true;
+      _premiumStatusController.add(true);
+      return true;
+    }
+
     // Check dev mode override first
     if (_devModeEnabled) {
       final prefs = await SharedPreferences.getInstance();

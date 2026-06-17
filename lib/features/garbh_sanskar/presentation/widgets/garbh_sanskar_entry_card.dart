@@ -102,7 +102,7 @@ class GarbhSanskarEntryCard extends ConsumerWidget {
                   Text(
                     isSetup
                         ? 'Planning • Prenatal • Postnatal • Samskaras'
-                        : 'Mantras • Yoga • Rituals • Lullabies',
+                        : 'Mantras • Yoga • Rituals • Care',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: Colors.white38,

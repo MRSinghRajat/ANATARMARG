@@ -1671,7 +1671,7 @@ class _SpiritualOnboardingScreenState extends State<SpiritualOnboardingScreen>
               ),
             ),
             const SizedBox(height: 20),
-            _GoldButton(label: _onboardingHindi ? 'चलें!' : "Let's Go!", onTap: _goToLogin),
+            _GoldButton(label: _onboardingHindi ? 'चलें!' : "Let's Go!", onTap: _nextStep),
             const SizedBox(height: 24),
           ],
         ),

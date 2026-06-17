@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
 import '../../data/models/journey_models.dart';
 import '../providers/journey_providers.dart';
-
 class JourneyMilestoneDetailScreen extends ConsumerStatefulWidget {
   final String userJourneyId;
   final String milestoneId;
@@ -67,6 +67,9 @@ class _JourneyMilestoneDetailScreenState
       CoinService().addCoins(_milestone!.coinReward!);
     }
     ref.invalidate(activeJourneyProvider);
+    ref.invalidate(activeJourneysProvider);
+    ref.invalidate(completedMilestoneDatesProvider(widget.userJourneyId));
+    ref.invalidate(journeyCompletedMilestoneIdsProvider(widget.userJourneyId));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -79,65 +82,290 @@ class _JourneyMilestoneDetailScreenState
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        backgroundColor: AppColors.primaryBackground,
-        appBar: AppBar(title: const Text('Milestone')),
-        body: const Center(child: CircularProgressIndicator()),
+        backgroundColor: AppColors.ashramBackgroundDark,
+        appBar: AppBar(
+          title: Text('Milestone', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppColors.zinc100,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryOrange),
+        ),
       );
     }
     if (_milestone == null) {
       return Scaffold(
-        backgroundColor: AppColors.primaryBackground,
-        appBar: AppBar(title: const Text('Milestone')),
-        body: const Center(child: Text('Milestone not found')),
+        backgroundColor: AppColors.ashramBackgroundDark,
+        appBar: AppBar(
+          title: Text('Milestone', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppColors.zinc100,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: Center(
+          child: Text(
+            'Milestone not found',
+            style: GoogleFonts.inter(color: AppColors.zinc500),
+          ),
+        ),
       );
     }
     final m = _milestone!;
+    final journeyAsync = ref.watch(userJourneyProvider(widget.userJourneyId));
+    final userJourney = journeyAsync.valueOrNull;
+    final journeyLocked =
+        userJourney == null || userJourney.isCompleted || !userJourney.isActive;
+
+    // Check optimistically AND from DB if already completed
+    final completedMilestoneDatesAsync =
+        ref.watch(completedMilestoneDatesProvider(widget.userJourneyId));
+    final dbCompleted =
+        completedMilestoneDatesAsync.valueOrNull?.containsKey(widget.milestoneId) ?? false;
+    final isComplete = _completed || dbCompleted;
+    final coinReward = m.coinReward ?? 0;
+
     return Scaffold(
-      backgroundColor: AppColors.primaryBackground,
+      backgroundColor: AppColors.ashramBackgroundDark,
       appBar: AppBar(
-        title: Text(m.title),
+        title: Text(
+          m.title,
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: AppColors.zinc100),
+          overflow: TextOverflow.ellipsis,
+        ),
         backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.zinc100,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Text(m.icon ?? '🪔', style: const TextStyle(fontSize: 48)),
-                    const SizedBox(height: 16),
-                    Text(m.title,
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    if (m.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(m.description!,
-                          style: Theme.of(context).textTheme.bodyLarge),
-                    ],
+            // ── Hero card ──────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primaryOrange.withValues(alpha: 0.12),
+                    AppColors.journeyDeepPurple.withValues(alpha: 0.18),
                   ],
                 ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.primaryOrange.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(m.icon ?? '🪔', style: const TextStyle(fontSize: 52)),
+                  const SizedBox(height: 14),
+                  // Milestone type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryOrange.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.primaryOrange.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      _milestoneTypeLabel(m.milestoneType),
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryOrange,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    m.title,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.zinc100,
+                    ),
+                  ),
+                  if (m.titleHindi != null && m.titleHindi!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      m.titleHindi!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.crimsonPro(
+                        fontSize: 16,
+                        color: AppColors.zinc400,
+                      ),
+                    ),
+                  ],
+                  // Coin reward pill
+                  if (coinReward > 0) ...[
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('🪙', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          '+$coinReward on completion',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryOrange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (m.allowNotes) ...[
-              const SizedBox(height: 16),
+
+            // ── Description / Significance ─────────────────────────────
+            if (m.description != null && m.description!.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text(
+                'SIGNIFICANCE',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryOrange,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.ashramCardDark,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  m.description!,
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    height: 1.65,
+                    color: AppColors.zinc400,
+                  ),
+                ),
+              ),
+            ],
+
+            // ── Notes field ────────────────────────────────────────────
+            if (m.allowNotes && !journeyLocked) ...[
+              const SizedBox(height: 20),
+              Text(
+                'YOUR NOTES',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryOrange,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: _notesController,
-                decoration: const InputDecoration(labelText: 'Notes'),
-                maxLines: 3,
+                style: GoogleFonts.inter(color: AppColors.zinc100, fontSize: 14),
+                cursorColor: AppColors.primaryOrange,
+                decoration: InputDecoration(
+                  hintText: 'Write your reflections, memories, or intentions…',
+                  hintStyle: GoogleFonts.inter(
+                    color: AppColors.zinc500,
+                    fontSize: 13,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.ashramCardDark,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.primaryOrange, width: 1.5),
+                  ),
+                ),
+                maxLines: 4,
+              ),
+            ],
+
+            // ── Status messages ────────────────────────────────────────
+            if (journeyLocked && userJourney != null && userJourney.isCompleted) ...[
+              const SizedBox(height: 14),
+              Text(
+                'This journey is complete. Milestones are view-only.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 13, height: 1.4, color: AppColors.zinc500),
+              ),
+            ],
+            if (isComplete) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Samskara completed!',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.greenAccent,
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _completed ? null : _complete,
-              child: Text(_completed ? 'Completed' : 'Mark complete'),
+
+            // ── Complete button ────────────────────────────────────────
+            ElevatedButton.icon(
+              onPressed: (isComplete || journeyLocked) ? null : _complete,
+              icon: Icon(
+                isComplete ? Icons.check_rounded : Icons.celebration_rounded,
+                size: 20,
+              ),
+              label: Text(
+                isComplete
+                    ? 'Samskara Complete'
+                    : journeyLocked
+                        ? 'Unavailable'
+                        : coinReward > 0
+                            ? 'Complete Samskara (+$coinReward 🪙)'
+                            : 'Complete Samskara',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isComplete ? AppColors.zinc600 : AppColors.primaryOrange,
+                foregroundColor: isComplete ? AppColors.zinc400 : Colors.black87,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _milestoneTypeLabel(String? type) {
+    switch (type) {
+      case 'samskara': return '✦ Samskara';
+      case 'ceremony': return '🪔 Ceremony';
+      case 'habit':    return '📅 Habit';
+      case 'learning': return '📖 Learning';
+      default:         return '✦ Milestone';
+    }
   }
 }

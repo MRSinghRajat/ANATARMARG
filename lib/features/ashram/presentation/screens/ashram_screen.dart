@@ -1,9 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/utils/app_clock.dart';
 import '../../../profile/presentation/providers/language_provider.dart';
@@ -23,28 +23,30 @@ import '../../../books/data/datasources/supabase_granthalaya_datasource.dart';
 import '../../../books/data/models/daily_story_model.dart';
 import '../../../books/presentation/screens/story_reader_screen.dart';
 import 'ashram_verse_detail_screen.dart';
-import 'meditation_guide_screen.dart';
 import 'gratitude_practice_screen.dart';
 import 'seva_help_screen.dart';
 import 'dana_practice_screen.dart';
 import 'chant_player_screen.dart';
+import 'evening_aarti_screen.dart';
 import 'japa_counter_screen.dart';
 import 'manifestation_practice_screen.dart';
 import 'habit_detail_screen.dart';
 import '../../data/panchang/panchang_engine.dart';
-import '../../data/panchang/panchang_models.dart';
 import '../panchang/widgets/panchang_detail_sheet.dart';
 import '../panchang/widgets/panchang_month_sheet.dart';
-import '../panchang/widgets/today_pill.dart';
+import '../../../journey/data/journey_logic.dart';
 import '../../../journey/data/models/journey_models.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
+import '../../../ai_guru/presentation/providers/guru_providers.dart';
 import '../../../onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 import '../../../profile/data/repositories/app_profile_repository.dart';
 import '../../../home/data/services/aangan_notification_service.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../core/services/app_notification_service.dart';
+import '../../../../core/services/notification_preferences.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/services/premium_service.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../shared/widgets/pro_gradient_badge.dart';
 
 /// Set to true to show the debug "Tap to change date" banner (e.g. for testing).
 const bool kShowDebugDateBanner = true;
@@ -56,8 +58,7 @@ class AshramScreen extends ConsumerStatefulWidget {
   ConsumerState<AshramScreen> createState() => _AshramScreenState();
 }
 
-class _AshramScreenState extends ConsumerState<AshramScreen>
-    with WidgetsBindingObserver {
+class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBindingObserver {
   final CoinService _coinService = CoinService();
   final AshramDailyVerseRepository _verseRepository =
       AshramDailyVerseRepository();
@@ -81,11 +82,13 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   final GlobalKey _coinCounterKey = GlobalKey();
   final Map<String, GlobalKey> _taskKeys = {};
   final Map<String, GlobalKey> _habitKeys = {};
-  bool _practiceToolsExpanded = true;
-  bool _todayPathExpanded = true;
-  bool _activeJourneyExpanded = true;
-  bool _myHabitsExpanded = true;
+  bool _practiceToolsExpanded = false;
+  bool _todayPathExpanded = false;
+  bool _activeJourneyExpanded = false;
+  bool _myHabitsExpanded = false;
   int _lastKnownLevel = 1;
+  /// Cancels auto-close if the level-up overlay is dismissed early (avoids a stray [pop] breaking the route stack).
+  Timer? _levelUpOverlayAutoClose;
   final AppProfileRepository _appProfileRepo = AppProfileRepository();
   late final Future<({String displayName, String? avatarUrl})> _profileFuture;
 
@@ -96,7 +99,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     return (displayName: name ?? onb ?? 'Sadhak', avatarUrl: avatar);
   }
 
-  /// Same layout/colors as My Growth: orange–purple gradient, white border, radius 20.
   BoxDecoration get _streakStyleDecoration => BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -126,12 +128,22 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
       if (mounted) setState(() => _isPremium = v);
     });
     _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
-      if (mounted) setState(() => _isPremium = v);
+      if (mounted) {
+        setState(() {
+          _isPremium = v;
+          if (!v) {
+            _activeJourneyExpanded = false;
+            _myHabitsExpanded = false;
+          }
+        });
+        ref.invalidate(guruUserTierProvider);
+      }
     });
   }
 
   @override
   void dispose() {
+    _levelUpOverlayAutoClose?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _premiumSubscription?.cancel();
     _tasksSubscription?.cancel();
@@ -157,14 +169,19 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
 
     _progressSubscription = _taskService.progressStream.listen((progress) {
       if (mounted) {
+        // Snapshot *before* setState — after setState, _progress is already the new value, so
+        // `_progress != null` would be true on first load and wrongly fire level-up.
+        final hadPriorProgress = _progress != null;
         final previousLevel = _progress?.spiritualLevel ?? _lastKnownLevel;
         setState(() => _progress = progress);
         if (progress != null && progress.spiritualLevel >= 1 && _coinService.currentBalance == 0) {
           _coinService.ensureMinimumKarmaForLevel(progress.spiritualLevel);
         }
-        if (progress != null && progress.spiritualLevel > previousLevel) {
+        if (progress != null &&
+            hadPriorProgress &&
+            progress.spiritualLevel > previousLevel) {
           _lastKnownLevel = progress.spiritualLevel;
-          WidgetsBinding.instance.addPostFrameCallback((_) => _showLevelUpAnimation(progress!.spiritualLevel));
+          WidgetsBinding.instance.addPostFrameCallback((_) => _showLevelUpAnimation(progress.spiritualLevel));
         } else if (progress != null) {
           _lastKnownLevel = progress.spiritualLevel;
         }
@@ -209,14 +226,17 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
       }
       final items = await service.getNotificationsForList();
       final appNotif = AppNotificationService.instance;
-      final now = DateTime.now();
-      final todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      if (!await NotificationPreferences.shouldDeliver(
+        NotificationPreferences.keyUpdates,
+      )) {
+        return;
+      }
       for (final item in items) {
         await appNotif.addNotification(
           title: item.emojiOrIcon != null ? '${item.emojiOrIcon} ${item.title}' : item.title,
           body: item.subtitle ?? '',
           type: 'aangan',
-          customId: 'aangan_${item.id}_$todayKey',
+          customId: 'aangan_${item.id}',
         );
       }
     } catch (_) {
@@ -257,6 +277,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     'listen_chant',
     'japa_108',
     'manifestation',
+    'evening_aarti',
   };
 
   bool _hasScreen(UserDailyTask task) =>
@@ -325,8 +346,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
       case 'daily_meditation':
       case 'morning_meditation':
       case 'pranayama':
-        screen = MeditationGuideScreen(
-          slug: slug,
+        screen = JapaCounterScreen(
           onComplete: () => _onTaskTap(task),
         );
         break;
@@ -365,12 +385,16 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
       case 'manifestation':
         final isPremium = await PremiumService.instance.isPremium;
         if (!isPremium) {
-          if (mounted) PaywallScreen.showAsBottomSheet(context);
+          if (mounted) navigateToProfileForProUpgrade(context);
           return;
         }
         screen = ManifestationPracticeScreen(
           onComplete: () => _onTaskTap(task),
         );
+        break;
+
+      case 'evening_aarti':
+        screen = const EveningAartiScreen();
         break;
 
       default:
@@ -423,10 +447,13 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
 
   void _showLevelUpAnimation(int newLevel) {
     if (!mounted) return;
+    _levelUpOverlayAutoClose?.cancel();
     final title = _progress?.spiritualTitle ?? 'Beginner';
-    showGeneralDialog<void>(
+    final navigator = Navigator.of(context);
+    final closed = showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (_, __, ___) => const SizedBox.shrink(),
@@ -487,15 +514,23 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
         );
       },
     );
-    Future.delayed(const Duration(milliseconds: 1800), () {
-      if (mounted) Navigator.of(context).pop();
+    // If the user dismisses the overlay early, cancel this — otherwise a second [pop] peels the wrong route
+    // and the next [pushNamed] can show "No route defined" or land on a broken stack.
+    closed.whenComplete(() {
+      _levelUpOverlayAutoClose?.cancel();
+      _levelUpOverlayAutoClose = null;
+    });
+    _levelUpOverlayAutoClose = Timer(const Duration(milliseconds: 1800), () {
+      _levelUpOverlayAutoClose = null;
+      if (!mounted) return;
+      navigator.pop();
     });
   }
 
   Future<void> _showAddHabitSheet() async {
     final canCreate = await _habitService.canCreateHabit();
     if (!canCreate && mounted) {
-      PaywallScreen.showAsBottomSheet(context);
+      navigateToProfileForProUpgrade(context);
       return;
     }
     if (!mounted) return;
@@ -511,7 +546,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     );
   }
 
-  /// Non-premium users see only: daily verse, daily daan (donate), daily meditation, japa counter.
+  /// Non-premium users see only: daily verse, daily daan (donate), japa (meditation) tasks, japa counter.
   static const _nonPremiumTaskSlugs = {
     'daily_verse',
     'donate',
@@ -539,19 +574,14 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
     return Scaffold(
       backgroundColor: AppColors.ashramBackgroundDark,
       body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
+        child: Column(
           children: [
-            Column(
-              children: [
-                SizedBox(
-                  height: headerHeight,
-                  child: _buildAshramHeader(context),
-                ),
-                Expanded(
-                  child: _buildAshramBody(),
-                ),
-              ],
+            SizedBox(
+              height: headerHeight,
+              child: _buildAshramHeader(context),
+            ),
+            Expanded(
+              child: _buildAshramBody(),
             ),
           ],
         ),
@@ -697,15 +727,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
             ),
           )
         else ...[
-          // ─── Today pill (Panchang) + calendar icon ───
-          SliverToBoxAdapter(
-            child: TodayPill(
-              day: PanchangEngine.getPanchangDay(now.year, now.month, now.day),
-              onTapDetails: () => _openPanchangDetailSheet(now),
-              onTapCalendar: _openPanchangMonthSheet,
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          // Panchang / calendar: Practice Tools → Panchang only (no top strip).
 
           // ─── Today's Path (collapsible) ───
           SliverToBoxAdapter(
@@ -731,33 +753,13 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    "Today's Path",
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryOrange.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      '${_visibleTasks.where((t) => t.isCompleted).length}/${_visibleTasks.length}',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primaryOrange,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              Text(
+                                "Today's Path",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               Text(
                                 dateStr,
@@ -769,6 +771,31 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                             ],
                           ),
                         ),
+                        if (_visibleTasks.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryOrange.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${_visibleTasks.where((t) => t.isCompleted).length}/${_visibleTasks.length}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryOrange,
+                              ),
+                            ),
+                          ),
+                          if (_pendingTasks.isEmpty) ...[
+                            const SizedBox(width: 10),
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: Colors.greenAccent.withValues(alpha: 0.95),
+                              size: 28,
+                            ),
+                          ],
+                        ],
                       ],
                     ),
                   ),
@@ -798,7 +825,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                               ),
                             ),
                           )
-                        else
+                        else ...[
                           ...List.generate(_visibleTasks.length, (index) {
                             final task = _visibleTasks[index];
                             final alt = index.isEven;
@@ -814,67 +841,57 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                               ),
                             );
                           }),
+                          if (_pendingTasks.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+                              child: Center(
+                                child: Text(
+                                  AppStrings.get(
+                                    'all_tasks_complete_compact',
+                                    ref.watch(languageProvider),
+                                  ),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.greenAccent.withValues(alpha: 0.9),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-          if (_pendingTasks.isEmpty && _visibleTasks.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: _streakStyleDecoration,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.celebration, color: AppColors.primaryOrange, size: 28),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Builder(
-                          builder: (context) {
-                            final lang = ref.watch(languageProvider);
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  AppStrings.get('all_tasks_complete', lang),
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  AppStrings.get('all_tasks_complete_sub', lang),
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white70,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-          // ─── Active Journey (collapsible): one card per active journey inside ───
+          // ─── Active Journey (Pro): visible for everyone; full cards need Pro ───
           SliverToBoxAdapter(
             child: Consumer(
               builder: (context, ref, _) {
                 final allJourneys = ref.watch(allUserJourneysProvider).valueOrNull ?? [];
                 final activeJourneys = allJourneys.where((j) => j.isActive).toList();
-                if (activeJourneys.isEmpty) return const SizedBox.shrink();
                 final types = ref.watch(journeyTypesProvider).valueOrNull ?? [];
+                if (activeJourneys.isEmpty && _isPremium) {
+                  return const SizedBox.shrink();
+                }
+                var allActivePathComplete = false;
+                if (activeJourneys.isNotEmpty) {
+                  allActivePathComplete = true;
+                  for (final j in activeJourneys) {
+                    final t = ref.watch(todaysJourneyTasksProvider(j.id)).valueOrNull ?? [];
+                    if (t.isEmpty || !t.every((twc) => twc.isCompleted)) {
+                      allActivePathComplete = false;
+                      break;
+                    }
+                  }
+                }
+                final subtitle = activeJourneys.isEmpty
+                    ? (_isPremium ? '' : 'Pro — continue paths in Granthalaya')
+                    : (activeJourneys.length == 1 ? '1 journey' : '${activeJourneys.length} journeys');
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
@@ -882,14 +899,26 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => setState(() => _activeJourneyExpanded = !_activeJourneyExpanded),
+                        onTap: () {
+                          if (!_isPremium) {
+                            navigateToProfileForProUpgrade(
+                              context,
+                              message:
+                                  'Active journeys and guided paths unlock with Pro. Continue in Granthalaya after upgrading.',
+                            );
+                            return;
+                          }
+                          setState(() => _activeJourneyExpanded = !_activeJourneyExpanded);
+                        },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                           child: Row(
                             children: [
                               Icon(
-                                _activeJourneyExpanded ? Icons.expand_more : Icons.chevron_right,
+                                (_activeJourneyExpanded && _isPremium)
+                                    ? Icons.expand_more
+                                    : Icons.chevron_right,
                                 color: AppColors.primaryOrange,
                                 size: 28,
                               ),
@@ -899,32 +928,49 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Active Journey',
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            'Active Journey',
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        if (AppConfig.showProMarkForPremiumFeature(
+                                          _isPremium,
+                                        )) ...[
+                                          const SizedBox(width: 8),
+                                          const ProGradientLabel(),
+                                        ],
+                                      ],
                                     ),
-                                    Text(
-                                      activeJourneys.length == 1
-                                          ? '1 journey'
-                                          : '${activeJourneys.length} journeys',
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white54,
-                                        fontSize: 12,
+                                    if (subtitle.isNotEmpty)
+                                      Text(
+                                        subtitle,
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white54,
+                                          fontSize: 12,
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 ),
                               ),
+                              if (activeJourneys.isNotEmpty && allActivePathComplete && _isPremium)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Colors.greenAccent.withValues(alpha: 0.95),
+                                  size: 28,
+                                ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                    if (_activeJourneyExpanded) ...[
+                    if (_activeJourneyExpanded && _isPremium)
                       for (final active in activeJourneys)
                         Padding(
                           padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
@@ -934,7 +980,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                             streakStyleDecoration: _streakStyleDecoration,
                           ),
                         ),
-                    ],
                   ],
                 );
               },
@@ -948,6 +993,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
               builder: (context) {
                 final lang = ref.watch(languageProvider);
                 final habitCount = _todaysHabits.isNotEmpty ? _todaysHabits.length : _habits.length;
+                final allHabitsDone =
+                    habitCount > 0 && _completedHabits.length == habitCount;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
@@ -955,14 +1002,26 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => setState(() => _myHabitsExpanded = !_myHabitsExpanded),
+                        onTap: () {
+                          if (!_isPremium) {
+                            navigateToProfileForProUpgrade(
+                              context,
+                              message:
+                                  'Custom habits and full tracking are part of Pro. Open Profile to upgrade.',
+                            );
+                            return;
+                          }
+                          setState(() => _myHabitsExpanded = !_myHabitsExpanded);
+                        },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                           child: Row(
                             children: [
                               Icon(
-                                _myHabitsExpanded ? Icons.expand_more : Icons.chevron_right,
+                                (_myHabitsExpanded && _isPremium)
+                                    ? Icons.expand_more
+                                    : Icons.chevron_right,
                                 color: AppColors.primaryOrange,
                                 size: 28,
                               ),
@@ -972,13 +1031,25 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      AppStrings.get('my_habits', lang),
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            AppStrings.get('my_habits', lang),
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        if (AppConfig.showProMarkForPremiumFeature(
+                                          _isPremium,
+                                        )) ...[
+                                          const SizedBox(width: 8),
+                                          const ProGradientLabel(),
+                                        ],
+                                      ],
                                     ),
                                     Text(
                                       '${_completedHabits.length}/$habitCount ${AppStrings.get('today', lang)}',
@@ -990,35 +1061,68 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                   ],
                                 ),
                               ),
+                              if (habitCount > 0) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryOrange.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    '${_completedHabits.length}/$habitCount',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryOrange,
+                                    ),
+                                  ),
+                                ),
+                                if (allHabitsDone) ...[
+                                  const SizedBox(width: 10),
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: Colors.greenAccent.withValues(alpha: 0.95),
+                                    size: 28,
+                                  ),
+                                ],
+                              ],
                             ],
                           ),
                         ),
                       ),
                     ),
-                    if (_myHabitsExpanded) ...[
+                    if (_myHabitsExpanded && _isPremium) ...[
                       if (_habits.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: _streakStyleDecoration,
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.add_circle_outline,
-                                    size: 40,
-                                    color: AppColors.primaryOrange.withValues(alpha: 0.8),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _showAddHabitSheet,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: _streakStyleDecoration,
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.add_circle_outline,
+                                        size: 40,
+                                        color: AppColors.primaryOrange.withValues(alpha: 0.8),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        AppStrings.get('add', lang) + ' personal practice',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white54,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    AppStrings.get('add', lang) + ' personal practice',
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white54,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -1045,9 +1149,11 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                         child: _FullWidthHabitRow(
                                           habit: habit,
                                           isCompleted: isCompleted,
+                                          readOnly: !_isPremium,
                                           onTap: () => _onHabitTap(habit),
                                           onNavigate: () => _navigateToHabitDetail(habit),
-                                          onLongPress: () => _showHabitOptions(habit),
+                                          onLongPress:
+                                              _isPremium ? () => _showHabitOptions(habit) : null,
                                           showDivider: !isLast,
                                         ),
                                       );
@@ -1066,7 +1172,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-          // ─── Expanded Practice Tools ───
+          // ─── Practice Tools ───
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1090,7 +1196,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                'Expanded Practice Tools',
+                                'Practice Tools',
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 16,
@@ -1129,15 +1235,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                           builder: (_) => const JapaCounterScreen(),
                                         ),
                                       )
-                                  : () => PaywallScreen.showAsBottomSheet(context),
-                            ),
-                            _PracticeToolTile(
-                              icon: Icons.headphones_rounded,
-                              label: 'Med Library',
-                              locked: !_isPremium,
-                              onTap: _isPremium
-                                  ? () => Navigator.of(context).pushNamed(AppRouter.listenAllMeditation)
-                                  : () => PaywallScreen.showAsBottomSheet(context),
+                                  : () => navigateToProfileForProUpgrade(context),
                             ),
                             _PracticeToolTile(
                               icon: Icons.music_note_rounded,
@@ -1149,7 +1247,15 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
                                           builder: (_) => ChantPlayerScreen(),
                                         ),
                                       )
-                                  : () => PaywallScreen.showAsBottomSheet(context),
+                                  : () => navigateToProfileForProUpgrade(context),
+                            ),
+                            _PracticeToolTile(
+                              icon: Icons.calendar_month_rounded,
+                              label: 'Panchang',
+                              locked: !_isPremium,
+                              onTap: _isPremium
+                                  ? _openPanchangMonthSheet
+                                  : () => navigateToProfileForProUpgrade(context),
                             ),
                           ],
                         ),
@@ -1181,6 +1287,10 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   }
 
   void _openPanchangMonthSheet() {
+    if (!_isPremium) {
+      navigateToProfileForProUpgrade(context);
+      return;
+    }
     final now = AppClock.now();
     showModalBottomSheet<void>(
       context: context,
@@ -1203,6 +1313,10 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
   }
 
   void _openPanchangDetailSheet(DateTime d) {
+    if (!_isPremium) {
+      navigateToProfileForProUpgrade(context);
+      return;
+    }
     final day = PanchangEngine.getPanchangDay(d.year, d.month, d.day);
     showModalBottomSheet<void>(
       context: context,
@@ -1226,7 +1340,8 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
       await _taskService.uncompleteTask(task);
     } else {
       final result = await _taskService.completeTask(task);
-      _taskService.refresh();
+      // Do not call refresh() here — it reloads from the server before persist finishes
+      // and wipes the optimistic update (checkbox looked “one task behind”).
       if (mounted && result.success && result.coinsEarned > 0) {
         final taskKey = _taskKeys[task.id];
         if (taskKey != null) {
@@ -1238,9 +1353,7 @@ class _AshramScreenState extends ConsumerState<AshramScreen>
           );
         }
       }
-      return;
     }
-    _taskService.refresh();
   }
 
   Widget _buildSectionHeader({
@@ -1533,33 +1646,32 @@ class _JourneyCard extends ConsumerWidget {
   final List<JourneyType> types;
   final BoxDecoration streakStyleDecoration;
 
-  static IconData _taskIcon(String slug) {
-    if (slug.contains('mantra') || slug.contains('chant') || slug.contains('listen')) return Icons.graphic_eq_rounded;
-    if (slug.contains('story') || slug.contains('read')) return Icons.menu_book_rounded;
-    if (slug.contains('affirmation') || slug.contains('heart')) return Icons.favorite_rounded;
-    if (slug.contains('stretch') || slug.contains('yoga') || slug.contains('movement')) return Icons.self_improvement_rounded;
-    return Icons.task_alt_rounded;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final journeyType = types.where((t) => t.id == userJourney.journeyTypeId).firstOrNull;
-    final tasksAsync = ref.watch(todaysJourneyTasksProvider(userJourney.id));
-    final tasks = tasksAsync.valueOrNull ?? [];
-    final meta = userJourney.metadata;
-    int currentDay = 24;
-    int totalDays = 90;
-    if (meta.containsKey('due_date')) {
-      final due = DateTime.tryParse(meta['due_date'] as String? ?? '');
-      if (due != null) {
-        final start = due.subtract(const Duration(days: 280));
-        final elapsed = DateTime.now().difference(start).inDays.clamp(0, 280);
-        currentDay = elapsed;
-        totalDays = 280;
-      }
+    final todaysAsync = ref.watch(todaysJourneyTasksProvider(userJourney.id));
+    final todaysTasks = todaysAsync.valueOrNull ?? [];
+    final tasks = todaysTasks;
+    final allTasksAsync = ref.watch(journeyTasksProvider(userJourney.journeyTypeId));
+    final allTasks = allTasksAsync.valueOrNull ?? [];
+    JourneyPhase? phase;
+    if (allTasks.isNotEmpty) {
+      final phases = JourneyLogic.extractPhases(allTasks);
+      try {
+        phase = JourneyLogic.getCurrentPhase(userJourney, phases);
+      } catch (_) {}
     }
-    final progress = totalDays > 0 ? (currentDay / totalDays).clamp(0.0, 1.0) : 0.0;
+    final rpcCompleted =
+        ref.watch(journeyCompletedTaskIdsTodayProvider(userJourney.id)).valueOrNull ?? {};
+    final completedTaskIdsToday = <String>{
+      ...rpcCompleted,
+      ...tasks.where((t) => t.isCompleted).map((t) => t.task.id),
+    };
+    final dayProg = JourneyLogic.journeyDayProgress(userJourney);
+    final currentDay = dayProg.currentDay;
     final title = journeyType?.title ?? 'Journey';
+    final allTodayDone =
+        tasks.isNotEmpty && tasks.every((twc) => completedTaskIdsToday.contains(twc.task.id));
 
     return Container(
       decoration: streakStyleDecoration,
@@ -1586,95 +1698,225 @@ class _JourneyCard extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Day $currentDay',
+              'Day $currentDay · Today’s tasks',
               style: GoogleFonts.poppins(
                 color: Colors.white54,
                 fontSize: 12,
               ),
             ),
             const SizedBox(height: 14),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final taskList = tasks.take(4).toList();
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 1.4,
-                  ),
-                  itemCount: taskList.length,
-                  itemBuilder: (context, index) {
-                    final twc = taskList[index];
-                    final icon = _taskIcon(twc.task.slug);
-                    return Material(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: () => Navigator.of(context).pushNamed(
-                          AppRouter.journeyTask,
-                          arguments: {'userJourneyId': userJourney.id, 'taskId': twc.task.id},
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(icon, color: AppColors.primaryOrange, size: 22),
-                              const SizedBox(height: 6),
-                              Flexible(
-                                child: Text(
-                                  twc.task.title,
-                                  style: GoogleFonts.poppins(
-                                    color: twc.isCompleted ? Colors.white54 : Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: twc.isCompleted ? TextDecoration.lineThrough : null,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
+            if (allTodayDone)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded,
+                        color: Colors.greenAccent.withValues(alpha: 0.9), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Today's path complete",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$currentDay / $totalDays DAYS',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white54,
+                    ),
+                  ],
+                ),
+              )
+            else if (todaysAsync.isLoading && tasks.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryOrange),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryOrange),
-                minHeight: 6,
+              )
+            else if (tasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No tasks for this journey yet.',
+                  style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+                ),
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < tasks.length; i++) ...[
+                    if (i > 0) Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+                    _AshramJourneyTodayTaskRow(
+                      key: ValueKey<String>('ashram_journey_task_${tasks[i].task.id}'),
+                      userJourney: userJourney,
+                      twc: tasks[i],
+                      phase: phase,
+                      allTasks: allTasks,
+                      completedTaskIdsToday: completedTaskIdsToday,
+                    ),
+                  ],
+                ],
               ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AshramJourneyTodayTaskRow extends ConsumerWidget {
+  const _AshramJourneyTodayTaskRow({
+    super.key,
+    required this.userJourney,
+    required this.twc,
+    required this.phase,
+    required this.allTasks,
+    required this.completedTaskIdsToday,
+  });
+
+  final UserJourney userJourney;
+  final JourneyTaskWithCompletion twc;
+  final JourneyPhase? phase;
+  final List<JourneyTask> allTasks;
+  final Set<String> completedTaskIdsToday;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDone = completedTaskIdsToday.contains(twc.task.id);
+    final blocked = JourneyLogic.taskCompletionBlockedReason(
+      userJourney: userJourney,
+      task: twc.task,
+      calendarPhase: phase,
+      allTasks: allTasks,
+      completedTaskIdsToday: completedTaskIdsToday,
+    );
+    final canCheck = userJourney.isActive &&
+        !userJourney.isCompleted &&
+        !isDone &&
+        blocked == null;
+    final canUncheck = userJourney.isActive && !userJourney.isCompleted && isDone;
+    final checkboxEnabled = canCheck || canUncheck;
+
+    final task = twc.task;
+    final duration = task.durationMinutes != null ? '${task.durationMinutes} mins' : '';
+    final timeLabel = task.frequency == 'daily' ? 'Daily' : task.frequency;
+    final subtitle = [duration, timeLabel].where((e) => e.isNotEmpty).join(' • ');
+
+    void openDetail() {
+      Navigator.of(context).pushNamed(
+        AppRouter.journeyTask,
+        arguments: {'userJourneyId': userJourney.id, 'taskId': task.id},
+      );
+    }
+
+    Future<void> onCheckbox(bool? v) async {
+      if (v == null) return;
+      final uid = ref.read(currentUserIdProvider);
+      if (uid == null) return;
+      final ujId = userJourney.id;
+      final repo = ref.read(journeyRepositoryProvider);
+      try {
+        if (v) {
+          await repo.completeTask(
+            userId: uid,
+            userJourneyId: ujId,
+            taskId: task.id,
+            coinReward: task.coinReward,
+          );
+        } else {
+          await repo.uncompleteTaskToday(
+            userId: uid,
+            userJourneyId: ujId,
+            taskId: task.id,
+          );
+        }
+        ref.invalidate(todaysJourneyTasksProvider(ujId));
+        ref.invalidate(displayedJourneyTasksProvider(ujId));
+        ref.invalidate(journeyCompletedTaskIdsTodayProvider(ujId));
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: Checkbox(
+              value: isDone,
+              onChanged: checkboxEnabled ? onCheckbox : null,
+              shape: const CircleBorder(),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+              fillColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.disabled)) {
+                  return Colors.white.withValues(alpha: 0.12);
+                }
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.primaryOrange;
+                }
+                return Colors.transparent;
+              }),
+              checkColor: Colors.black87,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: openDetail,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      task.title,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        decoration: isDone ? TextDecoration.lineThrough : null,
+                        decorationColor: Colors.white54,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded),
+            color: Colors.white54,
+            onPressed: openDetail,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          ),
+        ],
       ),
     );
   }
@@ -1838,23 +2080,6 @@ class _TodayPathTaskRow extends StatelessWidget {
     this.onNavigate,
   });
 
-  static IconData _iconForSlug(String slug) {
-    switch (slug) {
-      case 'daily_verse':
-        return Icons.menu_book_rounded;
-      case 'donate':
-        return Icons.volunteer_activism_rounded;
-      case 'daily_meditation':
-      case 'morning_meditation':
-      case 'pranayama':
-        return Icons.self_improvement_rounded;
-      case 'japa_108':
-        return Icons.touch_app_rounded;
-      default:
-        return Icons.check_circle_outline;
-    }
-  }
-
   static String _subtitleForTask(UserDailyTask task) {
     if (task.estimatedMinutes > 0) return '${task.estimatedMinutes} mins';
     if (task.description != null && task.description!.isNotEmpty) {
@@ -1866,61 +2091,91 @@ class _TodayPathTaskRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = AppColors.primaryOrange;
+    void openRow() {
+      if (hasScreen && onNavigate != null) {
+        onNavigate!();
+      } else {
+        onTap();
+      }
+    }
+
+    final subtitle = _subtitleForTask(task);
     return Material(
       color: alternatingBg ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
-      child: InkWell(
-        onTap: hasScreen && onNavigate != null ? onNavigate! : onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Icon(
-                _iconForSlug(task.slug),
-                size: 22,
-                color: accent.withValues(alpha: 0.9),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: Checkbox(
+                value: task.isCompleted,
+                onChanged: (v) {
+                  if (v == null) return;
+                  if (v != task.isCompleted) onCheckTap();
+                },
+                shape: const CircleBorder(),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+                fillColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return AppColors.primaryOrange;
+                  }
+                  return Colors.transparent;
+                }),
+                checkColor: Colors.black87,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      task.title,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (_subtitleForTask(task).isNotEmpty) ...[
-                      const SizedBox(height: 2),
+            ),
+            Expanded(
+              child: InkWell(
+                onTap: openRow,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        _subtitleForTask(task),
+                        task.title,
                         style: GoogleFonts.poppins(
-                          color: Colors.white54,
-                          fontSize: 11,
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                          decorationColor: Colors.white54,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-              GestureDetector(
-                onTap: onCheckTap,
-                child: Icon(
-                  task.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 24,
-                  color: task.isCompleted ? Colors.green : accent.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-          ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right_rounded),
+              color: Colors.white54,
+              onPressed: openRow,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+          ],
         ),
       ),
     );
@@ -1932,35 +2187,21 @@ class _FullWidthHabitRow extends StatelessWidget {
   const _FullWidthHabitRow({
     required this.habit,
     required this.isCompleted,
+    required this.readOnly,
     required this.onTap,
     required this.onNavigate,
-    required this.onLongPress,
+    this.onLongPress,
     this.showDivider = true,
   });
 
   final CustomHabit habit;
   final bool isCompleted;
+  /// When true, row tap opens detail only; no toggle / long-press edits.
+  final bool readOnly;
   final VoidCallback onTap;
   final VoidCallback onNavigate;
   final VoidCallback? onLongPress;
   final bool showDivider;
-
-  static IconData _iconFromName(String name) {
-    switch (name) {
-      case 'self_improvement':
-      case 'meditation':
-        return Icons.self_improvement_rounded;
-      case 'menu_book':
-      case 'book':
-        return Icons.menu_book_rounded;
-      case 'favorite':
-        return Icons.favorite_rounded;
-      case 'eco':
-        return Icons.eco_rounded;
-      default:
-        return Icons.check_circle_rounded;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1969,59 +2210,82 @@ class _FullWidthHabitRow extends StatelessWidget {
       children: [
         Material(
           color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  Icon(
-                    _iconFromName(habit.iconName),
-                    size: 24,
-                    color: isCompleted ? Colors.green : AppColors.primaryOrange,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Checkbox(
+                    value: isCompleted,
+                    onChanged: readOnly
+                        ? null
+                        : (v) {
+                            if (v == null) return;
+                            if (v != isCompleted) onTap();
+                          },
+                    shape: const CircleBorder(),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+                    fillColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.disabled)) {
+                        return Colors.white.withValues(alpha: 0.12);
+                      }
+                      if (states.contains(WidgetState.selected)) {
+                        return AppColors.primaryOrange;
+                      }
+                      return Colors.transparent;
+                    }),
+                    checkColor: Colors.black87,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          habit.title,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: onNavigate,
+                    onLongPress: readOnly ? null : onLongPress,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            habit.title,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          habit.frequency.displayName,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white54,
-                            fontSize: 11,
+                          const SizedBox(height: 2),
+                          Text(
+                            habit.frequency.displayName,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  if (isCompleted)
-                    Icon(Icons.check_circle, size: 22, color: Colors.green),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right_rounded),
-                    color: Colors.white54,
-                    onPressed: onNavigate,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  color: Colors.white54,
+                  onPressed: onNavigate,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                ),
+              ],
             ),
           ),
         ),
@@ -2129,7 +2393,7 @@ class _CompactHabitCard extends StatelessWidget {
   }
 }
 
-// ─── Expanded Practice Tools tile ───
+// ─── Practice Tools tile ───
 class _PracticeToolTile extends StatelessWidget {
   final IconData icon;
   final String label;

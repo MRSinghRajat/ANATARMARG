@@ -72,5 +72,10 @@
         <intent>
             <action android:name="android.intent.action.GET_CONTENT"/>
         </intent>
+        <!-- url_launcher: open https in external browser (Terms / Privacy links) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 </manifest>

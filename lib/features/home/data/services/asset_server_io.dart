@@ -17,6 +17,46 @@ class AssetServer {
     var path = request.uri.path;
     if (path == '/') path = '/aangan_3d.html';
 
+    // Handle image requests from the deities folder
+    if (path.startsWith('/assets/images/deities/')) {
+      try {
+        // Remove the leading slash to match the asset path in pubspec.yaml
+        final assetPath = path.substring(1);
+        final data = await rootBundle.load(assetPath);
+        request.response.headers
+          ..set('Content-Type', 'image/png')
+          ..set('Access-Control-Allow-Origin', '*');
+        request.response.add(data.buffer.asUint8List());
+        await request.response.close();
+        return;
+      } catch (e) {
+        request.response.statusCode = 404;
+        request.response.write('Not found');
+        await request.response.close();
+        return;
+      }
+    }
+
+    // Handle audio requests from the sounds folder
+    if (path.startsWith('/assets/sounds/')) {
+      try {
+        final assetPath = path.substring(1);
+        final data = await rootBundle.load(assetPath);
+        final isWav = path.endsWith('.wav');
+        request.response.headers
+          ..set('Content-Type', isWav ? 'audio/wav' : 'audio/mpeg')
+          ..set('Access-Control-Allow-Origin', '*');
+        request.response.add(data.buffer.asUint8List());
+        await request.response.close();
+        return;
+      } catch (e) {
+        request.response.statusCode = 404;
+        request.response.write('Not found');
+        await request.response.close();
+        return;
+      }
+    }
+
     final assetPath = 'assets/html$path';
     try {
       if (path.endsWith('.glb') || path.endsWith('.gltf')) {

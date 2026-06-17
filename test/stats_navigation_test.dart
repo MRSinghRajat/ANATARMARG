@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ashrae_playground/features/stats/presentation/screens/stats_screen.dart';
-import 'package:ashrae_playground/features/gamification/presentation/screens/leaderboard_screen.dart';
+import 'package:antarmarg/features/stats/presentation/screens/stats_screen.dart';
+import 'package:antarmarg/features/gamification/presentation/screens/leaderboard_screen.dart';
 
 void main() {
   testWidgets('StatsScreen navigates to LeaderboardScreen on button press', (WidgetTester tester) async {

@@ -25,10 +25,10 @@ class ChatInputBar extends StatelessWidget {
         MediaQuery.of(context).padding.bottom + 12,
       ),
       decoration: BoxDecoration(
-        color: AppColors.ashramBackgroundDark,
+        gradient: AppColors.aiGuruInputBarGradient,
         border: Border(
           top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: Colors.white.withValues(alpha: 0.12),
             width: 1,
           ),
         ),
@@ -38,7 +38,7 @@ class ChatInputBar extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.ashramBackgroundDark.withValues(alpha: 0.8),
+                color: AppColors.aiGuruBackgroundDark.withValues(alpha: 0.75),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: AppColors.primaryOrange.withValues(alpha: 0.3),

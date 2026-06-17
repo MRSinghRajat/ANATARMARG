@@ -21,14 +21,7 @@ class ServiceSelectorModal extends StatelessWidget {
     return Container(
       height: screenHeight * 0.85,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryOrange.withValues(alpha: 0.2),
-            AppColors.deepPurple.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: AppColors.aiGuruSheetGradient,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
@@ -134,12 +127,12 @@ class _ServiceCard extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: isSelected
                   ? [
-                      AppColors.primaryOrange.withValues(alpha: 0.3),
-                      AppColors.deepPurple.withValues(alpha: 0.2),
+                      AppColors.primaryOrange.withValues(alpha: 0.42),
+                      AppColors.deepPurple.withValues(alpha: 0.32),
                     ]
                   : [
-                      AppColors.primaryOrange.withValues(alpha: 0.12),
-                      AppColors.deepPurple.withValues(alpha: 0.08),
+                      AppColors.primaryOrange.withValues(alpha: 0.24),
+                      AppColors.deepPurple.withValues(alpha: 0.2),
                     ],
             ),
             borderRadius: BorderRadius.circular(20),

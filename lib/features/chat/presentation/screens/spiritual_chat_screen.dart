@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_router.dart';
+import '../../../../shared/services/feature_gate_config.dart';
 import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../shared/widgets/typing_indicator.dart';
+import '../../../ai_guru/models/guru_message.dart';
+import '../../../ai_guru/presentation/providers/guru_providers.dart';
+import '../../../ai_guru/repositories/guru_repository.dart';
+import '../../../ai_guru/services/guru_link_navigation.dart';
 import '../../data/models/spiritual_service.dart';
 import '../../data/models/chat_message.dart';
-import '../../data/models/conversation_history.dart';
 import '../../data/config/spiritual_service_prompts.dart';
 import '../widgets/service_selector_modal.dart';
 import '../widgets/chat_message_bubble.dart';
 import '../widgets/chat_input_bar.dart';
 import '../widgets/service_form_sheet.dart';
-import '../../data/services/spiritual_chat_service.dart';
-import '../../data/services/consultation_usage_service.dart';
 import '../../data/models/feeling_responses.dart';
-import '../../data/models/feeling_suggestion_model.dart';
 import '../../data/repositories/feeling_repository.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/services/premium_service.dart';
+import '../../../../core/services/revenuecat_service.dart';
+import '../../../ai_guru/config/guru_credit_pack_config.dart';
 import '../../../onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 
 /// Main screen for the AI Spiritual Chatbot.
@@ -47,26 +50,16 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _askAnythingHomeController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final SpiritualChatService _chatService = SpiritualChatService();
-  final ConsultationUsageService _usageService = ConsultationUsageService.instance;
 
   bool _isLoading = false;
   bool _readingDelivered = false;
-  Map<String, dynamic>? _userProfile;
   String? _currentConversationId;
 
-  final List<ConversationHistory> _conversationHistory = [];
+  List<GuruConversationSummary> _conversationSummaries = [];
 
-  /// Same theme as My Growth / Ashram: orange–purple gradient, white border, radius 20.
+  /// Same family as AI Guru cards: saffron–violet gradient, white border, radius 20.
   BoxDecoration get _streakStyleDecoration => BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryOrange.withValues(alpha: 0.2),
-            AppColors.deepPurple.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: AppColors.aiGuruCardGradient,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),
@@ -77,64 +70,164 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    // Defer network work until after first frame so tab switch / initial paint stays smooth.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _refreshConversationSummaries();
+      await _syncGuruAiCreditsToSupabase();
+    });
+  }
+
+  Future<void> _syncGuruAiCreditsToSupabase() async {
+    if (!mounted) return;
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final tier = await ref.read(guruUserTierProvider.future);
+      await ref.read(guruAiCreditsServiceProvider).syncTierToProfile(tier);
+      ref.invalidate(guruCreditPeekProvider);
+    } catch (e) {
+      debugPrint('SpiritualChat: sync guru credits: $e');
+    }
   }
 
   @override
   void dispose() {
-    _persistConversations();
     _messageController.dispose();
     _askAnythingHomeController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  String get _storageKey {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
-    return 'ai_chat_history_$userId';
+  Future<void> _refreshConversationSummaries() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final list = await ref.read(guruRepositoryProvider).listConversations(uid);
+      if (mounted) setState(() => _conversationSummaries = list);
+    } catch (e) {
+      debugPrint('Failed to load conversations: $e');
+    }
   }
 
-  Future<void> _loadConversations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final encoded = prefs.getString(_storageKey);
-      if (encoded != null && encoded.isNotEmpty) {
-        final loaded = ConversationHistory.decodeList(encoded);
-        if (mounted) {
-          setState(() => _conversationHistory.addAll(loaded));
-        }
+  SpiritualServiceType _serviceTypeFromDb(String service) {
+    for (final v in SpiritualServiceType.values) {
+      if (v.name == service) return v;
+    }
+    return SpiritualServiceType.askAnything;
+  }
+
+  List<ChatMessage> _mapGuruMessagesToChat(
+    String conversationId,
+    List<GuruMessage> rows,
+  ) {
+    return rows
+        .map(
+          (m) => ChatMessage(
+            conversationId: conversationId,
+            role: m.role == 'user' ? ChatRole.user : ChatRole.assistant,
+            content: m.content,
+            createdAt: m.createdAt,
+          ),
+        )
+        .toList();
+  }
+
+  /// Opens or resumes the Supabase-backed thread. Returns conversation id, or null on failure.
+  Future<String?> _openServiceConversation(
+    SpiritualServiceType service, {
+    bool skipGreetingWhenEmpty = false,
+    bool loadExistingMessages = true,
+  }) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sign in to chat with Guruji.')),
+        );
       }
-    } catch (e) {
-      debugPrint('Failed to load AI conversations: $e');
+      return null;
+    }
+    final repo = ref.read(guruRepositoryProvider);
+    try {
+      final id = await repo.getOrCreateConversation(
+        userId: uid,
+        service: service.name,
+      );
+      final gm = loadExistingMessages
+          ? await repo.getRecentMessages(id, limit: 100)
+          : <GuruMessage>[];
+      if (!mounted) return null;
+      setState(() {
+        _selectedService = service;
+        _messages.clear();
+        _messages.addAll(_mapGuruMessagesToChat(id, gm));
+        _currentConversationId = id;
+        _readingDelivered = _messages.any((m) => m.isReading);
+        _showAIGuruHome = false;
+        _isInChat = true;
+      });
+      if (_messages.isEmpty && !skipGreetingWhenEmpty) {
+        _addGreetingMessage(service);
+      }
+      _scrollToBottom();
+      return id;
+    } catch (e, st) {
+      debugPrint('Guru: open conversation failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_openChatFailureMessage(e)),
+          ),
+        );
+      }
+      return null;
     }
   }
 
-  Future<void> _persistConversations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final encoded = ConversationHistory.encodeList(_conversationHistory);
-      await prefs.setString(_storageKey, encoded);
-    } catch (e) {
-      debugPrint('Failed to persist AI conversations: $e');
+  /// Maps PostgREST / Postgres errors to something actionable (often: run Supabase migrations).
+  String _openChatFailureMessage(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('check constraint') ||
+        s.contains('violates check') ||
+        s.contains('23514') ||
+        s.contains('spiritual_chat_conversations_service')) {
+      return 'Chat can’t start: database is missing Ask Anything rules. '
+          'Run Supabase migrations (spiritual_chat_service_expand), then retry.';
     }
+    if (s.contains('jwt') &&
+        (s.contains('expired') || s.contains('invalid'))) {
+      return 'Session expired. Sign in again to chat.';
+    }
+    if (s.contains('permission denied') || s.contains('rls')) {
+      return 'No permission to open chat. Sign in again or check Supabase RLS policies.';
+    }
+    return 'Could not open chat. Check connection and try again.';
   }
 
   void _showAllFeaturesSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.ashramBackgroundDark,
+      backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: true,
-      builder: (context) => _AllFeaturesSheet(
-        onServiceSelected: (service) {
-          Navigator.of(context).pop();
-          if (service == SpiritualServiceType.askAnything) {
-            _onServiceSelected(service);
-          } else {
-            _startInsightService(service);
-          }
-        },
+      builder: (context) => DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: AppColors.aiGuruSheetGradient,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _AllFeaturesSheet(
+          onServiceSelected: (service) {
+            Navigator.of(context).pop();
+            if (service == SpiritualServiceType.askAnything) {
+              // Sheet already closed — do not pop again (would break navigation).
+              _openServiceConversation(service);
+            } else {
+              _startInsightService(service);
+            }
+          },
+        ),
       ),
     );
   }
@@ -143,7 +236,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.ashramBackgroundDark,
+      backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: true,
       builder: (context) => ServiceSelectorModal(
@@ -155,40 +248,28 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
 
   void _onServiceSelected(SpiritualServiceType service) {
     Navigator.of(context).pop();
-    
-    // Create new conversation
-    final newConversation = ConversationHistory.create(
-      service: service,
-    );
-    
+    _openServiceConversation(service);
+  }
+
+  Future<void> _resumeRemoteConversation(GuruConversationSummary summary) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    final repo = ref.read(guruRepositoryProvider);
+    final gm = await repo.getRecentMessages(summary.id, limit: 100);
+    if (!mounted) return;
+    final service = _serviceTypeFromDb(summary.service);
     setState(() {
       _selectedService = service;
       _messages.clear();
-      _userProfile = null;
-      _currentConversationId = newConversation.id;
-      _readingDelivered = false;
-      _showAIGuruHome = false;
-      _isInChat = true;
-      _conversationHistory.insert(0, newConversation);
-    });
-    
-    _addGreetingMessage(service);
-  }
-
-  void _resumeConversation(ConversationHistory conversation) {
-    setState(() {
-      _selectedService = conversation.service;
-      _messages.clear();
-      _messages.addAll(conversation.messages);
-      _userProfile = conversation.userProfile;
-      _currentConversationId = conversation.id;
-      _readingDelivered = true; // Already delivered in previous session
+      _messages.addAll(_mapGuruMessagesToChat(summary.id, gm));
+      _currentConversationId = summary.id;
+      _readingDelivered = _messages.any((m) => m.isReading);
       _isInChat = true;
     });
     _scrollToBottom();
   }
 
-  void _deleteConversation(ConversationHistory conversation) {
+  void _deleteConversation(GuruConversationSummary summary) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -211,7 +292,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'This will permanently delete this ${conversation.service.title} conversation.',
+                'This will permanently delete this ${_serviceTypeFromDb(summary.service).title} conversation.',
                 style: GoogleFonts.outfit(
                   color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 14,
@@ -229,12 +310,20 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(context);
-                      setState(() {
-                        _conversationHistory.removeWhere((c) => c.id == conversation.id);
-                      });
-                      _persistConversations();
+                      await ref
+                          .read(guruRepositoryProvider)
+                          .deleteConversation(summary.id);
+                      await _refreshConversationSummaries();
+                      if (_currentConversationId == summary.id && mounted) {
+                        setState(() {
+                          _messages.clear();
+                          _currentConversationId = null;
+                          _isInChat = false;
+                          _showAIGuruHome = true;
+                        });
+                      }
                     },
                     child: Text(
                       AppStrings.get('delete', ref.read(languageProvider)),
@@ -251,38 +340,11 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   }
 
   void _goBackToAIGuruHome() {
-    _saveCurrentConversation();
+    Future<void>.microtask(_refreshConversationSummaries);
     setState(() {
       _showAIGuruHome = true;
       _isInChat = false;
     });
-  }
-
-  void _saveCurrentConversation() {
-    if (_currentConversationId == null || _messages.isEmpty) return;
-    
-    final index = _conversationHistory.indexWhere(
-      (c) => c.id == _currentConversationId,
-    );
-    
-    if (index != -1) {
-      // Get the last non-empty message for preview
-      String? lastMessage;
-      for (int i = _messages.length - 1; i >= 0; i--) {
-        if (_messages[i].content.isNotEmpty) {
-          lastMessage = _messages[i].content;
-          break;
-        }
-      }
-      
-      _conversationHistory[index] = _conversationHistory[index].copyWith(
-        updatedAt: DateTime.now(),
-        messages: List.from(_messages),
-        lastMessage: lastMessage,
-        userProfile: _userProfile,
-      );
-    }
-    _persistConversations();
   }
 
   void _addGreetingMessage(SpiritualServiceType service) {
@@ -323,20 +385,30 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
 
   Future<void> _showDataCollectionForm() async {
     if (_selectedService == null) return;
-    
-    // Check usage limit before showing form
-    final canStart = await _usageService.canStartConsultation();
-    if (!canStart && mounted) {
-      _showUsageLimitDialog();
+
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sign in to continue.')),
+        );
+      }
       return;
     }
-    
+    final tier = await ref.read(guruUserTierProvider.future);
+    await ref.read(guruAiCreditsServiceProvider).syncTierToProfile(tier);
+    final peek = await ref.read(guruAiCreditsServiceProvider).peek();
+    if (peek != null && peek.totalSendable <= 0 && mounted) {
+      _showQuotaDialog(tier);
+      return;
+    }
+
     if (!mounted) return;
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.ashramBackgroundDark,
+      backgroundColor: Colors.transparent,
       builder: (context) => ServiceFormSheet(
         service: _selectedService!,
         onSubmit: _onFormSubmitted,
@@ -344,99 +416,197 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     );
   }
   
-  void _showUsageLimitDialog() {
-    showDialog(
+  void _showQuotaDialog(UserTier currentTier) {
+    final wFree = FeatureGateConfig.guruWeeklyIncludedFree;
+    final wPlus = FeatureGateConfig.guruWeeklyIncludedPlus;
+    final wPro = FeatureGateConfig.guruWeeklyIncludedPro;
+
+    final (String body, String primaryLabel) = switch (currentTier) {
+      UserTier.free => (
+          "You've used this week's included messages with Guruji ($wFree per week on Free).\n\n"
+              'Subscribe to Plus or Pro for more each week, or buy credit packs to keep chatting.',
+          'View plans',
+        ),
+      UserTier.plus => (
+          "You've used this week's included messages ($wPlus per week on Plus).\n\n"
+              'Upgrade to Pro for $wPro per week, or buy credit packs for more anytime.',
+          'Upgrade to Pro',
+        ),
+      UserTier.pro => (
+          "You've used this week's included Pro messages ($wPro per week).\n\n"
+              'Buy credit packs to keep talking with Guruji without waiting for next week.',
+          'Buy credits',
+        ),
+    };
+
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.ashramBackgroundDark,
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _streakStyleDecoration,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-          children: [
-            const                 Icon(
-                  Icons.lock_outline,
-                  color: AppColors.primaryOrange,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Monthly Limit Reached',
-                    style: GoogleFonts.cormorantGaramond(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryOrange,
-                    ),
-                  ),
-                ),
-              ],
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFFFFBF0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'No messages left this week',
+          style: TextStyle(
+            color: Color(0xFF7C2D12),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          body,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            height: 1.4,
+            color: const Color(0xFF44403C),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Not now'),
+          ),
+          if (GuruCreditPackConfig.configuredPacks().isNotEmpty)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showBuyCreditsSheet();
+              },
+              child: const Text('Buy credits'),
             ),
-            const SizedBox(height: 12),
-            Text(
-              "You've used all ${ConsultationUsageService.freeMonthlyLimit} free consultations this month.",
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFB45309),
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Upgrade to Premium for unlimited spiritual guidance!',
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: AppColors.primaryOrange,
-                fontWeight: FontWeight.w500,
-              ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (currentTier == UserTier.pro) {
+                _showBuyCreditsSheet();
+              } else {
+                Navigator.pushNamed(context, AppRouter.paywall);
+              }
+            },
+            child: Text(primaryLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showBuyCreditsSheet() async {
+    final packs = GuruCreditPackConfig.configuredPacks();
+    if (packs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Credit packs are not configured yet. Add GURU_CREDITS_PRODUCT_ID_* to .env and App Store Connect.',
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+          ),
+        );
+      }
+      return;
+    }
+    final rc = RevenueCatService.instance;
+    if (!rc.isInitialized) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Store is not ready. Try again in a moment.')),
+        );
+      }
+      return;
+    }
+    final ids = packs.map((p) => p.productId).toList();
+    final products = await rc.getStoreProducts(ids);
+    final byId = {for (final p in products) p.identifier: p};
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: AppColors.aiGuruSheetGradient,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    'Maybe Later',
-                    style: GoogleFonts.outfit(
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
+                Text(
+                  'AI Guru credits',
+                  style: GoogleFonts.outfit(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    PaywallScreen.showAsBottomSheet(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryOrange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Go Premium',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                  ),
+                const SizedBox(height: 8),
+                Text(
+                  'Used after your weekly included messages. Credits do not expire with the week.',
+                  style: GoogleFonts.outfit(fontSize: 13, color: AppColors.zinc500, height: 1.35),
                 ),
+                const SizedBox(height: 16),
+                ...packs.map((pack) {
+                  final sp = byId[pack.productId];
+                  final label = sp?.priceString ?? '${pack.credits} credits';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton(
+                      onPressed: sp == null
+                          ? null
+                          : () async {
+                              Navigator.pop(ctx);
+                              final out = await rc.purchaseStoreProduct(sp);
+                              if (!mounted) return;
+                              if (out.success) {
+                                final ok = await ref
+                                    .read(guruAiCreditsServiceProvider)
+                                    .grantPurchasedCredits(pack.credits);
+                                ref.invalidate(guruCreditPeekProvider);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      ok
+                                          ? '+${pack.credits} credits added'
+                                          : 'Purchase OK but could not add credits. Contact support.',
+                                    ),
+                                  ),
+                                );
+                              } else if (out.errorMessage != null &&
+                                  !(out.cancelled)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(out.errorMessage!)),
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryOrange,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(
+                        '${pack.credits} credits — $label',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  );
+                }),
               ],
             ),
-          ],
+          ),
         ),
       ),
-    ),
     );
   }
 
   void _onFormSubmitted(Map<String, dynamic> formData) {
     Navigator.of(context).pop();
-    setState(() {
-      _userProfile = formData;
-    });
     
     // Extract image if present (for palmistry)
     String? imageBase64;
@@ -473,82 +643,101 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     return buffer.toString().trim();
   }
 
+  List<String> _quickRepliesAfterReading(SpiritualServiceType service) {
+    switch (service) {
+      case SpiritualServiceType.palmistry:
+        return const [
+          'Heart line aur love life par aur detail',
+          'Career / fate line timing',
+          'Koi remedy ya daily practice',
+        ];
+      case SpiritualServiceType.kundli:
+        return const [
+          'Career aur dasha par aur',
+          'Relationship timing',
+          'Remedies batayein',
+        ];
+      case SpiritualServiceType.numerology:
+        return const [
+          'Mulank aur Namank aur detail',
+          'Is saal ka focus',
+          'Aur ek sawaal hai',
+        ];
+      case SpiritualServiceType.mantra:
+        return const [
+          'Mantra ki roz ki practice',
+          'Is mantra ka aur matlab',
+          'Dusra mantra suggest karein',
+        ];
+      case SpiritualServiceType.upcomingEvents:
+        return const [
+          'Aage ke tyohaar aur batao',
+          'Meri date ke hisaab se',
+          'Nayi consultation',
+        ];
+      case SpiritualServiceType.askAnything:
+        return const [
+          'Aur detail mein samjhao',
+          'Mere paas ek sawaal hai',
+          'Nayi consultation',
+        ];
+    }
+  }
+
   Future<void> _requestReading(Map<String, dynamic> formData) async {
-    if (_selectedService == null) return;
-    
+    if (_selectedService == null || _currentConversationId == null) return;
+
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+
     setState(() => _isLoading = true);
     _scrollToBottom();
 
-    try {
-      // Build context message for AI
-      final contextMessage = _buildReadingRequest(formData);
-      
-      // Extract palm image if this is a palmistry reading
-      String? palmImage;
-      if (_selectedService == SpiritualServiceType.palmistry) {
-        palmImage = formData['palmImage'] as String?;
-      }
-      
-      final response = await _chatService.chat(
-        service: _selectedService!,
-        userMessage: contextMessage,
-        userProfile: formData,
-        history: _messages.map((m) => m.toGptFormat()).toList(),
-        imageBase64: palmImage,
-      );
-
-      if (mounted) {
-        // Increment usage count after successful reading
-        if (!_readingDelivered) {
-          await _usageService.incrementConsultationCount();
-          _readingDelivered = true;
-        }
-        
-        setState(() {
-          _messages.add(ChatMessage.assistant(
-            conversationId: _currentConversationId ?? 'temp',
-            content: response,
-            isReading: true,
-            quickReplies: ["Tell me more", "I have a question", "New consultation"],
-          ));
-          _isLoading = false;
-        });
-        _scrollToBottom();
-        _saveCurrentConversation();
-      }
-    } catch (e) {
-      print('Error requesting reading: $e');
-      if (mounted) {
-        String errorMessage = "I apologize, but I'm having trouble connecting right now. Please try again in a moment. 🙏";
-        
-        // Provide more helpful error messages
-        final errorString = e.toString().toLowerCase();
-        if (errorString.contains('api key')) {
-          errorMessage = "API key is not configured. Please check your .env file has a valid GPT_API_KEY. 🔑";
-        } else if (errorString.contains('timeout') || errorString.contains('timed out')) {
-          errorMessage = "The request took too long. Please try again - sometimes the spirits need a moment longer to connect. 🕉️";
-        } else if (errorString.contains('401') || errorString.contains('unauthorized')) {
-          errorMessage = "API authentication failed. Please check your GPT_API_KEY is valid. 🔐";
-        } else if (errorString.contains('429') || errorString.contains('rate limit')) {
-          if (errorString.contains('quota') || errorString.contains('insufficient_quota')) {
-            errorMessage = "The AI service has reached its usage limit. Please check your OpenAI account billing and plan at platform.openai.com, or try again later. 🙏";
-          } else {
-            errorMessage = "Too many requests. Please wait a moment and try again. 🙏";
-          }
-        } else if (errorString.contains('500') || errorString.contains('502') || errorString.contains('503')) {
-          errorMessage = "The service is temporarily unavailable. Please try again shortly. 🙏";
-        }
-        
-        setState(() {
-          _messages.add(ChatMessage.assistant(
-            conversationId: _currentConversationId ?? 'temp',
-            content: errorMessage,
-          ));
-          _isLoading = false;
-        });
-        _scrollToBottom();
-      }
+    final contextMessage = _buildReadingRequest(formData);
+    String? palmImage;
+    if (_selectedService == SpiritualServiceType.palmistry) {
+      palmImage = formData['palmImage'] as String?;
     }
+
+    final tier = await ref.read(guruUserTierProvider.future);
+    final result = await ref.read(guruApiServiceProvider).sendMessage(
+          userId: uid,
+          tier: tier,
+          conversationId: _currentConversationId!,
+          service: _selectedService!,
+          userMessage: contextMessage,
+          imageBase64: palmImage,
+          imageMediaType: 'image/jpeg',
+        );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result.isQuotaExceeded) {
+      _showQuotaDialog(result.tier!);
+      return;
+    }
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.errorMessage ?? 'Something went wrong.')),
+      );
+      return;
+    }
+
+    if (!_readingDelivered) {
+      _readingDelivered = true;
+    }
+    setState(() {
+      _messages.add(ChatMessage.assistant(
+        conversationId: _currentConversationId!,
+        content: result.reply!,
+        isReading: true,
+        quickReplies: _quickRepliesAfterReading(_selectedService!),
+      ));
+    });
+    await _refreshConversationSummaries();
+    ref.invalidate(guruCreditPeekProvider);
+    _scrollToBottom();
   }
 
   String _buildReadingRequest(Map<String, dynamic> formData) {
@@ -597,15 +786,16 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     return buffer.toString();
   }
 
-  void _addUserMessage(String content) {
+  void _addUserMessage(String content, {String? conversationId}) {
+    final cid = conversationId ?? _currentConversationId ?? 'temp';
     setState(() {
       _messages.add(ChatMessage.user(
-        conversationId: _currentConversationId ?? 'temp',
+        conversationId: cid,
         content: content,
       ));
     });
     _scrollToBottom();
-    _sendMessage(content);
+    _sendMessage(content, conversationId: conversationId);
   }
 
   void _addUserMessageWithImage(String content, {String? imageBase64}) {
@@ -620,67 +810,73 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     // Note: Don't call _sendMessage here - the reading request is sent separately
   }
 
-  Future<void> _sendMessage(String content) async {
-    if (_selectedService == null) return;
-    
+  Future<void> _sendMessage(String content, {String? conversationId}) async {
+    final cid = conversationId ?? _currentConversationId;
+    final service = _selectedService;
+    if (service == null || cid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat is not ready. Please try sending again.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sign in to chat with Guruji.')),
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
     _scrollToBottom();
 
-    try {
-      // Add date context for follow-up messages too
-      final now = DateTime.now();
-      final messageWithContext = "Today's date: ${now.day}/${now.month}/${now.year}. User message: $content";
-      
-      final response = await _chatService.chat(
-        service: _selectedService!,
-        userMessage: messageWithContext,
-        userProfile: _userProfile,
-        history: _messages.map((m) => m.toGptFormat()).toList(),
-      );
+    final now = DateTime.now();
+    final messageWithContext =
+        "Today's date: ${now.day}/${now.month}/${now.year}. User message: $content";
 
-      if (mounted) {
-        if (_selectedService == SpiritualServiceType.askAnything) {
-          await _usageService.incrementAskAnythingCount();
-        }
-        setState(() {
-          _messages.add(ChatMessage.assistant(
-            conversationId: _currentConversationId ?? 'temp',
-            content: response,
-          ));
-          _isLoading = false;
-        });
-        _scrollToBottom();
-        _saveCurrentConversation();
-      }
-    } catch (e) {
-      print('Error sending message: $e');
-      if (mounted) {
-        String errorMessage = "I apologize, but I'm having trouble connecting right now. Please try again. 🙏";
-        
-        final errorString = e.toString().toLowerCase();
-        if (errorString.contains('api key')) {
-          errorMessage = "API key is not configured. Please check your .env file. 🔑";
-        } else if (errorString.contains('timeout')) {
-          errorMessage = "The request took too long. Please try again. 🕉️";
-        } else if (errorString.contains('429') && (errorString.contains('quota') || errorString.contains('insufficient_quota'))) {
-          errorMessage = "The AI service has reached its usage limit. Please check your OpenAI account billing and plan at platform.openai.com, or try again later. 🙏";
-        } else if (errorString.contains('429') || errorString.contains('rate limit')) {
-          errorMessage = "Too many requests. Please wait a moment and try again. 🙏";
-        }
-        
-        setState(() {
-          _messages.add(ChatMessage.assistant(
-            conversationId: _currentConversationId ?? 'temp',
-            content: errorMessage,
-          ));
-          _isLoading = false;
-        });
-        _scrollToBottom();
-      }
+    final tier = await ref.read(guruUserTierProvider.future);
+    final result = await ref.read(guruApiServiceProvider).sendMessage(
+          userId: uid,
+          tier: tier,
+          conversationId: cid,
+          service: service,
+          userMessage: messageWithContext,
+        );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result.isQuotaExceeded) {
+      _showQuotaDialog(result.tier!);
+      return;
     }
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.errorMessage ?? 'Something went wrong.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _messages.add(ChatMessage.assistant(
+        conversationId: _currentConversationId!,
+        content: result.reply!,
+      ));
+    });
+    await _refreshConversationSummaries();
+    ref.invalidate(guruCreditPeekProvider);
+    _scrollToBottom();
   }
 
   void _onSendMessage() {
+    if (_isLoading) return;
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
     _messageController.clear();
@@ -690,123 +886,30 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   Future<void> _onAskAnythingSendFromHome() async {
     final text = _askAnythingHomeController.text.trim();
     if (text.isEmpty) return;
-    final canAsk = await _usageService.canAskAnything();
-    if (!mounted) return;
-    if (!canAsk) {
-      _showAskAnythingLimitDialog();
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sign in to chat with Guruji.')),
+        );
+      }
       return;
     }
     _askAnythingHomeController.clear();
-    _startAskAnythingAndGoToChat(text);
-  }
-
-  void _startAskAnythingAndGoToChat(String firstMessage) {
-    final newConversation = ConversationHistory.create(
-      service: SpiritualServiceType.askAnything,
+    final conversationId = await _openServiceConversation(
+      SpiritualServiceType.askAnything,
+      skipGreetingWhenEmpty: true,
     );
-    setState(() {
-      _selectedService = SpiritualServiceType.askAnything;
-      _messages.clear();
-      _userProfile = null;
-      _currentConversationId = newConversation.id;
-      _readingDelivered = false;
-      _showAIGuruHome = false;
-      _isInChat = true;
-      _conversationHistory.insert(0, newConversation);
-    });
-    _addUserMessage(firstMessage);
-  }
-
-  void _showAskAnythingLimitDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.ashramBackgroundDark,
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _streakStyleDecoration,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.info_outline, color: AppColors.primaryOrange),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Ask Anything limit reached',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryOrange,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "You've used your free Ask Anything questions this month. Upgrade to Premium for more spiritual guidance.",
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: Colors.white70,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(
-                      'Maybe Later',
-                      style: GoogleFonts.outfit(color: Colors.white70),
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      PaywallScreen.showAsBottomSheet(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryOrange,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      'Upgrade',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (!mounted || conversationId == null) return;
+    _addUserMessage(text, conversationId: conversationId);
   }
 
   void _startInsightService(SpiritualServiceType service) {
-    final newConversation = ConversationHistory.create(service: service);
-    setState(() {
-      _selectedService = service;
-      _messages.clear();
-      _userProfile = null;
-      _currentConversationId = newConversation.id;
-      _readingDelivered = false;
-      _showAIGuruHome = false;
-      _isInChat = true;
-      _conversationHistory.insert(0, newConversation);
-    });
-    _addGreetingMessage(service);
+    _openServiceConversation(service);
   }
 
-  /// Opens the chat with the selected feeling as user message and AI response (no API call, no insight consumed).
+  /// Opens Ask Anything chat, shows scripted comfort + optional ashram suggestion.
+  /// Persists to Supabase so the next Guruji (OpenAI) reply has full context — user can keep chatting.
   Future<void> _openFeelingInChat(String feelingId) async {
     final lang = ref.read(languageProvider);
     final title = FeelingResponses.getTitleForFeelingDisplay(feelingId, lang);
@@ -815,202 +918,96 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
 
     FeelingRepository().logFeeling(feelingId);
 
-    final newConversation = ConversationHistory.create(
-      service: SpiritualServiceType.askAnything,
-    );
     final weekday = DateTime.now().weekday;
     final suggestion =
         await FeelingRepository().getSuggestionForFeelingAndWeekday(feelingId, weekday);
 
     if (!mounted) return;
-    setState(() {
-      _selectedService = SpiritualServiceType.askAnything;
-      _messages.clear();
-      _userProfile = null;
-      _currentConversationId = newConversation.id;
-      _readingDelivered = false;
-      _showAIGuruHome = false;
-      _isInChat = true;
-      _conversationHistory.insert(0, newConversation);
 
-      final userContent = "I'm feeling $title";
-      _messages.add(ChatMessage.user(
-        conversationId: newConversation.id,
-        content: userContent,
-      ));
-      _messages.add(ChatMessage.assistant(
-        conversationId: newConversation.id,
-        content: response,
-      ));
-      if (suggestion != null) {
-        final suggestionText = suggestion.description != null &&
-                suggestion.description!.isNotEmpty
-            ? '${suggestion.title}\n\n${suggestion.description}'
-            : suggestion.title;
-        _messages.add(ChatMessage.assistant(
-          conversationId: newConversation.id,
-          content: "Today's suggestion: $suggestionText",
-        ));
+    // Load real thread from DB so UI matches history the model will see on the next send.
+    final cid = await _openServiceConversation(
+      SpiritualServiceType.askAnything,
+      skipGreetingWhenEmpty: true,
+      loadExistingMessages: true,
+    );
+    if (!mounted || cid == null) return;
+
+    final userContent = "I'm feeling $title";
+    final repo = ref.read(guruRepositoryProvider);
+    String? suggestionLine;
+    if (suggestion != null) {
+      suggestionLine = suggestion.description != null &&
+              suggestion.description!.isNotEmpty
+          ? '${suggestion.title}\n\n${suggestion.description}'
+          : suggestion.title;
+    }
+
+    try {
+      await repo.saveMessage(cid, 'user', userContent);
+      await repo.saveMessage(cid, 'assistant', response);
+      if (suggestionLine != null) {
+        await repo.saveMessage(
+          cid,
+          'assistant',
+          "Today's suggestion: $suggestionLine",
+        );
       }
-    });
+    } catch (e, st) {
+      debugPrint('Guru: persist feeling messages failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save this moment. Try again.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    try {
+      final fresh = await repo.getRecentMessages(cid, limit: 100);
+      if (!mounted) return;
+      setState(() {
+        _messages.clear();
+        _messages.addAll(_mapGuruMessagesToChat(cid, fresh));
+        _readingDelivered = _messages.any((m) => m.isReading);
+      });
+    } catch (e, st) {
+      debugPrint('Guru: reload after feeling failed: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _messages.add(ChatMessage.user(
+          conversationId: cid,
+          content: userContent,
+        ));
+        _messages.add(ChatMessage.assistant(
+          conversationId: cid,
+          content: response,
+        ));
+        if (suggestionLine != null) {
+          _messages.add(ChatMessage.assistant(
+            conversationId: cid,
+            content: "Today's suggestion: $suggestionLine",
+          ));
+        }
+      });
+    }
     _scrollToBottom();
   }
 
-  void _showFeelingResponseSheet(String feelingId) {
-    final lang = ref.read(languageProvider);
-    final title = FeelingResponses.getTitleForFeelingDisplay(feelingId, lang);
-    final response = FeelingResponses.getResponseForFeeling(feelingId);
-    final emoji = FeelingResponses.getEmojiForFeeling(feelingId);
-    if (response == null) return;
-
-    // Save to Supabase for logged-in users
-    FeelingRepository().logFeeling(feelingId);
-
-    // Weekday 1 = Monday .. 7 = Sunday
-    final weekday = DateTime.now().weekday;
-    final suggestionFuture =
-        FeelingRepository().getSuggestionForFeelingAndWeekday(feelingId, weekday);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.ashramBackgroundDark,
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + 16,
-          left: 16,
-          right: 16,
-          top: 24,
-        ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryOrange.withValues(alpha: 0.2),
-              AppColors.deepPurple.withValues(alpha: 0.2),
-            ],
-          ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(emoji ?? '🙏', style: const TextStyle(fontSize: 28)),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryOrange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              response,
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: Colors.white70,
-                height: 1.45,
-              ),
-            ),
-            FutureBuilder<FeelingSuggestion?>(
-              future: suggestionFuture,
-              builder: (context, snap) {
-                final suggestion = snap.data;
-                if (suggestion == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryOrange.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.lightbulb_outline_rounded,
-                              size: 18,
-                              color: AppColors.primaryOrange,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              "Today's suggestion",
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primaryOrange,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          suggestion.title,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                        if (suggestion.description != null &&
-                            suggestion.description!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            suggestion.description!,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              color: Colors.white70,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildAIGuruHomeView() {
-    return FutureBuilder<bool>(
-      future: PremiumService.instance.isPremium,
-      builder: (context, premiumSnap) {
-        final isPremium = premiumSnap.data ?? false;
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _buildAIGuruHeader(isPremium)),
-            SliverToBoxAdapter(child: _buildMoodSection()),
-            SliverToBoxAdapter(child: _buildAskAnythingCard(isPremium)),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          ],
-        );
-      },
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildAIGuruHeader()),
+        SliverToBoxAdapter(child: _buildMoodSection()),
+        SliverToBoxAdapter(child: _buildAskAnythingCard()),
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      ],
     );
   }
 
-  Widget _buildAIGuruHeader(bool isPremium) {
+  Widget _buildAIGuruHeader() {
     return Padding(
       padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
       child: SafeArea(
@@ -1021,7 +1018,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
             IconButton(
               icon: const Icon(Icons.history_rounded),
               color: AppColors.primaryOrange,
-              onPressed: _showPastConversationsSheet,
+              onPressed: _openPastConversationsSheet,
               tooltip: 'Past conversations',
             ),
             IconButton(
@@ -1040,9 +1037,10 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     final lang = ref.watch(languageProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      child: KeyedSubtree(
-        key: ValueKey('mood_${widget.animationSeed}'),
-        child: Column(
+      child: RepaintBoundary(
+        child: KeyedSubtree(
+          key: ValueKey('mood_${widget.animationSeed}'),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             BlinkingIcon(
@@ -1074,138 +1072,177 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
             const SizedBox(height: 8),
           ],
         ),
+        ),
       ),
     );
   }
 
-  Widget _buildAskAnythingCard(bool isPremium) {
-    return FutureBuilder<int>(
-      future: _usageService.getRemainingAskAnything(),
-      builder: (context, snap) {
-        final remaining = snap.data ?? 0;
-        final canAsk = isPremium || remaining > 0;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            'ASK ANYTHING',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          Text(
-                            isPremium ? 'PREMIUM ACTIVE' : '$remaining INSIGHTS LEFT',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primaryOrange.withValues(alpha: 0.9),
-                              letterSpacing: 0.3,
-                            ),
-                          ),
+  Widget _buildAskAnythingCard() {
+    final tierAsync = ref.watch(guruUserTierProvider);
+    final peekAsync = ref.watch(guruCreditPeekProvider);
+    final UserTier tier = tierAsync.maybeWhen(
+      data: (t) => t,
+      orElse: () => UserTier.free,
+    );
+    final peek = peekAsync.valueOrNull;
+    final total = peek?.totalSendable ?? 0;
+    final canAsk = total > 0;
+    final badge = peekAsync.isLoading
+        ? '…'
+        : peek == null
+            ? '—'
+            : '${tier.name.toUpperCase()} • $total left this week';
+
+    return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.08),
+                          AppColors.deepPurple.withValues(alpha: 0.15),
+                          AppColors.primaryOrange.withValues(alpha: 0.06),
                         ],
+                        stops: const [0.0, 0.55, 1.0],
                       ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (!canAsk)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                'Upgrade to ask more questions.',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: AppColors.primaryOrange,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _askAnythingHomeController,
-                                  enabled: canAsk,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Type your deepest inquiry...',
-                                    hintStyle: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      color: Colors.white38,
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white.withValues(alpha: 0.06),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                                  ),
-                                  onSubmitted: (_) => _onAskAnythingSendFromHome(),
+                              Text(
+                                'ASK ANYTHING',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Material(
-                                color: canAsk ? AppColors.primaryOrange : Colors.grey.shade600,
-                                borderRadius: BorderRadius.circular(24),
-                                child: InkWell(
-                                  onTap: canAsk ? _onAskAnythingSendFromHome : null,
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
-                                  ),
+                              Text(
+                                badge,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.primaryOrange.withValues(alpha: 0.9),
+                                  letterSpacing: 0.3,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (!canAsk)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'No weekly messages left. Upgrade or buy credits.',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12,
+                                            color: AppColors.primaryOrange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      if (GuruCreditPackConfig.configuredPacks().isNotEmpty)
+                                        TextButton(
+                                          onPressed: _showBuyCreditsSheet,
+                                          child: Text(
+                                            'Buy credits',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.primaryOrange,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _askAnythingHomeController,
+                                      enabled: canAsk,
+                                      textInputAction: TextInputAction.send,
+                                      onSubmitted: (_) {
+                                        if (canAsk) _onAskAnythingSendFromHome();
+                                      },
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        color: Colors.white,
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: 'Type your deepest inquiry...',
+                                        hintStyle: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: Colors.white38,
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.white.withValues(alpha: 0.06),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(24),
+                                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                                        ),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Material(
+                                    color: canAsk ? AppColors.primaryOrange : Colors.grey.shade600,
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: InkWell(
+                                      onTap: canAsk ? () => _onAskAnythingSendFromHome() : null,
+                                      borderRadius: BorderRadius.circular(24),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        _buildRecentAskAnythingPills(),
+                      ],
                     ),
-                    // Recent Ask Anything conversations as pills
-                    _buildRecentAskAnythingPills(),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        );
-      },
-    );
+            );
   }
 
   Widget _buildRecentAskAnythingPills() {
-    final askAnythingConversations = _conversationHistory
-        .where((c) => c.service == SpiritualServiceType.askAnything)
+    final askRows = _conversationSummaries
+        .where((c) => c.service == SpiritualServiceType.askAnything.name)
+        .take(8)
         .toList();
-    if (askAnythingConversations.isEmpty) return const SizedBox.shrink();
+    if (askRows.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
@@ -1227,24 +1264,26 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: askAnythingConversations.map((c) {
-                final preview = (c.lastMessage != null && c.lastMessage!.isNotEmpty)
-                    ? (c.lastMessage!.length > 24 ? '${c.lastMessage!.substring(0, 24)}...' : c.lastMessage!)
+              children: askRows.map((c) {
+                final preview = (c.title != null && c.title!.isNotEmpty)
+                    ? (c.title!.length > 24 ? '${c.title!.substring(0, 24)}...' : c.title!)
                     : 'Ask Anything';
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
-                        _resumeConversation(c);
-                        setState(() {
-                          _showAIGuruHome = false;
-                          _isInChat = true;
-                        });
+                      onTap: () async {
+                        await _resumeRemoteConversation(c);
+                        if (mounted) {
+                          setState(() {
+                            _showAIGuruHome = false;
+                            _isInChat = true;
+                          });
+                        }
                       },
                       borderRadius: BorderRadius.circular(20),
-                        child: Container(
+                      child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.08),
@@ -1277,15 +1316,32 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.ashramBackgroundDark,
-      appBar: _showAIGuruHome ? null : _buildAppBar(),
-      body: _showAIGuruHome ? _buildAIGuruHomeView() : _buildChatView(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(gradient: AppColors.aiGuruScreenGradient),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!_showAIGuruHome) _buildAppBar(),
+              Expanded(
+                child: _showAIGuruHome ? _buildAIGuruHomeView() : _buildChatView(),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: AppColors.ashramBackgroundDark,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: true,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -1329,24 +1385,19 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
     );
   }
 
-  void _showPastConversationsSheet() {
+  Future<void> _openPastConversationsSheet() async {
+    await _refreshConversationSummaries();
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.ashramBackgroundDark,
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryOrange.withValues(alpha: 0.2),
-              AppColors.deepPurple.withValues(alpha: 0.2),
-            ],
-          ),
+          gradient: AppColors.aiGuruSheetGradient,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
@@ -1364,7 +1415,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
             ),
             const SizedBox(height: 12),
             Flexible(
-              child: _conversationHistory.isEmpty
+              child: _conversationSummaries.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
@@ -1378,24 +1429,25 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
                     )
                   : ListView.builder(
                       shrinkWrap: true,
-                      itemCount: _conversationHistory.length,
+                      itemCount: _conversationSummaries.length,
                       itemBuilder: (context, index) {
-                        final c = _conversationHistory[index];
+                        final c = _conversationSummaries[index];
+                        final svc = _serviceTypeFromDb(c.service);
                         return ListTile(
-                          leading: Text(c.service.emoji, style: const TextStyle(fontSize: 20)),
+                          leading: Text(svc.emoji, style: const TextStyle(fontSize: 20)),
                           title: Text(
-                            c.service.title,
+                            svc.title,
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                               color: Colors.white,
                             ),
                           ),
-                          subtitle: c.lastMessage != null && c.lastMessage!.isNotEmpty
+                          subtitle: c.title != null && c.title!.isNotEmpty
                               ? Text(
-                                  c.lastMessage!.length > 40
-                                      ? '${c.lastMessage!.substring(0, 40)}...'
-                                      : c.lastMessage!,
+                                  c.title!.length > 40
+                                      ? '${c.title!.substring(0, 40)}...'
+                                      : c.title!,
                                   style: GoogleFonts.outfit(
                                     fontSize: 12,
                                     color: Colors.white60,
@@ -1411,13 +1463,15 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
                               _deleteConversation(c);
                             },
                           ),
-                          onTap: () {
+                          onTap: () async {
                             Navigator.pop(context);
-                            _resumeConversation(c);
-                            setState(() {
-                              _showAIGuruHome = false;
-                              _isInChat = true;
-                            });
+                            await _resumeRemoteConversation(c);
+                            if (mounted) {
+                              setState(() {
+                                _showAIGuruHome = false;
+                                _isInChat = true;
+                              });
+                            }
                           },
                         );
                       },
@@ -1454,18 +1508,46 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
   Widget _buildChatView() {
     return Column(
       children: [
-        // Usage indicator: insights left (Ask Anything) or consultations left
-        _UsageBanner(
-          usageService: _usageService,
-          selectedService: _selectedService,
-        ),
         Expanded(child: _buildChatBody()),
+        _buildChatQuotaLine(),
         ChatInputBar(
           controller: _messageController,
           onSend: _onSendMessage,
           isLoading: _isLoading,
         ),
       ],
+    );
+  }
+
+  Widget _buildChatQuotaLine() {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final service = _selectedService;
+    final peekAsync = ref.watch(guruCreditPeekProvider);
+
+    if (uid == null || service == null) {
+      return const SizedBox.shrink();
+    }
+
+    return peekAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (peek) {
+        if (peek == null) return const SizedBox.shrink();
+        final rem = peek.totalSendable;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6, top: 2),
+          child: Text(
+            rem == 0
+                ? 'No messages left this week  •  Buy credits or wait for reset'
+                : '$rem message${rem == 1 ? '' : 's'} left this week (included + purchased)',
+            style: TextStyle(
+              fontSize: 11,
+              color: rem <= 1 ? Colors.orange[700] : Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        );
+      },
     );
   }
 
@@ -1496,14 +1578,7 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.primaryOrange.withValues(alpha: 0.15),
-                        AppColors.deepPurple.withValues(alpha: 0.1),
-                      ],
-                    ),
+                    gradient: AppColors.aiGuruCardGradient,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                   ),
@@ -1521,6 +1596,8 @@ class _SpiritualChatScreenState extends ConsumerState<SpiritualChatScreen> {
         return ChatMessageBubble(
           message: message,
           onQuickReplyTap: _onQuickReplyTap,
+          onGuruLinkTap: (type, value) =>
+              navigateFromGuruLink(context, type, value),
         );
       },
     );
@@ -1566,45 +1643,46 @@ class _StaggeredFeelingGridState extends State<_StaggeredFeelingGrid>
     final ids = FeelingResponses.allIds;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: gap),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          childAspectRatio: 1.05,
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+                childAspectRatio: 1.05,
+              ),
+              itemCount: ids.length,
+              itemBuilder: (context, index) {
+                final id = ids[index];
+                final start = index * _staggerDelay;
+                final end = start + _animDuration;
+                double t = 0;
+                if (_controller.value <= start) {
+                  t = 0;
+                } else if (_controller.value >= end) {
+                  t = 1;
+                } else {
+                  t = (_controller.value - start) / (end - start);
+                }
+                t = Curves.easeOut.transform(t);
+                final scale = 0.3 + 0.7 * t;
+                final opacity = t;
+                return Transform.scale(
+                  scale: scale,
+                  child: Opacity(
+                    opacity: opacity,
+                    child: _buildChip(id, widget.languageCode),
+                  ),
+                );
+              },
+            );
+          },
         ),
-        itemCount: ids.length,
-        itemBuilder: (context, index) {
-          final id = ids[index];
-          return AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              final start = index * _staggerDelay;
-              final end = start + _animDuration;
-              double t = 0;
-              if (_controller.value <= start) {
-                t = 0;
-              } else if (_controller.value >= end) {
-                t = 1;
-              } else {
-                t = (_controller.value - start) / (end - start);
-              }
-              t = Curves.easeOut.transform(t);
-              final scale = 0.3 + 0.7 * t;
-              final opacity = t;
-              return Transform.scale(
-                scale: scale,
-                child: Opacity(
-                  opacity: opacity,
-                  child: child,
-                ),
-              );
-            },
-            child: _buildChip(id, widget.languageCode),
-          );
-        },
       ),
     );
   }
@@ -1663,14 +1741,7 @@ class _AllFeaturesSheet extends StatelessWidget {
   const _AllFeaturesSheet({required this.onServiceSelected});
 
   static BoxDecoration get _cardDecoration => BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryOrange.withValues(alpha: 0.2),
-            AppColors.deepPurple.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: AppColors.aiGuruCardGradient,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       );
@@ -1828,7 +1899,7 @@ class _AllFeaturesSheet extends StatelessWidget {
                           color: AppColors.primaryOrange,
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
-                            onTap: () => PaywallScreen.showAsBottomSheet(context),
+                            onTap: () => navigateToProfileForProUpgrade(context),
                             borderRadius: BorderRadius.circular(12),
                             child: const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1930,110 +2001,6 @@ class _AllFeaturesSheet extends StatelessWidget {
   }
 }
 
-/// Widget that shows remaining insights (Ask Anything) or consultations for free users.
-class _UsageBanner extends StatelessWidget {
-  final ConsultationUsageService usageService;
-  final SpiritualServiceType? selectedService;
-
-  const _UsageBanner({
-    required this.usageService,
-    this.selectedService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isAskAnything =
-        selectedService == SpiritualServiceType.askAnything;
-
-    return FutureBuilder<int>(
-      future: isAskAnything
-          ? usageService.getRemainingAskAnything()
-          : usageService.getRemainingConsultations(),
-      builder: (context, snapshot) {
-        final remaining = snapshot.data ?? -1;
-
-        // Don't show for premium users (unlimited = -1)
-        if (remaining < 0 || !snapshot.hasData) {
-          return const SizedBox.shrink();
-        }
-
-        final isLow = remaining <= 1;
-        final String message = isAskAnything
-            ? (isLow
-                ? 'Only $remaining insight${remaining == 1 ? '' : 's'} left this month'
-                : '$remaining insight${remaining == 1 ? '' : 's'} left this month')
-            : (isLow
-                ? 'Only $remaining consultation${remaining == 1 ? '' : 's'} remaining this month'
-                : '$remaining free consultation${remaining == 1 ? '' : 's'} remaining this month');
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isLow
-                  ? [
-                      Colors.orange.withValues(alpha: 0.2),
-                      Colors.orange.withValues(alpha: 0.1),
-                    ]
-                  : [
-                      AppColors.primaryOrange.withValues(alpha: 0.15),
-                      AppColors.deepPurple.withValues(alpha: 0.08),
-                    ],
-            ),
-            border: Border(
-              bottom: BorderSide(
-                color: isLow
-                    ? Colors.orange.withValues(alpha: 0.3)
-                    : AppColors.primaryOrange.withValues(alpha: 0.2),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isLow ? Icons.warning_amber_rounded : Icons.auto_awesome,
-                size: 16,
-                color: isLow ? Colors.orange : AppColors.primaryOrange,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: isLow
-                        ? Colors.orange
-                        : Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  PaywallScreen.showAsBottomSheet(context);
-                },
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'Go Premium',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primaryOrange,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 /// Typewriter animation: reveals [text] character by character over [duration].
 class TypewriterText extends StatefulWidget {
   const TypewriterText({
@@ -2125,7 +2092,7 @@ class _BlinkingIconState extends State<BlinkingIcon>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 2600),
     )..repeat(reverse: true);
     _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),

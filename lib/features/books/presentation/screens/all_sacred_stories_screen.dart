@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../../../shared/services/premium_service.dart';
-import '../../../subscription/presentation/screens/paywall_screen.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../providers/book_providers.dart';
 import 'sacred_story_reader_screen.dart';
@@ -473,7 +473,7 @@ class _AllSacredStoriesScreenState
       color: Colors.transparent,
       child: InkWell(
         onTap: isLocked
-            ? () => PaywallScreen.showAsBottomSheet(context)
+            ? () => navigateToProfileForProUpgrade(context)
             : () {
                 Navigator.push(
                   context,

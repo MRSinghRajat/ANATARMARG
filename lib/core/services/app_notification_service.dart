@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_notification.dart';
+import 'notification_preferences.dart';
 
 const String _keyNotifications = 'app_notifications_list';
 
@@ -93,6 +94,7 @@ class AppNotificationService {
     String? type,
     String? customId,
   }) async {
+    if (!await NotificationPreferences.isMasterEnabled()) return;
     await _load();
     if (customId != null && _list.any((n) => n.id == customId)) return;
     final id = customId ?? '${DateTime.now().millisecondsSinceEpoch}_${_list.length}';

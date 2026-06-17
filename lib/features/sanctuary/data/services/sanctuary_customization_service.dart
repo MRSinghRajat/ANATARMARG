@@ -21,11 +21,15 @@ class SanctuaryCustomizationService {
   static const String _localPrefsKey = 'sanctuary_customization_v2';
   static const String _purchasedItemsKey = 'sanctuary_purchased_items_v2';
   static const String _templeGroundKey = 'temple_ground_type';
+  static const String _mandirDeityBgKey = 'mandir_deity_background';
+  static const String _mandirLightKey = 'mandir_light';
 
   final _customizationController = StreamController<SanctuaryCustomization>.broadcast();
   SanctuaryCustomization _currentCustomization = SanctuaryCustomization.defaultConfig;
   Set<String> _purchasedItems = {};
   TempleGroundType _templeGroundType = TempleGroundType.mud;
+  String? _mandirDeityBackground;
+  String _mandirLightId = 'mood_midday';
   bool _isInitialized = false;
   bool _isLoading = false;
   Completer<void>? _initCompleter;
@@ -33,6 +37,8 @@ class SanctuaryCustomizationService {
   Stream<SanctuaryCustomization> get customizationStream => _customizationController.stream;
   SanctuaryCustomization get currentCustomization => _currentCustomization;
   TempleGroundType get templeGroundType => _templeGroundType;
+  String? get mandirDeityBackground => _mandirDeityBackground;
+  String get mandirLightId => _mandirLightId;
   Set<String> get purchasedItems => _purchasedItems;
   bool get isInitialized => _isInitialized;
   bool get isLoading => _isLoading;
@@ -129,7 +135,8 @@ class SanctuaryCustomizationService {
       if (response != null) {
         final customizationData = response['customization_data'];
         final purchasedData = response['purchased_items'] as List<dynamic>?;
-        
+        final mandirData = response['mandir_data'];
+
         if (customizationData != null) {
           final Map<String, dynamic> jsonData;
           if (customizationData is String) {
@@ -139,24 +146,45 @@ class SanctuaryCustomizationService {
           }
           _currentCustomization = SanctuaryCustomization.fromJson(jsonData);
         }
-        
+
         if (purchasedData != null) {
           _purchasedItems = purchasedData.map((e) => e.toString()).toSet();
         } else {
           _purchasedItems = _getDefaultPurchasedItems();
         }
 
-        // Temple ground type is local-only; load from prefs
-        final prefs = await SharedPreferences.getInstance();
-        final groundName = prefs.getString(_templeGroundKey);
-        if (groundName != null) {
-          _templeGroundType = TempleGroundType.values.firstWhere(
-            (e) => e.name == groundName,
-            orElse: () => TempleGroundType.mud,
-          );
+        if (mandirData != null) {
+          final Map<String, dynamic> md = mandirData is String
+              ? (jsonDecode(mandirData) as Map<String, dynamic>)
+              : (mandirData as Map<String, dynamic>);
+          final groundName = md['temple_ground']?.toString();
+          if (groundName != null && groundName.isNotEmpty) {
+            _templeGroundType = TempleGroundType.values.firstWhere(
+              (e) => e.name == groundName,
+              orElse: () => TempleGroundType.mud,
+            );
+          }
+          final deityBg = md['deity_background'];
+          _mandirDeityBackground = (deityBg != null && deityBg.toString().isNotEmpty && deityBg.toString() != 'none')
+              ? deityBg.toString()
+              : null;
+          final lightId = md['light']?.toString();
+          if (lightId != null && lightId.isNotEmpty) {
+            _mandirLightId = lightId;
+          }
+        } else {
+          final prefs = await SharedPreferences.getInstance();
+          final groundName = prefs.getString(_templeGroundKey);
+          if (groundName != null) {
+            _templeGroundType = TempleGroundType.values.firstWhere(
+              (e) => e.name == groundName,
+              orElse: () => TempleGroundType.mud,
+            );
+          }
+          _mandirDeityBackground = prefs.getString(_mandirDeityBgKey);
+          _mandirLightId = prefs.getString(_mandirLightKey) ?? 'mood_midday';
         }
 
-        // Cache locally for offline support
         await _saveToLocalStorage();
         return true;
       }
@@ -198,6 +226,8 @@ class SanctuaryCustomizationService {
           orElse: () => TempleGroundType.mud,
         );
       }
+      _mandirDeityBackground = prefs.getString(_mandirDeityBgKey);
+      _mandirLightId = prefs.getString(_mandirLightKey) ?? 'mood_midday';
     } catch (e) {
       print('Error loading sanctuary customization from local storage: $e');
       _currentCustomization = SanctuaryCustomization.defaultConfig;
@@ -227,6 +257,12 @@ class SanctuaryCustomizationService {
       await prefs.setString(_localPrefsKey, jsonEncode(_currentCustomization.toJson()));
       await prefs.setStringList(_purchasedItemsKey, _purchasedItems.toList());
       await prefs.setString(_templeGroundKey, _templeGroundType.name);
+      if (_mandirDeityBackground != null) {
+        await prefs.setString(_mandirDeityBgKey, _mandirDeityBackground!);
+      } else {
+        await prefs.remove(_mandirDeityBgKey);
+      }
+      await prefs.setString(_mandirLightKey, _mandirLightId);
     } catch (e) {
       print('Error saving sanctuary customization to local storage: $e');
     }
@@ -241,6 +277,11 @@ class SanctuaryCustomizationService {
         'user_id': userId,
         'customization_data': _currentCustomization.toJson(),
         'purchased_items': _purchasedItems.toList(),
+        'mandir_data': {
+          'temple_ground': _templeGroundType.name,
+          'deity_background': _mandirDeityBackground,
+          'light': _mandirLightId,
+        },
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id');
       
@@ -287,12 +328,40 @@ class SanctuaryCustomizationService {
     }
   }
 
-  /// Set temple ground type (persists locally)
+  /// Set temple ground type (persists locally and Supabase)
   Future<void> setTempleGroundType(TempleGroundType type) async {
     if (_templeGroundType == type) return;
     _templeGroundType = type;
+    await _saveToLocalStorage();
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) await _saveToSupabase(userId);
+  }
+
+  /// Set Mandir deity background (persists locally and Supabase). slug e.g. 'shiva', 'none' for default.
+  Future<void> setMandirDeityBackground(String? slug) async {
+    if (_mandirDeityBackground == slug) return;
+    _mandirDeityBackground = slug;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_templeGroundKey, type.name);
+    if (slug != null && slug.isNotEmpty && slug != 'none') {
+      await prefs.setString(_mandirDeityBgKey, slug);
+    } else {
+      await prefs.remove(_mandirDeityBgKey);
+    }
+    await _saveToLocalStorage();
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) await _saveToSupabase(userId);
+  }
+
+  /// Set Mandir light/mood (persists locally and Supabase). id e.g. 'mood_midday', 'mood_dawn'.
+  Future<void> setMandirLight(String id) async {
+    if (_mandirLightId == id) return;
+    _mandirLightId = id;
+    await _saveToLocalStorage();
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) await _saveToSupabase(userId);
   }
 
   /// Purchase an item (deducts coins via CoinService externally)

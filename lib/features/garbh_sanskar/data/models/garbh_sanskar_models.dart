@@ -662,7 +662,8 @@ class WeekDevelopmentInfo {
   final String babySizeEmoji;
   final String babyDevelopment;
   final String motherTip;
-  final String mantraRecommendation;
+  /// Singing / calm voice — not specific mantras (app may not ship audio).
+  final String gentleBondingTip;
 
   const WeekDevelopmentInfo({
     required this.week,
@@ -670,7 +671,7 @@ class WeekDevelopmentInfo {
     required this.babySizeEmoji,
     required this.babyDevelopment,
     required this.motherTip,
-    required this.mantraRecommendation,
+    required this.gentleBondingTip,
   });
 
   static WeekDevelopmentInfo forWeek(int week) {
@@ -689,56 +690,67 @@ class WeekDevelopmentInfo {
         week: 1, babySize: 'Poppy seed', babySizeEmoji: '🌱',
         babyDevelopment: 'The journey begins. The fertilised egg is implanting in the uterus.',
         motherTip: 'Start taking folic acid. Eat fresh fruits and vegetables.',
-        mantraRecommendation: 'Ganesha Mantra — for auspicious beginnings'),
+        gentleBondingTip:
+            'Start the day with a soft hum or a line of any simple lullaby — calm rhythm matters more than perfect words.'),
     4: WeekDevelopmentInfo(
         week: 4, babySize: 'Sesame seed', babySizeEmoji: '🌾',
         babyDevelopment: 'The neural tube is forming — the foundation of the brain and spinal cord.',
         motherTip: 'Rest as much as possible. Morning sickness may begin.',
-        mantraRecommendation: 'Gayatri Mantra — for the baby\'s developing mind'),
+        gentleBondingTip:
+            'Sing or hum gently for a minute or two; your steady voice supports a sense of safety.'),
     8: WeekDevelopmentInfo(
         week: 8, babySize: 'Raspberry', babySizeEmoji: '🫐',
         babyDevelopment: 'Tiny fingers and toes are forming. The heart is beating strongly.',
         motherTip: 'Eat small, frequent meals to manage nausea.',
-        mantraRecommendation: 'Santana Gopala Mantra — for the baby\'s heart'),
+        gentleBondingTip:
+            'A few quiet moments of humming or a familiar tune help emotional bonding.'),
     12: WeekDevelopmentInfo(
         week: 12, babySize: 'Lime', babySizeEmoji: '🍋',
         babyDevelopment: 'All major organs are formed. The baby can move, though you can\'t feel it yet.',
         motherTip: 'First trimester is ending. Energy levels should improve soon.',
-        mantraRecommendation: 'Maha Mrityunjaya Mantra — for protection and health'),
+        gentleBondingTip:
+            'Protection here is warmth in your voice — keep lullabies soft and unhurried.'),
     16: WeekDevelopmentInfo(
         week: 16, babySize: 'Avocado', babySizeEmoji: '🥑',
         babyDevelopment: 'The baby can hear! Your voice is the most comforting sound in their world.',
         motherTip: 'Start talking and singing to your baby. They can hear you.',
-        mantraRecommendation: 'Om Namah Shivaya — the baby can hear this mantra'),
+        gentleBondingTip:
+            'Your live lullaby — even imperfect — is more comforting than any recording.'),
     20: WeekDevelopmentInfo(
         week: 20, babySize: 'Banana', babySizeEmoji: '🍌',
         babyDevelopment: 'Halfway there! The baby is swallowing amniotic fluid and developing taste buds.',
         motherTip: 'Eat a variety of flavours — your baby tastes what you eat.',
-        mantraRecommendation: 'Vishnu Sahasranama — for the baby\'s protection'),
+        gentleBondingTip:
+            'Sing softly when you can; short, simple phrases are enough.'),
     24: WeekDevelopmentInfo(
         week: 24, babySize: 'Corn', babySizeEmoji: '🌽',
         babyDevelopment: 'The baby\'s face is fully formed. They are making facial expressions.',
         motherTip: 'Practice prenatal yoga to relieve back pain and improve sleep.',
-        mantraRecommendation: 'Lalita Sahasranama — invoking the Divine Mother'),
+        gentleBondingTip:
+            'Keep humming or singing on relaxed breath — no need to perform, just be present.'),
     28: WeekDevelopmentInfo(
         week: 28, babySize: 'Eggplant', babySizeEmoji: '🍆',
         babyDevelopment: 'The baby can open their eyes and see light. The brain is developing rapidly.',
         motherTip: 'Sleep on your left side for better circulation.',
-        mantraRecommendation: 'Lalita Sahasranama — for safe delivery'),
+        gentleBondingTip:
+            'Gentle lullabies and slow tones can soothe you both before birth.'),
     32: WeekDevelopmentInfo(
         week: 32, babySize: 'Squash', babySizeEmoji: '🎃',
         babyDevelopment: 'The baby is practising breathing movements. They have a regular sleep cycle.',
         motherTip: 'Prepare your birth plan. Practice breathing exercises.',
-        mantraRecommendation: 'Maha Mrityunjaya Mantra — for a safe birth'),
+        gentleBondingTip:
+            'Soft singing or humming can ease tension — keep volume low and kind.'),
     36: WeekDevelopmentInfo(
         week: 36, babySize: 'Papaya', babySizeEmoji: '🍈',
         babyDevelopment: 'The baby is almost ready. They are in the head-down position.',
         motherTip: 'Pack your hospital bag. Rest as much as possible.',
-        mantraRecommendation: 'Devi Stuti — invoking the Mother\'s grace'),
+        gentleBondingTip:
+            'Your calm voice and simple tunes are still the best company.'),
     40: WeekDevelopmentInfo(
         week: 40, babySize: 'Watermelon', babySizeEmoji: '🍉',
         babyDevelopment: 'Full term! The baby is ready to meet you.',
         motherTip: 'Trust your body. The divine is with you.',
-        mantraRecommendation: 'Surrender Meditation — release and trust'),
+        gentleBondingTip:
+            'Trust a quiet lullaby or hum — gentleness is enough for this moment.'),
   };
 }

@@ -1,3 +1,7 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../../core/services/daily_notification_service.dart';
+import '../../../../core/services/notification_preferences.dart';
 import '../datasources/local_progress_datasource.dart';
 import '../datasources/supabase_progress_datasource.dart';
 
@@ -156,6 +160,7 @@ class BookProgressRepository {
     required String bookId,
     required String chapterId,
     String? lastReadVerseId,
+    String? bookNameForReminder,
   }) async {
     if (_useSupabase) {
       await _supabase.updateLastReadPosition(
@@ -168,6 +173,17 @@ class BookProgressRepository {
         bookId: bookId,
         chapterId: chapterId,
         lastReadVerseId: lastReadVerseId,
+      );
+    }
+    if (bookNameForReminder != null && bookNameForReminder.isNotEmpty) {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('reading_reminder_book_id', bookId);
+      await p.setString('reading_reminder_book_title', bookNameForReminder);
+      final readingOn = await NotificationPreferences.getBool(
+        NotificationPreferences.keyReading,
+      );
+      await DailyNotificationService.updateFromReadingReminderSetting(
+        readingOn,
       );
     }
   }

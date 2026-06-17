@@ -53,7 +53,7 @@ class SubscriptionPlan {
       period: _getPeriodString(package),
       savings: _getSavings(type),
       isBestValue: type == SubscriptionPlanType.yearly,
-      isMostPopular: type == SubscriptionPlanType.monthly,
+      isMostPopular: type == SubscriptionPlanType.yearly,
       package: package,
     );
   }
@@ -160,7 +160,7 @@ class SubscriptionStatus {
     if (entitlement.expirationDate != null) {
       expDate = DateTime.tryParse(entitlement.expirationDate!);
     }
-    purchDate = DateTime.tryParse(entitlement.latestPurchaseDate!);
+    purchDate = DateTime.tryParse(entitlement.latestPurchaseDate);
   
     return SubscriptionStatus(
       isActive: entitlement.isActive,

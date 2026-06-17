@@ -89,42 +89,55 @@ class DailyTaskService {
   /// Complete a task with optimistic UI update.
   /// Updates the local list immediately, then persists to server in background.
   Future<TaskCompletionResult> completeTask(UserDailyTask task) async {
-    // ── Optimistic update: flip status locally and notify listeners NOW ──
+    // If rewards were already granted for this row, re-checking must not mint coins/XP again.
+    final replay = task.rewardsGrantedAt != null;
+
     final optimistic = task.copyWith(
       status: TaskStatus.completed,
       completedAt: DateTime.now(),
-      coinsEarned: task.coinReward,
-      karmaEarned: task.karmaReward,
+      coinsEarned: replay ? 0 : task.coinReward,
+      karmaEarned: replay ? 0 : task.karmaReward,
     );
     _replaceTask(task.id, optimistic);
     _tasksController.add(_currentTasks);
 
-    // ── Background: persist to server (fire-and-forget) ──
     _persistCompletion(task);
 
     return TaskCompletionResult(
       success: true,
-      coinsEarned: task.coinReward,
-      karmaEarned: task.karmaReward,
-      experienceEarned: _calculateExperience(task),
+      coinsEarned: replay ? 0 : task.coinReward,
+      karmaEarned: replay ? 0 : task.karmaReward,
+      experienceEarned: replay ? 0 : _calculateExperience(task),
       newStreak: _currentProgress?.currentStreak ?? 0,
-      message: 'Task completed! +${task.coinReward} Karma',
+      message: replay
+          ? 'Marked complete'
+          : 'Task completed! +${task.coinReward} Karma',
     );
   }
 
   /// Heavy server work runs asynchronously after optimistic update.
   Future<void> _persistCompletion(UserDailyTask task) async {
     try {
-      final success = await _taskRepository.completeTask(task.id);
-      if (!success) {
-        // Revert optimistic update on failure
+      final outcome = await _taskRepository.completeTask(task.id);
+      if (!outcome.success) {
         final reverted = task.copyWith(status: TaskStatus.pending);
         _replaceTask(task.id, reverted);
         _tasksController.add(_currentTasks);
         return;
       }
 
-      // Run coin + progress + achievement calls in parallel where possible
+      final merged = task.copyWith(
+        status: TaskStatus.completed,
+        completedAt: DateTime.now(),
+        rewardsGrantedAt: outcome.rewardsGrantedAt,
+        coinsEarned: outcome.grantedNewRewards ? task.coinReward : 0,
+        karmaEarned: outcome.grantedNewRewards ? task.karmaReward : 0,
+      );
+      _replaceTask(task.id, merged);
+      _tasksController.add(_currentTasks);
+
+      if (!outcome.grantedNewRewards) return;
+
       await Future.wait([
         _coinService.addCoins(task.coinReward),
         _progressRepository.recordTaskCompletion(
@@ -135,7 +148,6 @@ class DailyTaskService {
           if (updatedProgress != null) {
             _currentProgress = updatedProgress;
             _progressController.add(_currentProgress);
-            // Check achievements in background
             _checkAchievements(updatedProgress);
           }
         }),
@@ -178,12 +190,13 @@ class DailyTaskService {
 
   /// Uncomplete a task with optimistic UI update.
   Future<bool> uncompleteTask(UserDailyTask task) async {
-    // ── Optimistic update ──
+    // Keep rewardsGrantedAt so a re-complete cannot farm coins/XP.
     final optimistic = task.copyWith(
       status: TaskStatus.pending,
       completedAt: null,
       coinsEarned: 0,
       karmaEarned: 0,
+      rewardsGrantedAt: task.rewardsGrantedAt,
     );
     _replaceTask(task.id, optimistic);
     _tasksController.add(_currentTasks);

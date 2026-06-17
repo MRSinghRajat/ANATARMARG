@@ -105,6 +105,8 @@ class UserDailyTask {
   final DateTime? completedAt;
   final int coinsEarned;
   final int karmaEarned;
+  /// Set when coins/XP were first credited for this row; kept after user un-marks complete.
+  final DateTime? rewardsGrantedAt;
   final DateTime createdAt;
 
   const UserDailyTask({
@@ -118,6 +120,7 @@ class UserDailyTask {
     this.completedAt,
     this.coinsEarned = 0,
     this.karmaEarned = 0,
+    this.rewardsGrantedAt,
     required this.createdAt,
   });
 
@@ -148,6 +151,9 @@ class UserDailyTask {
           : null,
       coinsEarned: json['coins_earned'] as int? ?? 0,
       karmaEarned: json['karma_earned'] as int? ?? 0,
+      rewardsGrantedAt: json['rewards_granted_at'] != null
+          ? DateTime.tryParse(json['rewards_granted_at'].toString())
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -163,6 +169,7 @@ class UserDailyTask {
       'completed_at': completedAt?.toIso8601String(),
       'coins_earned': coinsEarned,
       'karma_earned': karmaEarned,
+      'rewards_granted_at': rewardsGrantedAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -178,6 +185,7 @@ class UserDailyTask {
     DateTime? completedAt,
     int? coinsEarned,
     int? karmaEarned,
+    DateTime? rewardsGrantedAt,
     DateTime? createdAt,
   }) {
     return UserDailyTask(
@@ -191,6 +199,7 @@ class UserDailyTask {
       completedAt: completedAt ?? this.completedAt,
       coinsEarned: coinsEarned ?? this.coinsEarned,
       karmaEarned: karmaEarned ?? this.karmaEarned,
+      rewardsGrantedAt: rewardsGrantedAt ?? this.rewardsGrantedAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -207,6 +216,20 @@ class UserDailyTask {
         return TaskStatus.pending;
     }
   }
+}
+
+/// Result of [DailyTaskRepository.completeTask] for idempotent coins/XP in [DailyTaskService].
+class DailyTaskCompleteOutcome {
+  final bool success;
+  /// False when this row was already rewarded once (user un-checked and checked again).
+  final bool grantedNewRewards;
+  final DateTime? rewardsGrantedAt;
+
+  const DailyTaskCompleteOutcome({
+    required this.success,
+    this.grantedNewRewards = false,
+    this.rewardsGrantedAt,
+  });
 }
 
 /// Task category enum with display properties

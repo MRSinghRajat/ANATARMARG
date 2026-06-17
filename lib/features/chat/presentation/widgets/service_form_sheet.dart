@@ -290,14 +290,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryOrange.withValues(alpha: 0.2),
-            AppColors.deepPurple.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: AppColors.aiGuruSheetGradient,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),

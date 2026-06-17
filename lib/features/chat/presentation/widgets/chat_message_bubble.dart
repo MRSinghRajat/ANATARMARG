@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../ai_guru/services/guru_link_parser.dart';
 import '../../data/models/chat_message.dart';
 
 /// Widget that displays a single chat message bubble.
 class ChatMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final Function(String)? onQuickReplyTap;
+  final void Function(String type, String value)? onGuruLinkTap;
 
   const ChatMessageBubble({
     super.key,
     required this.message,
     this.onQuickReplyTap,
+    this.onGuruLinkTap,
   });
 
   @override
@@ -68,14 +71,7 @@ class ChatMessageBubble extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryOrange.withValues(alpha: 0.3),
-            AppColors.deepPurple.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: AppColors.aiGuruBubbleGradient,
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.15),
@@ -106,6 +102,72 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
+  static const Color _guruLinkBg = Color(0xFFFFF4E6);
+  static const Color _guruLinkFg = Color(0xFF7C2D12);
+
+  Widget _buildMessageText(BuildContext context, bool isUser) {
+    final baseStyle = GoogleFonts.outfit(
+      fontSize: 14,
+      color: Colors.white.withValues(alpha: 0.9),
+      height: 1.5,
+    );
+    if (isUser) {
+      return SelectableText(
+        message.content,
+        style: baseStyle,
+      );
+    }
+    final segments = GuruLinkParser.parse(message.content);
+    final hasLinks = segments.any((s) => s is GuruLinkSegment);
+    if (!hasLinks) {
+      return SelectableText(
+        message.content,
+        style: baseStyle,
+      );
+    }
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
+        children: [
+          for (final s in segments)
+            if (s is GuruTextSegment)
+              TextSpan(text: s.text)
+            else if (s is GuruLinkSegment)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  child: Material(
+                    color: _guruLinkBg.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      onTap: onGuruLinkTap != null
+                          ? () => onGuruLinkTap!(s.type, s.value)
+                          : null,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          '${s.type}: ${s.value}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _guruLinkFg,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageContent(BuildContext context, bool isUser) {
     final timeFormat = DateFormat('h:mm a');
     
@@ -125,22 +187,8 @@ class ChatMessageBubble extends StatelessWidget {
                 ],
               )
             : message.isReading
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.primaryOrange.withValues(alpha: 0.2),
-                      AppColors.deepPurple.withValues(alpha: 0.15),
-                    ],
-                  )
-                : LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.primaryOrange.withValues(alpha: 0.12),
-                      AppColors.deepPurple.withValues(alpha: 0.08),
-                    ],
-                  ),
+                ? AppColors.aiGuruCardGradient
+                : AppColors.aiGuruBubbleGradient,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(20),
           topRight: const Radius.circular(20),
@@ -184,15 +232,7 @@ class ChatMessageBubble extends StatelessWidget {
           // Display image if present
           if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
             _buildImagePreview(context, message.imageBase64!),
-          if (message.content.isNotEmpty)
-            SelectableText(
-              message.content,
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.9),
-                height: 1.5,
-              ),
-            ),
+          if (message.content.isNotEmpty) _buildMessageText(context, isUser),
           const SizedBox(height: 6),
           Align(
             alignment: Alignment.bottomRight,

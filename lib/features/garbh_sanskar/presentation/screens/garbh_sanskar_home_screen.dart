@@ -6,7 +6,6 @@ import '../../data/models/garbh_sanskar_models.dart';
 import '../providers/garbh_sanskar_providers.dart';
 import 'garbh_sanskar_content_list_screen.dart';
 import 'garbh_sanskar_samskaras_screen.dart';
-import 'garbh_sanskar_lullabies_screen.dart';
 import 'baby_milestones_screen.dart';
 import 'garbh_sanskar_setup_screen.dart';
 
@@ -92,11 +91,11 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
               if (journey.isPrenatal) _buildWeekTracker(),
               if (journey.isPostnatal) _buildPostnatalHeader(),
               const SizedBox(height: 8),
-              if (!journey.isPlanning) _buildDailySection(ref),
+              if (!journey.isPlanning) _buildGentleVoiceReminder(),
               const SizedBox(height: 8),
               _buildContentGrid(context),
               const SizedBox(height: 16),
-              _buildBookSuggestions(context),
+              _buildWeeklyReadingGuidance(),
               const SizedBox(height: 24),
             ],
           ),
@@ -243,7 +242,7 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
             ),
             child: Text(
               'Prepare your body, mind and spirit for this sacred journey. '
-              'Follow mantras, meditations and Ayurvedic diet tips to create '
+              'Follow meditations, gentle practices and Ayurvedic diet tips to create '
               'the best environment for your future baby.',
               style: GoogleFonts.inter(fontSize: 12, color: Colors.white54, height: 1.5),
             ),
@@ -332,14 +331,32 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
               color: Colors.black26,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('🕉️', style: TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    info.mantraRecommendation,
-                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFFFD700)),
+                Row(
+                  children: [
+                    const Text('🌙', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'सुबह की कोमलता — Sing softly (calm & protection)',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.white54,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  info.gentleBondingTip,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: const Color(0xFFFFD700),
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -401,39 +418,48 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
     );
   }
 
-  // ── Daily mantra section ──────────────────────────────────
+  // ── Gentle voice (no in-app audio; encourages live lullaby / hum) ──
 
-  Widget _buildDailySection(WidgetRef ref) {
-    final phase = journey.isPrenatal ? 'prenatal' : 'postnatal';
-    final contentAsync = journey.isPrenatal
-        ? ref.watch(prenatalContentProvider)
-        : ref.watch(postnatalContentProvider);
-
-    return contentAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (allContent) {
-        final mantras = allContent.where((c) => c.contentType == 'mantra').toList();
-        if (mantras.isEmpty) return const SizedBox.shrink();
-        final todayIndex = DateTime.now().dayOfYear % mantras.length;
-        final todayMantra = mantras[todayIndex];
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'आज का मंत्र — Today\'s Mantra',
-                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white.withOpacity(0.46)),
+  Widget _buildGentleVoiceReminder() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.saffron.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.saffron.withOpacity(0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🌙', style: TextStyle(fontSize: 22)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'आज की आवाज़ — Your voice today',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.46),
+                  ),
                 ),
-              ),
-              _DailyMantraCard(content: todayMantra, phase: phase),
-            ],
+                const SizedBox(height: 6),
+                Text(
+                  'Take a few quiet minutes to hum or sing softly to your baby. '
+                  'Your calm, live voice matters more than any recording.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.white70,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -549,19 +575,6 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
             ),
           const SizedBox(height: 10),
 
-          // Lullabies
-          _NavCard(
-            emoji: '🌙',
-            title: 'Lullabies',
-            titleHindi: 'लोरियाँ',
-            subtitle: 'Krishna, Ram, Hanuman & more',
-            color: const Color(0xFF6366F1),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GarbhSanskarLullabiesScreen()),
-            ),
-          ),
-
           if (journey.isPostnatal) ...[
             const SizedBox(height: 10),
             _NavCard(
@@ -581,107 +594,41 @@ class _GarbhSanskarHomeBody extends ConsumerWidget {
     );
   }
 
-  // ── Book suggestions ──────────────────────────────────────
+  // ── Weekly reading: encourage reading without naming specific texts ──
 
-  Widget _buildBookSuggestions(BuildContext context) {
-    final books = <_BookSuggestion>[];
-    if (journey.isPlanning) {
-      books.addAll([
-        _BookSuggestion(title: 'Bhagavad Gita', titleHindi: 'भगवद् गीता', desc: 'Wisdom for inner peace before parenthood', emoji: '📖'),
-        _BookSuggestion(title: 'Ayurvedic Diet', titleHindi: 'आयुर्वेदिक आहार', desc: 'Pre-conception nutrition from Ayurveda', emoji: '🌿'),
-        _BookSuggestion(title: 'Garbhopanishad', titleHindi: 'गर्भोपनिषद', desc: 'Vedic text on the science of conception', emoji: '📜'),
-      ]);
-    } else if (journey.isPrenatal) {
-      final t = journey.trimester;
-      if (t == 1) {
-        books.addAll([
-          _BookSuggestion(title: 'Garbhopanishad', titleHindi: 'गर्भोपनिषद', desc: 'Vedic insights on fetal development', emoji: '📜'),
-          _BookSuggestion(title: 'Bhagavad Gita', titleHindi: 'भगवद् गीता', desc: 'Peace of mind for the first trimester', emoji: '📖'),
-        ]);
-      } else if (t == 2) {
-        books.addAll([
-          _BookSuggestion(title: 'Ramayana', titleHindi: 'रामायण', desc: 'Stories of dharma for your baby to hear', emoji: '📖'),
-          _BookSuggestion(title: 'Lalita Sahasranama', titleHindi: 'ललिता सहस्रनाम', desc: 'The Divine Mother\'s thousand names', emoji: '🕉️'),
-        ]);
-      } else {
-        books.addAll([
-          _BookSuggestion(title: 'Vishnu Sahasranama', titleHindi: 'विष्णु सहस्रनाम', desc: 'For protection during the final weeks', emoji: '🕉️'),
-          _BookSuggestion(title: 'Mahabharata', titleHindi: 'महाभारत', desc: 'Abhimanyu learnt in the womb — so can your baby', emoji: '📖'),
-        ]);
-      }
-    } else {
-      books.addAll([
-        _BookSuggestion(title: 'Ramayana', titleHindi: 'रामायण', desc: 'Read aloud stories for your newborn', emoji: '📖'),
-        _BookSuggestion(title: 'Bhagavad Gita', titleHindi: 'भगवद् गीता', desc: 'Daily shloka practice for the family', emoji: '📖'),
-      ]);
-    }
-
-    if (books.isEmpty) return const SizedBox.shrink();
-
+  Widget _buildWeeklyReadingGuidance() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Suggested Reading',
+            'पठन — Reading',
             style: GoogleFonts.cormorantGaramond(
               fontSize: 20,
               color: Colors.white,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'From the Granthalaya',
-            style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.ashramCardDark,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.saffron.withOpacity(0.15)),
+            ),
+            child: Text(
+              'When you can, read aloud from any sacred or uplifting material you already have. '
+              'We do not list specific books or paths here — use what is meaningful and available to you.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.72),
+                height: 1.5,
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
-          ...books.map((b) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.ashramCardDark,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.saffron.withOpacity(0.15)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: AppColors.saffron.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(child: Text(b.emoji, style: const TextStyle(fontSize: 20))),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            b.titleHindi,
-                            style: GoogleFonts.cormorantGaramond(
-                              fontSize: 16,
-                              color: AppColors.saffron,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            b.desc,
-                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withOpacity(0.46)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, color: AppColors.saffron.withOpacity(0.4), size: 20),
-                  ],
-                ),
-              )),
         ],
       ),
     );
@@ -702,106 +649,6 @@ class _Section {
     required this.type,
     required this.color,
   });
-}
-
-class _BookSuggestion {
-  final String title, titleHindi, desc, emoji;
-  const _BookSuggestion({
-    required this.title,
-    required this.titleHindi,
-    required this.desc,
-    required this.emoji,
-  });
-}
-
-class _DailyMantraCard extends StatelessWidget {
-  final GarbhSanskarContent content;
-  final String phase;
-  const _DailyMantraCard({required this.content, required this.phase});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => GarbhSanskarContentListScreen(
-            phase: phase,
-            contentType: 'mantra',
-            title: 'Mantras',
-            titleHindi: 'मंत्र',
-            color: AppColors.saffron,
-            emoji: '🕉️',
-            initialContentId: content.id,
-          ),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.saffron.withOpacity(0.12), const Color(0xFF2A1000)],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.saffron.withOpacity(0.25)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('🕉️', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    content.displayTitle,
-                    style: GoogleFonts.cormorantGaramond(
-                      fontSize: 16,
-                      color: AppColors.saffron,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                if (content.formattedDuration.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      content.formattedDuration,
-                      style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.46)),
-                    ),
-                  ),
-              ],
-            ),
-            if (content.subtitle != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                content.subtitle!,
-                style: GoogleFonts.inter(fontSize: 12, color: Colors.white54),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.play_circle_outline, color: AppColors.saffron, size: 16),
-                const SizedBox(width: 4),
-                Text('Tap to listen & read', style: GoogleFonts.inter(fontSize: 11, color: AppColors.saffron)),
-                const Spacer(),
-                Text('+${content.coinsReward} 🪙', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFFFD700))),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _ContentTypeCard extends StatelessWidget {
@@ -899,8 +746,4 @@ class _NavCard extends StatelessWidget {
       ),
     );
   }
-}
-
-extension _DateTimeExt on DateTime {
-  int get dayOfYear => difference(DateTime(year, 1, 1)).inDays + 1;
 }

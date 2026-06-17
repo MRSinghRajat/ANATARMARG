@@ -100,6 +100,69 @@ class AppColors {
   static const Color aiGuruBackgroundLight = Color(0xFFFDFAF2);
   static const Color aiGuruBackgroundDark = Color(0xFF221610);
 
+  /// Full-screen AI Guru / spiritual chat backdrop (warm ember → plum / saffron glow).
+  static LinearGradient get aiGuruScreenGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF1C1410),
+          aiGuruBackgroundDark,
+          Color(0xFF18101C),
+          Color(0xFF2A1840),
+        ],
+        stops: [0.0, 0.32, 0.68, 1.0],
+      );
+
+  /// Bottom sheets and tall modals (AI Guru).
+  /// Opaque stops so the sheet does not blend with content behind the modal route.
+  static LinearGradient get aiGuruSheetGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          aiGuruBackgroundDark,
+          Color(0xFF1A0F18),
+          Color(0xFF2B1F38),
+          Color(0xFF3A2618),
+        ],
+        stops: [0.0, 0.4, 0.78, 1.0],
+      );
+
+  /// Assistant message bubbles (softer than cards).
+  static LinearGradient get aiGuruBubbleGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          primaryOrange.withValues(alpha: 0.15),
+          deepPurple.withValues(alpha: 0.12),
+          aiGuruPrimary.withValues(alpha: 0.08),
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      );
+
+  /// Bordered cards / streak-style panels on AI Guru screens.
+  static LinearGradient get aiGuruCardGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          primaryOrange.withValues(alpha: 0.38),
+          deepPurple.withValues(alpha: 0.34),
+          aiGuruPrimary.withValues(alpha: 0.22),
+        ],
+        stops: const [0.0, 0.52, 1.0],
+      );
+
+  /// Chat input strip — continues the screen gradient subtly.
+  static LinearGradient get aiGuruInputBarGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          const Color(0xFF1A1214),
+          aiGuruBackgroundDark,
+          deepPurple.withValues(alpha: 0.28),
+        ],
+        stops: const [0.0, 0.45, 1.0],
+      );
+
   // Panchang / Hindu calendar (reference HTML --gold, --saffron, --bg, etc.)
   static const Color panchangBg = Color(0xFF0C0904);
   static const Color panchangGold = Color(0xFFD4943A);

@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../data/models/custom_habit_model.dart';
 import '../../data/services/custom_habit_service.dart';
 import '../widgets/add_habit_sheet.dart';
@@ -20,6 +24,8 @@ class _HabitDetailScreenState extends State<HabitDetailScreen>
   late CustomHabit _habit;
   final CustomHabitService _habitService = CustomHabitService.instance;
   late AnimationController _fadeController;
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
 
   @override
   void initState() {
@@ -29,10 +35,17 @@ class _HabitDetailScreenState extends State<HabitDetailScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
   }
 
   @override
   void dispose() {
+    _premiumSubscription?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
@@ -156,9 +169,13 @@ class _HabitDetailScreenState extends State<HabitDetailScreen>
                   ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.edit_outlined,
-                        color: Colors.white54),
-                    onPressed: _editHabit,
+                    icon: Icon(
+                      _isPremium ? Icons.edit_outlined : Icons.lock_outline_rounded,
+                      color: Colors.white54,
+                    ),
+                    onPressed: _isPremium
+                        ? _editHabit
+                        : () => navigateToProfileForProUpgrade(context),
                   ),
                 ],
               ),
@@ -582,6 +599,29 @@ class _HabitDetailScreenState extends State<HabitDetailScreen>
   }
 
   Widget _buildActions() {
+    if (!_isPremium) {
+      return SizedBox(
+        height: 48,
+        child: OutlinedButton.icon(
+          onPressed: () => navigateToProfileForProUpgrade(context),
+          icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+          label: Text(
+            'Upgrade to Pro to edit or delete habits',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primaryOrange,
+            side: BorderSide(
+                color: AppColors.primaryOrange.withValues(alpha: 0.4)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

@@ -3,7 +3,6 @@ import '../../../../core/config/supabase_config.dart';
 import '../models/granthalaya_models.dart';
 import '../models/book_model.dart';
 import '../models/chapter_model.dart';
-import '../models/meditation_guide_model.dart';
 import '../../../../features/content/data/models/verse_model.dart';
 
 class SupabaseGranthalayaDataSource {
@@ -206,36 +205,6 @@ class SupabaseGranthalayaDataSource {
       }).toList();
     } catch (e) {
       print('Error fetching chants: $e');
-      return [];
-    }
-  }
-
-  /// Fetch YouTube videos for Granthalaya Video section (from granthalaya_videos table).
-  Future<List<GranthalayaVideoModel>> getVideos() async {
-    if (!_supabase.isInitialized) return [];
-
-    try {
-      final response = await _supabase.client!
-          .from(SupabaseConfig.granthalayaVideosTable)
-          .select()
-          .eq('is_active', true)
-          .order('display_order', ascending: true);
-
-      final list = _toList(response);
-      final videos = <GranthalayaVideoModel>[];
-      for (final item in list) {
-        try {
-          final map = item as Map<String, dynamic>;
-          final videoId = (map['video_id']?.toString() ?? '').trim();
-          if (videoId.isEmpty) continue;
-          videos.add(GranthalayaVideoModel.fromJson(map));
-        } catch (_) {
-          // skip malformed rows
-        }
-      }
-      return videos;
-    } catch (e) {
-      print('Error fetching granthalaya videos: $e');
       return [];
     }
   }
@@ -479,25 +448,6 @@ class SupabaseGranthalayaDataSource {
       }).toList();
     } catch (e) {
       print('Error fetching stories with audio: $e');
-      return [];
-    }
-  }
-
-  /// Fetch meditation guides
-  Future<List<MeditationGuideModel>> getMeditationGuides() async {
-    if (!_supabase.isInitialized) return [];
-    try {
-      final response = await _supabase.client!
-          .from('meditation_guides')
-          .select()
-          .eq('is_active', true)
-          .order('order_index', ascending: true);
-      final list = _toList(response);
-      return list
-          .map((j) => MeditationGuideModel.fromJson(j as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      print('Error fetching meditation guides: $e');
       return [];
     }
   }

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:ashrae_playground/core/config/supabase_config.dart';
+import 'package:antarmarg/core/config/supabase_config.dart';
 
 void main() {
   test('SupabaseConfig loads values from dotenv', () async {

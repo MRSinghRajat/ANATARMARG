@@ -9,13 +9,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../../shared/services/premium_service.dart';
+import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../sanctuary/data/models/sanctuary_customization_model.dart';
 import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 import '../../../sanctuary/presentation/widgets/customizable_om_sanctuary.dart';
 import '../../../sanctuary/presentation/widgets/sanctuary_shop_sheet.dart';
 import '../../data/services/asset_server.dart';
+import '../../../navigation/presentation/providers/main_navigation_intent_provider.dart';
 import '../../../../core/services/day_night_service.dart';
-
+import '../../../../core/utils/sound_manager.dart';
 /// Redesigned Aangan Screen with Customizable Om Sanctuary
 /// Features:
 /// - Top 40%: Customizable Om Sanctuary with live preview
@@ -38,6 +41,8 @@ class AanganScreen extends ConsumerStatefulWidget {
 
 class _AanganScreenState extends ConsumerState<AanganScreen>
     with TickerProviderStateMixin {
+  ProviderSubscription<int?>? _aanganPendingTabSubscription;
+
   final CoinService _coinService = CoinService();
   final SanctuaryCustomizationService _customizationService =
       SanctuaryCustomizationService();
@@ -54,10 +59,12 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   // Loading state
   bool _customizationLoaded = false;
 
-  // Aatma (sanctuary) vs Mandir (3D): 0 = Aatma, 1 = Mandir
+  // Aatma (sanctuary) vs Mandir: 0 = Aatma, 1 = Mandir
   int _aanganTabIndex = 0;
+  /// Mandir tab: [MandirItems.mandirView] ids → same WebView; JS swaps temple / Shiv Ling / per-deity murti.
+  String _mandirViewId = MandirItems.idSacredTemple;
 
-  // Asset server + WebView for Mandir 3D (lazy-started on first Mandir tap)
+  // Loopback HTTP server + WebView: GLTFLoader needs http XHR; file:// is blocked on WKWebView.
   final AssetServer _assetServer = AssetServer();
   WebViewController? _mandirWebViewController;
   bool _mandirServerStarted = false;
@@ -69,8 +76,18 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   bool _isAatmaSheetMinimized = true;
   bool _isMandirSheetMinimized = true;
 
+  // Pro: Mandir 3D available; non-Pro: show blurred lock (no WebView = no animation runs)
+  bool _isPremium = false;
+  StreamSubscription<bool>? _premiumSubscription;
+
   static const double _sheetMinSize = 0.065;
   static const double _sheetMidSize = 0.45;
+
+  /// Profile mute + volume → Mandir WebView Aarti [HTMLAudioElement].
+  late final Listenable _mandirSoundPrefsListenable = Listenable.merge([
+    SoundManager().backgroundSoundEnabled,
+    SoundManager().backgroundVolume,
+  ]);
 
   SanctuaryCustomization get _displayCustomization =>
       _previewCustomization ??
@@ -81,9 +98,59 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   void initState() {
     super.initState();
     _customizationLoaded = true;
+    PremiumService.instance.isPremium.then((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
+    _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
+      if (mounted) setState(() => _isPremium = v);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeServices();
+      if (!mounted) return;
+      if (!MandirItems.isValidMandirViewId(_mandirViewId)) {
+        setState(() => _mandirViewId = MandirItems.idSacredTemple);
+      }
     });
+    _mandirSoundPrefsListenable.addListener(_syncMandirWebViewBackgroundMusic);
+
+    _aanganPendingTabSubscription =
+        ref.listenManual<int?>(aanganPendingTabProvider, (previous, tab) {
+      if (tab == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(aanganPendingTabProvider.notifier).state = null;
+        setState(() {
+          _aanganTabIndex = tab;
+          if (tab == 1) {
+            _isMandirSheetMinimized = false;
+            if (_isPremium) {
+              _ensureMandirServer();
+              Future.delayed(const Duration(milliseconds: 400), () {
+                if (!mounted) return;
+                _applyMandirStructureToWebView();
+                if (_mandirViewId == MandirItems.idSacredTemple) {
+                  _mandirWebViewController?.runJavaScript(
+                    "if(typeof mandirEntryZoom==='function')mandirEntryZoom();",
+                  );
+                }
+              });
+            }
+          }
+        });
+      });
+    });
+  }
+
+  void _syncMandirWebViewBackgroundMusic() {
+    final sm = SoundManager();
+    final on = sm.backgroundSoundEnabled.value;
+    final vol = sm.backgroundVolume.value;
+    _mandirWebViewController?.runJavaScript(
+      '(function(){'
+      "if(typeof setMandirBackgroundMusicEnabled==='function')setMandirBackgroundMusicEnabled(${on ? 'true' : 'false'});"
+      "if(typeof setMandirBackgroundMusicVolume==='function')setMandirBackgroundMusicVolume($vol);"
+      '})();',
+    );
   }
 
   @override
@@ -99,7 +166,10 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
 
   @override
   void dispose() {
+    _aanganPendingTabSubscription?.close();
+    _mandirSoundPrefsListenable.removeListener(_syncMandirWebViewBackgroundMusic);
     _customizationSubscription?.cancel();
+    _premiumSubscription?.cancel();
     if (_mandirServerStarted && !kIsWeb) _assetServer.stop();
     super.dispose();
   }
@@ -174,6 +244,29 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
     _mandirWebViewController?.runJavaScript(jsCall);
   }
 
+  void _applyMandirStructureToWebView() {
+    final js = MandirItems.mandirStructureViewJsArg(_mandirViewId);
+    _mandirWebViewController?.runJavaScript(
+      "if(typeof setMandirStructureView==='function')setMandirStructureView('$js');",
+    );
+  }
+
+  void _onMandirViewFromShop(String id) {
+    setState(() => _mandirViewId = id);
+    _ensureMandirServer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _applyMandirStructureToWebView();
+      if (id == MandirItems.idSacredTemple) {
+        Future.delayed(const Duration(milliseconds: 320), () {
+          if (!mounted || _mandirViewId != MandirItems.idSacredTemple) return;
+          _mandirWebViewController?.runJavaScript(
+            "if(typeof mandirEntryZoom==='function')mandirEntryZoom();",
+          );
+        });
+      }
+    });
+  }
+
   void _ensureMandirServer() {
     if (_mandirServerStarted || kIsWeb) return;
     _mandirServerStarted = true;
@@ -182,18 +275,35 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
       final port = _assetServer.port;
       final controller = WebViewController();
       controller.setJavaScriptMode(JavaScriptMode.unrestricted);
-      controller.setBackgroundColor(const Color(0xFF0B1623));
+      // Avoid setBackgroundColor to prevent UIColor pigeon channel error on iOS
       controller.setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) async {
             await _customizationService.ensureInitialized();
             final ground = _customizationService.templeGroundType;
             controller.runJavaScript("setFloor('${ground.name}',null)");
-            controller.runJavaScript("mood('midday',null)");
+            final lightId = _customizationService.mandirLightId;
+            final lightMatch = MandirItems.light.where((e) => e.id == lightId).toList();
+            if (lightMatch.isNotEmpty) {
+              controller.runJavaScript(lightMatch.first.jsCall);
+            } else {
+              controller.runJavaScript("mood('midday',null)");
+            }
+            final deityBg = _customizationService.mandirDeityBackground;
+            if (deityBg != null && deityBg.isNotEmpty && deityBg != 'none') {
+              controller.runJavaScript("setDeityBackground('$deityBg')");
+            }
+            final structureJs = MandirItems.mandirStructureViewJsArg(_mandirViewId);
+            controller.runJavaScript(
+              "if(typeof setMandirStructureView==='function')setMandirStructureView('$structureJs');",
+            );
+            _syncMandirWebViewBackgroundMusic();
           },
         ),
       );
-      controller.loadRequest(Uri.parse('http://localhost:$port/'));
+      // 127.0.0.1 loopback only — avoids NSLocalNetworkUsageDescription while
+      // satisfying GLTFLoader (file:// XHR is blocked in WKWebView).
+      await controller.loadRequest(Uri.parse('http://127.0.0.1:$port/'));
       if (mounted) {
         setState(() {
           _mandirWebViewController = controller;
@@ -342,29 +452,30 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   }
 
   Widget _buildMandirLayout() {
+    // Non-Pro: show blurred lock only — no WebView, so no 3D/animation code runs
+    if (!_isPremium) {
+      return _buildMandirProLockedLayout();
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 3D WebView fills entire background
-        if (_mandirWebViewController != null)
-          Positioned.fill(
-            child: WebViewWidget(controller: _mandirWebViewController!),
-          )
-        else
-          Positioned.fill(
-            child: ColoredBox(
-              color: const Color(0xFF0B1623),
-              child: Center(
-                child: Text(
-                  'Loading Mandir...',
-                  style: GoogleFonts.tenorSans(
-                    fontSize: 13,
-                    color: Colors.white38,
+        // 3D WebView: temple / Shiv Ling / deity murti planes — setMandirStructureView in aangan_3d.html.
+        Positioned.fill(
+          child: _mandirWebViewController != null
+              ? WebViewWidget(controller: _mandirWebViewController!)
+              : ColoredBox(
+                  color: const Color(0xFF0B1623),
+                  child: Center(
+                    child: Text(
+                      'Loading Mandir...',
+                      style: GoogleFonts.tenorSans(
+                        fontSize: 13,
+                        color: Colors.white38,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ),
+        ),
 
         // Tab bar floating on top
         Positioned(
@@ -405,6 +516,8 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
                   onExpandTap: _expandMandirSheet,
                   onMandirAction: _onMandirAction,
                   onGroundTypeChange: (_) {},
+                  mandirViewSelectionId: _mandirViewId,
+                  onMandirViewSelected: _onMandirViewFromShop,
                 );
               },
             ),
@@ -414,39 +527,127 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
     );
   }
 
-  /// Tab bar: Aatma (sanctuary) | Mandir (3D) — pill style, gold active with underline
+  /// Minimal placeholder (no full Pro gate page). Banner + dialog come from Mandir tab tap.
+  Widget _buildMandirProLockedLayout() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.ashramBackgroundDark,
+                  const Color(0xFF152535),
+                  AppColors.ashramBackgroundDark,
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 120,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.temple_hindu_rounded,
+                  size: 56,
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '3D Mandir',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cormorantGaramond(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.45),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Available with Pro — open Profile to upgrade.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: Colors.white.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: 12,
+          left: 24,
+          right: 24,
+          child: _buildAatmaMandirTabBar(),
+        ),
+      ],
+    );
+  }
+
+  /// Tab bar: Aatma | Mandir
   Widget _buildAatmaMandirTabBar() {
-    return Center(child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _TabBarTab(
-            label: 'AATMA',
-            isActive: _aanganTabIndex == 0,
-            onTap: () => setState(() => _aanganTabIndex = 0),
-          ),
-          const SizedBox(width: 2),
-          _TabBarTab(
-            label: 'MANDIR',
-            isActive: _aanganTabIndex == 1,
-            onTap: () {
-              _ensureMandirServer();
-              setState(() => _aanganTabIndex = 1);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Future.delayed(const Duration(milliseconds: 350), () {
-                  _onMandirAction("if(typeof mandirEntryZoom==='function')mandirEntryZoom();");
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TabBarTab(
+              label: 'AATMA',
+              isActive: _aanganTabIndex == 0,
+              onTap: () => setState(() => _aanganTabIndex = 0),
+            ),
+            const SizedBox(width: 2),
+            _TabBarTab(
+              label: 'MANDIR',
+              isActive: _aanganTabIndex == 1,
+              isLocked: !_isPremium,
+              onTap: () {
+                if (!_isPremium) {
+                  setState(() => _aanganTabIndex = 1);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    navigateToProfileForProUpgrade(
+                      context,
+                      message:
+                          'The immersive 3D Mandir, aarti, and décor options are included with Pro. Open Profile to view plans.',
+                    );
+                  });
+                  return;
+                }
+                _ensureMandirServer();
+                setState(() => _aanganTabIndex = 1);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Future.delayed(const Duration(milliseconds: 400), () {
+                    if (!mounted) return;
+                    _applyMandirStructureToWebView();
+                    if (_mandirViewId == MandirItems.idSacredTemple) {
+                      _mandirWebViewController?.runJavaScript(
+                        "if(typeof mandirEntryZoom==='function')mandirEntryZoom();",
+                      );
+                    }
+                  });
                 });
-              });
-            },
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -495,11 +696,13 @@ class _TabBarTab extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final bool isLocked;
 
   const _TabBarTab({
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.isLocked = false,
   });
 
   @override
@@ -520,16 +723,25 @@ class _TabBarTab extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                label,
-                style: GoogleFonts.tenorSans(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                  color: isActive
-                      ? AppColors.ashramAccentGold
-                      : Colors.white.withValues(alpha: 0.5),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLocked) ...[
+                    Icon(Icons.lock, size: 10, color: isActive ? AppColors.ashramAccentGold : Colors.white54),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    label,
+                    style: GoogleFonts.tenorSans(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: isActive
+                          ? AppColors.ashramAccentGold
+                          : Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
               if (isActive) ...[
                 const SizedBox(height: 3),

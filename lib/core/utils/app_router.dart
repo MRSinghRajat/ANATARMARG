@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -15,6 +16,7 @@ import '../../features/profile/presentation/screens/my_growth_screen.dart';
 import '../../features/subscription/presentation/screens/paywall_screen.dart';
 import '../../features/subscription/presentation/screens/customer_center_screen.dart';
 import '../../features/subscription/presentation/screens/subscription_dev_settings.dart';
+import '../../features/legal/presentation/screens/legal_document_screen.dart';
 import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_setup_screen.dart';
 import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_home_screen.dart';
 import '../../features/journey/presentation/screens/journey_setup_screen.dart';
@@ -24,15 +26,13 @@ import '../../features/journey/presentation/screens/journey_milestone_detail_scr
 import '../../features/books/presentation/screens/sacred_text_audio_screen.dart';
 import '../../features/books/presentation/screens/book_audio_detail_screen.dart';
 import '../../features/books/presentation/screens/story_audio_screen.dart';
-import '../../features/books/presentation/screens/meditation_audio_screen.dart';
 import '../../features/books/presentation/screens/all_sacred_texts_listen_screen.dart';
 import '../../features/books/presentation/screens/all_books_listen_screen.dart';
 import '../../features/books/presentation/screens/all_stories_listen_screen.dart';
 import '../../features/books/presentation/screens/all_chants_listen_screen.dart';
-import '../../features/books/presentation/screens/all_meditation_listen_screen.dart';
 import '../../features/books/data/models/granthalaya_models.dart';
 import '../../features/books/data/models/book_model.dart';
-import '../../features/books/data/models/meditation_guide_model.dart';
+import '../../features/journey/presentation/screens/journey_content_link_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -55,19 +55,19 @@ class AppRouter {
   static const String journeyHome = '/journey/home';
   static const String journeyTask = '/journey/task';
   static const String journeyMilestone = '/journey/milestone';
+  static const String journeyOpenContent = '/journey/open-content';
   static const String myGrowth = '/my-growth';
+  static const String termsOfService = '/legal/terms';
+  static const String privacyPolicy = '/legal/privacy';
 
   // Listen tab routes
   static const String listenSacredText = '/listen/sacred-text';
   static const String listenBook = '/listen/book';
   static const String listenStory = '/listen/story';
-  static const String listenMeditation = '/listen/meditation';
   static const String listenAllTexts = '/listen/all-texts';
   static const String listenAllBooks = '/listen/all-books';
   static const String listenAllStories = '/listen/all-stories';
   static const String listenAllChants = '/listen/all-chants';
-  static const String listenAllMeditation = '/listen/all-meditation';
-
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case splash:
@@ -92,7 +92,10 @@ class AppRouter {
         return MaterialPageRoute(
             builder: (_) => const SpiritualOnboardingScreen());
       case home:
-        return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
+        return MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+          settings: settings,
+        );
       case reading:
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
@@ -124,14 +127,22 @@ class AppRouter {
       case paywall:
         return MaterialPageRoute(
           fullscreenDialog: true,
-          builder: (_) => const PaywallScreen(),
+          builder: (_) => const PaywallRouteScreen(),
         );
       case customerCenter:
         return MaterialPageRoute(
             builder: (_) => const CustomerCenterScreen());
       case subscriptionDevSettings:
+        if (kDebugMode) {
+          return MaterialPageRoute(
+            builder: (_) => const SubscriptionDevSettings(),
+            settings: settings,
+          );
+        }
         return MaterialPageRoute(
-            builder: (_) => const SubscriptionDevSettings());
+          builder: (_) => const _SubscriptionDevBlocked(),
+          settings: settings,
+        );
       case garbhSanskarSetup:
         return MaterialPageRoute(
             builder: (_) => const GarbhSanskarSetupScreen());
@@ -190,10 +201,6 @@ class AppRouter {
         final story = settings.arguments as SacredStoryModel;
         return MaterialPageRoute(builder: (_) => StoryAudioScreen(story: story), settings: settings);
       }
-      case listenMeditation: {
-        final guide = settings.arguments as MeditationGuideModel;
-        return MaterialPageRoute(builder: (_) => MeditationAudioScreen(guide: guide), settings: settings);
-      }
       case listenAllTexts:
         return MaterialPageRoute(builder: (_) => const AllSacredTextsListenScreen(), settings: settings);
       case listenAllBooks:
@@ -202,10 +209,29 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const AllStoriesListenScreen(), settings: settings);
       case listenAllChants:
         return MaterialPageRoute(builder: (_) => const AllChantsListenScreen(), settings: settings);
-      case listenAllMeditation:
-        return MaterialPageRoute(builder: (_) => const AllMeditationListenScreen(), settings: settings);
+      case journeyOpenContent: {
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => JourneyContentLinkScreen(
+            refType: args['refType'] as String? ?? '',
+            refIdOrSlug: args['refIdOrSlug'] as String? ?? '',
+            displayTitle: args['displayTitle'] as String?,
+          ),
+          settings: settings,
+        );
+      }
       case myGrowth:
         return MaterialPageRoute(builder: (_) => const MyGrowthScreen(), settings: settings);
+      case termsOfService:
+        return MaterialPageRoute(
+          builder: (_) => const TermsOfServiceScreen(),
+          settings: settings,
+        );
+      case privacyPolicy:
+        return MaterialPageRoute(
+          builder: (_) => const PrivacyPolicyScreen(),
+          settings: settings,
+        );
       default:
         // Auth callback deep links (/?code=... or /?refresh_token=...) arrive
         // here when the Navigator sees them as routes. Redirect to login and
@@ -223,5 +249,28 @@ class AppRouter {
           ),
         );
     }
+  }
+}
+
+/// Shown if a release build opens the dev-only subscription route (e.g. stale link).
+class _SubscriptionDevBlocked extends StatefulWidget {
+  const _SubscriptionDevBlocked();
+
+  @override
+  State<_SubscriptionDevBlocked> createState() => _SubscriptionDevBlockedState();
+}
+
+class _SubscriptionDevBlockedState extends State<_SubscriptionDevBlocked> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).maybePop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: SizedBox.shrink());
   }
 }
