@@ -36,7 +36,24 @@ class RevenueCatService {
   Offerings? get offerings => _offerings;
 
   // Configuration
-  String get _apiKey => dotenv.env['REVENUECAT_API_KEY'] ?? '';
+  //
+  // RevenueCat issues a separate public SDK key per store: `appl_...` for the
+  // Apple App Store and `goog_...` for Google Play. Pick the platform-specific
+  // key, falling back to the legacy single `REVENUECAT_API_KEY` if set.
+  String get _apiKey {
+    final fallback = dotenv.env['REVENUECAT_API_KEY'] ?? '';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        final android = dotenv.env['REVENUECAT_API_KEY_ANDROID'];
+        return (android != null && android.isNotEmpty) ? android : fallback;
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        final ios = dotenv.env['REVENUECAT_API_KEY_IOS'];
+        return (ios != null && ios.isNotEmpty) ? ios : fallback;
+      default:
+        return fallback;
+    }
+  }
   String get _entitlementId => dotenv.env['REVENUECAT_ENTITLEMENT_ID'] ?? 'Antar marg Pro';
   bool get _debugMode => dotenv.env['REVENUECAT_DEBUG_MODE']?.toLowerCase() == 'true';
 

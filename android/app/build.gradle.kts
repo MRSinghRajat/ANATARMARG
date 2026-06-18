@@ -5,12 +5,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Apply the Firebase Google Services plugin only when google-services.json
+// exists. This keeps the Android build working before Firebase is set up;
+// drop android/app/google-services.json in to enable FCM push.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
-    namespace = "com.example.antar_marg"
+    namespace = "com.antarmarg.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Required by flutter_local_notifications (uses java.time on older APIs).
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -20,8 +29,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.antar_marg"
+        // Matches the iOS bundle identifier so RevenueCat, Firebase, and Google
+        // Sign-In share one app identity across platforms.
+        applicationId = "com.antarmarg.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -41,4 +51,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Core library desugaring runtime for flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

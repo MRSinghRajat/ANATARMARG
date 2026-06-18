@@ -37,7 +37,7 @@ Find the **SHA-1** under `Variant: debug` (or `release` if testing release build
 4. Under **OAuth 2.0 Client IDs**:
    - If you have an **Android** client: Edit it → add your SHA-1
    - If not: **Create Credentials** → **OAuth client ID** → Application type: **Android**
-     - Package name: `com.example.antar_marg`
+     - Package name: `com.antarmarg.app`
      - SHA-1: paste the fingerprint from step 1
 5. Save
 
