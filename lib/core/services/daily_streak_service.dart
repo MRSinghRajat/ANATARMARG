@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/daily_streak_repository.dart';
+import '../utils/app_clock.dart';
 
 /// Tracks daily app engagement streak: last active date, current streak count,
 /// and optional user-committed goal. Persists to Supabase per user when logged in,
@@ -21,7 +23,9 @@ class DailyStreakService {
 
   SharedPreferences? _prefs;
   String? _userId;
-  final DailyStreakRepository _repo = DailyStreakRepository();
+  DailyStreakRepository? _repo;
+
+  DailyStreakRepository get _streakRepo => _repo ??= DailyStreakRepository();
 
   Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -63,7 +67,7 @@ class DailyStreakService {
     final today = _todayString();
 
     if (_useSupabase) {
-      final row = await _repo.fetch();
+      final row = await _streakRepo.fetch();
       if (row != null) {
         await _syncFromSupabase(row);
       }
@@ -80,7 +84,7 @@ class DailyStreakService {
       await prefs.setInt(_kCurrentStreak, 1);
       await prefs.setBool(_kSeenDay1, true);
       if (_useSupabase) {
-        await _repo.upsert(
+        await _streakRepo.upsert(
           lastActiveDate: today,
           currentStreak: 1,
           hasSeenDay1Celebration: true,
@@ -98,7 +102,7 @@ class DailyStreakService {
       await prefs.setString(_kLastActive, today);
       await prefs.setInt(_kCurrentStreak, 1);
       if (_useSupabase) {
-        await _repo.upsert(
+        await _streakRepo.upsert(
           lastActiveDate: today,
           currentStreak: 1,
           hasSeenDay1Celebration: true,
@@ -124,7 +128,7 @@ class DailyStreakService {
       await prefs.setString(_kLastActive, today);
       await prefs.setInt(_kCurrentStreak, newStreak);
       if (_useSupabase) {
-        await _repo.upsert(
+        await _streakRepo.upsert(
           lastActiveDate: today,
           currentStreak: newStreak,
           hasSeenDay1Celebration: seenDay1,
@@ -162,7 +166,7 @@ class DailyStreakService {
     await prefs.setString(_kLastActive, today);
     await prefs.setInt(_kCurrentStreak, 1);
     if (_useSupabase) {
-      await _repo.upsert(
+      await _streakRepo.upsert(
         lastActiveDate: today,
         currentStreak: 1,
         hasSeenDay1Celebration: true,
@@ -178,7 +182,7 @@ class DailyStreakService {
     await _prefs!.setBool(_kCommittedGoal, true);
     await _prefs!.setInt(_kCommittedDays, days);
     if (_useSupabase) {
-      await _repo.setCommittedGoal(days);
+      await _streakRepo.setCommittedGoal(days);
     }
   }
 
@@ -193,9 +197,20 @@ class DailyStreakService {
 
   String get lastActiveDate => _prefs?.getString(_kLastActive) ?? '';
 
-  static String _todayString() {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+  static String _todayString() => AppClock.todayString();
+
+  @visibleForTesting
+  Future<void> debugResetForTests() async {
+    _userId = null;
+    _prefs = null;
+    _repo = null;
+    await init();
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final keys = prefs.getKeys().where((k) => k.startsWith(_keyPrefix)).toList();
+    for (final k in keys) {
+      await prefs.remove(k);
+    }
   }
 }
 

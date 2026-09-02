@@ -107,6 +107,18 @@ class SanctuaryCustomizationService {
     }
   }
 
+  /// Drop in-memory customization so the next sign-in cannot flash the previous user's sanctuary.
+  Future<void> resetSession() async {
+    _isInitialized = false;
+    _initCompleter = null;
+    _currentCustomization = SanctuaryCustomization.defaultConfig;
+    _purchasedItems = {};
+    _templeGroundType = TempleGroundType.mud;
+    _mandirDeityBackground = null;
+    _mandirLightId = 'mood_midday';
+    _customizationController.add(_currentCustomization);
+  }
+
   /// Force reload from Supabase (source of truth)
   Future<void> refresh() async {
     final supabase = Supabase.instance.client;

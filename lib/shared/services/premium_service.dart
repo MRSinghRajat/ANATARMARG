@@ -197,6 +197,14 @@ class PremiumService {
   /// Get subscription management URL
   String? get managementUrl => _revenueCat.managementUrl;
 
+  /// Drop cached premium so the next account cannot briefly inherit this session.
+  Future<void> resetSession() async {
+    _cachedIsPremium = null;
+    _subscriptionStatus = null;
+    _premiumStatusController.add(false);
+    await refreshPremiumStatus();
+  }
+
   /// Dispose resources
   void dispose() {
     _premiumStatusController.close();

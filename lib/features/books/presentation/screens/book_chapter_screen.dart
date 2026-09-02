@@ -39,6 +39,9 @@ class _ShlokReaderColors {
   static const Color zinc900 = Color(0xFF18181B);
 }
 
+/// Gita / scripture chapter reader.
+/// Verse body shows Hindi and English together on purpose (AM-58) — there is no
+/// `_showHindi` toggle here. See `docs/LOCALIZATION.md`.
 class BookChapterScreen extends ConsumerStatefulWidget {
   final BookModel book;
   final ChapterModel? chapter;
@@ -98,7 +101,7 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
       widget.chapter?.chapterNumber ?? widget.chapterNumber ?? 1;
   String get _chapterDisplayName =>
       widget.chapter?.title ?? 'Chapter $_chapterNum';
-  // Both translations are always shown - no language toggle needed
+  // AM-58: verse body always shows Hindi + English. Not a catalog switch. See docs/LOCALIZATION.md.
 
   String _getBookShortName() {
     switch (widget.book.id) {
@@ -1377,7 +1380,8 @@ class _BookChapterScreenState extends ConsumerState<BookChapterScreen>
             ),
             const SizedBox(height: 16),
 
-            // Hindi verse text (primary) with drop cap
+            // Hindi verse + English translation: scripture-body exception (AM-58).
+            // Do not collapse this to a single-language switch. See docs/LOCALIZATION.md.
             if (hindiText.isNotEmpty)
               _buildVerseBodyWithDropCap(hindiText),
 

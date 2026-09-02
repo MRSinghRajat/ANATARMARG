@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../providers/now_playing_provider.dart';
@@ -129,14 +130,10 @@ class _SacredTextAudioScreenState extends ConsumerState<SacredTextAudioScreen> {
                   ],
                   // Title
                   Text(
-                    text.title,
+                    localized(ref, en: text.title, hi: text.titleHindi),
                     style: GoogleFonts.crimsonPro(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
-                  if (text.titleHindi != null) ...[
-                    const SizedBox(height: 4),
-                    Text(text.titleHindi!, style: GoogleFonts.crimsonPro(fontSize: 16, color: Colors.white.withValues(alpha: 0.5)), textAlign: TextAlign.center),
-                  ],
                   const SizedBox(height: 8),
                   // Info badges
                   Row(

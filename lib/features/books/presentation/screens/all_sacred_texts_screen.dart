@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../providers/book_providers.dart';
@@ -572,7 +573,7 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        text.title,
+                        localized(ref, en: text.title, hi: text.titleHindi),
                         style: GoogleFonts.crimsonPro(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -582,18 +583,6 @@ class _AllSacredTextsScreenState extends ConsumerState<AllSacredTextsScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (text.titleHindi != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          text.titleHindi!,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.matteGold.withOpacity(0.6),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                       const SizedBox(height: 6),
                       Row(
                         children: [

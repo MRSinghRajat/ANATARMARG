@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/animated_guide.dart';
 import '../../../../shared/services/guide_animation_service.dart';
@@ -105,6 +106,13 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
     'Just exploring',
   ];
 
+  static const _spiritualBackgroundHindi = {
+    'New to spirituality': 'आध्यात्म में नए',
+    'Some experience': 'कुछ अनुभव',
+    'Experienced practitioner': 'अनुभवी साधक',
+    'Just exploring': 'अभी जान रहे हैं',
+  };
+
   final List<String> _goals = [
     'Learn ancient wisdom',
     'Daily reflection',
@@ -112,6 +120,14 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
     'Understanding dharma',
     'Peace and clarity',
   ];
+
+  static const _goalHindi = {
+    'Learn ancient wisdom': 'प्राचीन ज्ञान सीखें',
+    'Daily reflection': 'दैनिक चिंतन',
+    'Personal growth': 'व्यक्तिगत विकास',
+    'Understanding dharma': 'धर्म को समझें',
+    'Peace and clarity': 'शांति और स्पष्टता',
+  };
 
   @override
   void dispose() {
@@ -145,7 +161,7 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
             const SizedBox(height: 24),
             
             Text(
-              'Tell Us About Yourself',
+              localized(ref, en: 'Tell Us About Yourself', hi: 'अपने बारे में बताएँ'),
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -161,9 +177,9 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                     // Name
                     TextField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Your Name *',
-                        hintText: 'Enter your name',
+                      decoration: InputDecoration(
+                        labelText: localized(ref, en: 'Your Name *', hi: 'आपका नाम *'),
+                        hintText: localized(ref, en: 'Enter your name', hi: 'अपना नाम लिखें'),
                       ),
                       onChanged: (value) {
                         formNotifier.setName(value);
@@ -176,9 +192,9 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                     // Age
                     TextField(
                       controller: _ageController,
-                      decoration: const InputDecoration(
-                        labelText: 'Age (Optional)',
-                        hintText: 'Enter your age',
+                      decoration: InputDecoration(
+                        labelText: localized(ref, en: 'Age (Optional)', hi: 'उम्र (वैकल्पिक)'),
+                        hintText: localized(ref, en: 'Enter your age', hi: 'अपनी उम्र लिखें'),
                       ),
                       keyboardType: TextInputType.number,
                       onChanged: (value) {
@@ -194,9 +210,9 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                     // Location
                     TextField(
                       controller: _locationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Location (Optional)',
-                        hintText: 'City, Country',
+                      decoration: InputDecoration(
+                        labelText: localized(ref, en: 'Location (Optional)', hi: 'स्थान (वैकल्पिक)'),
+                        hintText: localized(ref, en: 'City, Country', hi: 'शहर, देश'),
                       ),
                       onChanged: (value) {
                         formNotifier.setLocation(value);
@@ -207,7 +223,7 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                     
                     // Spiritual Background
                     Text(
-                      'Spiritual Background',
+                      localized(ref, en: 'Spiritual Background', hi: 'आध्यात्मिक पृष्ठभूमि'),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -217,7 +233,7 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                       children: _spiritualBackgrounds.map((bg) {
                         final isSelected = formState.spiritualBackground == bg;
                         return FilterChip(
-                          label: Text(bg),
+                          label: Text(localized(ref, en: bg, hi: _spiritualBackgroundHindi[bg])),
                           selected: isSelected,
                           onSelected: (selected) {
                             formNotifier.setSpiritualBackground(bg);
@@ -230,7 +246,11 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                     
                     // Goals
                     Text(
-                      'Your Goals (Select all that apply)',
+                      localized(
+                        ref,
+                        en: 'Your Goals (Select all that apply)',
+                        hi: 'आपके लक्ष्य (सभी लागू विकल्प चुनें)',
+                      ),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -240,7 +260,7 @@ class _OnboardingFormScreenState extends ConsumerState<OnboardingFormScreen> {
                       children: _goals.map((goal) {
                         final isSelected = formState.goals.contains(goal);
                         return FilterChip(
-                          label: Text(goal),
+                          label: Text(localized(ref, en: goal, hi: _goalHindi[goal])),
                           selected: isSelected,
                           onSelected: (selected) {
                             formNotifier.toggleGoal(goal);

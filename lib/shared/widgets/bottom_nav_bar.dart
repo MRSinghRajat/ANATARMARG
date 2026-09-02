@@ -8,7 +8,6 @@ import '../../features/profile/presentation/providers/language_provider.dart';
 enum NavItem {
   home,
   books,
-  chat,
   ashram,
   profile,
 }
@@ -55,7 +54,6 @@ class BottomNavBar extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(context, NavItem.home, Icons.home, AppStrings.get('nav_aangan', lang), tourHighlight),
-                _buildNavItem(context, NavItem.chat, Icons.auto_awesome, AppStrings.get('nav_ai_guru', lang), tourHighlight),
                 _buildNavItem(context, NavItem.ashram, Icons.temple_buddhist, AppStrings.get('nav_ashram', lang), tourHighlight),
                 _buildNavItem(context, NavItem.books, Icons.menu_book, AppStrings.get('nav_granthalya', lang), tourHighlight),
                 _buildNavItem(context, NavItem.profile, Icons.person, AppStrings.get('nav_profile', lang), tourHighlight),

@@ -11,6 +11,19 @@ enum ItemRarity {
   epic,
 }
 
+extension ShopItemRarityCopy on ItemRarity {
+  String get displayName {
+    switch (this) {
+      case ItemRarity.common:
+        return 'Traditional';
+      case ItemRarity.rare:
+        return 'Festival';
+      case ItemRarity.epic:
+        return 'Sacred';
+    }
+  }
+}
+
 class ItemModel {
   final String id;
   final String name;

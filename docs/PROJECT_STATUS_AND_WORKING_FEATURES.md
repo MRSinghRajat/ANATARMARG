@@ -1,3 +1,5 @@
+# ARCHIVED — superseded by docs/CONFLUENCE_APP_OVERVIEW.md and docs/JIRA_WORK_PLAN.md (2026-08-29).
+
 # ANTAR MARG – What’s Done & What’s Working
 
 This document summarizes what has been built so far and what is currently working in the app.

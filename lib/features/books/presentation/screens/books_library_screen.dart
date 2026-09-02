@@ -5,14 +5,11 @@ import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/book_model.dart';
 import '../providers/book_providers.dart';
-import '../providers/now_playing_provider.dart';
 import '../../data/models/granthalaya_models.dart';
-import '../widgets/granthalaya_audio_content.dart';
-import '../widgets/granthalaya_audio_progress_sync.dart';
-import '../widgets/granthalaya_audio_mini_player.dart';
 import 'book_detail_screen.dart';
 import 'full_audio_player_screen.dart';
 import 'deity_detail_screen.dart';
@@ -27,6 +24,8 @@ import '../../../../shared/widgets/upgrade_pro_banner.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../journey/data/models/journey_models.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
+import '../widgets/deity_portrait.dart';
+import '../../../navigation/presentation/providers/main_navigation_intent_provider.dart';
 
 /// Granthalaya - Academic Dashboard. Sacred Texts on top, Foundation & Concepts, Study Resources.
 class BooksLibraryScreen extends ConsumerStatefulWidget {
@@ -45,10 +44,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   bool _isLoading = true;
   bool _isPremium = false;
   StreamSubscription<bool>? _premiumSubscription;
-  /// 0 = Read, 1 = Listen, 2 = Journey
+  ProviderSubscription<int?>? _granthalayaPendingTabSubscription;
+  /// 0 = Read, 1 = Listen (Coming Soon), 2 = Journey
   int _granthalayaTabIndex = 0;
   int _sacredLibraryCategoryIndex = 0;
-  // Audio (Listen mode) - mini player driven by nowPlayingProvider
 
   static const _coverUrls = {
     'bhagavad_gita':
@@ -88,15 +87,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     ),
   ];
 
-  IconData _iconFromName(String name) {
-    switch (name) {
-      case 'record_voice_over':
-        return Icons.record_voice_over;
-      default:
-        return Icons.menu_book;
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -106,23 +96,28 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     });
     _premiumSubscription = PremiumService.instance.premiumStatusStream.listen((v) {
       if (!mounted) return;
-      setState(() {
-        _isPremium = v;
-        if (!v && _granthalayaTabIndex != 0) {
-          _granthalayaTabIndex = 0;
-          ref.read(granthalayaReadModeProvider.notifier).state = true;
-        }
-      });
+      setState(() => _isPremium = v);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(granthalayaReadModeProvider.notifier).state =
           _granthalayaTabIndex == 0;
+    });
+    _granthalayaPendingTabSubscription =
+        ref.listenManual<int?>(granthalayaPendingTabProvider, (previous, tab) {
+      if (tab == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(granthalayaPendingTabProvider.notifier).state = null;
+        setState(() => _granthalayaTabIndex = tab);
+        ref.read(granthalayaReadModeProvider.notifier).state = tab == 0;
+      });
     });
   }
 
   @override
   void dispose() {
     _premiumSubscription?.cancel();
+    _granthalayaPendingTabSubscription?.close();
     _scrollController.dispose();
     _journeyPageController.dispose();
     super.dispose();
@@ -181,20 +176,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     Navigator.of(context).pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
   }
 
-  /// Pull-to-refresh: reload books and invalidate all Granthalaya providers so every section refetches.
-
   void _selectGranthalayaTab(int index) {
-    if (!_isPremium && (index == 1 || index == 2)) {
-      final msg = index == 1
-          ? 'Listen mode and the full audio library are part of Pro. Open Profile to upgrade.'
-          : 'Spiritual journeys unlock with Pro. Open Profile to upgrade.';
-      navigateToProfileForProUpgrade(context, message: msg);
-      return;
-    }
     setState(() => _granthalayaTabIndex = index);
     ref.read(granthalayaReadModeProvider.notifier).state = index == 0;
   }
 
+  /// Pull-to-refresh: reload books and invalidate all Granthalaya providers so every section refetches.
   Future<void> _onGranthalayaRefresh() async {
     await _loadBooks();
     if (!mounted) return;
@@ -204,7 +191,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     ref.invalidate(sacredStoryCategoriesProvider);
     ref.invalidate(deitiesProvider);
     ref.invalidate(chantsProvider);
-    ref.invalidate(resourceCardsProvider);
     ref.invalidate(deepDiveProvider);
     ref.invalidate(audioCategoriesProvider);
     ref.invalidate(audioInProgressProvider);
@@ -284,8 +270,8 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           SliverToBoxAdapter(child: _buildSacredLibrarySection()),
           SliverToBoxAdapter(child: _buildSacredStoriesSection()),
           SliverToBoxAdapter(child: _buildExploreDeitiesSection()),
-          SliverToBoxAdapter(child: _buildResourceLibrarySection()),
-          SliverToBoxAdapter(child: _buildDeepDiveSection()),
+          // AM-44: Resource Library + Deep Dive widgets removed until destination
+          // screens exist. resourceCardsProvider / deepDiveProvider stay parked.
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
@@ -322,7 +308,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   index: 1,
                   icon: Icons.headphones,
                   label: 'Listen',
-                  locked: !_isPremium,
+                  locked: false,
                 ),
               ),
             ),
@@ -333,7 +319,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   index: 2,
                   icon: Icons.route,
                   label: 'Journey',
-                  locked: !_isPremium,
+                  locked: false,
                 ),
               ),
             ),
@@ -388,9 +374,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   Widget _buildJourneyContent() {
-    if (!_isPremium) {
-      return const SizedBox.shrink();
-    }
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(activeJourneyProvider);
@@ -780,7 +763,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                journeyType?.title ?? 'Journey',
+                                localized(ref, en: journeyType?.title ?? 'Journey', hi: journeyType?.titleHindi),
                                 style: GoogleFonts.inter(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w800,
@@ -1165,7 +1148,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  journeyType?.title ?? 'Journey',
+                                  localized(ref, en: journeyType?.title ?? 'Journey', hi: journeyType?.titleHindi),
                                   style: GoogleFonts.inter(
                                     fontSize: compact ? 15 : 17,
                                     fontWeight: FontWeight.w700,
@@ -1226,12 +1209,15 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   String? _journeyContextLabel(UserJourney uj, JourneyPhase? phase) {
+    final phaseTitle = phase == null
+        ? null
+        : localized(ref, en: phase.title, hi: phase.titleHindi);
     final meta = uj.metadata;
     if (meta.containsKey('due_date')) {
       final due = DateTime.tryParse(meta['due_date'] as String? ?? '');
       if (due != null) {
         final week = (40 - due.difference(DateTime.now()).inDays / 7).ceil().clamp(1, 42);
-        return 'Week $week${phase != null ? ' · ${phase.title}' : ''}';
+        return 'Week $week${phaseTitle != null ? ' · $phaseTitle' : ''}';
       }
     }
     if (meta.containsKey('child_dob')) {
@@ -1242,14 +1228,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         final y = days ~/ 365;
         final m = (days % 365) ~/ 30;
         final ageStr = y > 0 ? '${y}y ${m}m' : '${m}m';
-        return '$name · $ageStr${phase != null ? ' · ${phase.title}' : ''}';
+        return '$name · $ageStr${phaseTitle != null ? ' · $phaseTitle' : ''}';
       }
     }
     if (uj.startDate != null) {
       final day = DateTime.now().difference(uj.startDate!).inDays;
-      return 'Day $day${phase != null ? ' · ${phase.title}' : ''}';
+      return 'Day $day${phaseTitle != null ? ' · $phaseTitle' : ''}';
     }
-    return phase?.title;
+    return phaseTitle;
   }
 
   Color? _parseColor(String hex) {
@@ -1471,7 +1457,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        t.title,
+                                        localized(ref, en: t.title, hi: t.titleHindi),
                                         style: GoogleFonts.inter(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w700,
@@ -1482,9 +1468,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
-                                      if (isTrending && (t.subtitle ?? '').isNotEmpty)
+                                      if (isTrending && localized(ref, en: t.subtitle ?? '', hi: t.subtitleHindi).isNotEmpty)
                                         Text(
-                                          t.subtitle ?? '',
+                                          localized(ref, en: t.subtitle ?? '', hi: t.subtitleHindi),
                                           style: GoogleFonts.inter(
                                             fontSize: 11,
                                             color: AppColors.zinc400,
@@ -1493,7 +1479,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                      if (isTrending && (t.subtitle ?? '').isNotEmpty) const SizedBox(height: 4),
+                                      if (isTrending && localized(ref, en: t.subtitle ?? '', hi: t.subtitleHindi).isNotEmpty) const SizedBox(height: 4),
                                       if (startedText != null) ...[
                                         Row(
                                           children: [
@@ -1537,7 +1523,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                         ),
                                       ] else if (isComingSoon)
                                         Text(
-                                          t.subtitle ?? 'Coming soon',
+                                          localized(ref, en: t.subtitle ?? 'Coming soon', hi: t.subtitleHindi),
                                           style: GoogleFonts.inter(
                                             fontSize: 11,
                                             color: AppColors.zinc400,
@@ -1546,9 +1532,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         )
-                                      else if ((t.subtitle ?? '').isNotEmpty)
+                                      else if (localized(ref, en: t.subtitle ?? '', hi: t.subtitleHindi).isNotEmpty)
                                         Text(
-                                          t.subtitle ?? '',
+                                          localized(ref, en: t.subtitle ?? '', hi: t.subtitleHindi),
                                           style: GoogleFonts.inter(
                                             fontSize: 11,
                                             color: AppColors.zinc400,
@@ -1654,7 +1640,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      t.title,
+                                      localized(ref, en: t.title, hi: t.titleHindi),
                                       style: GoogleFonts.inter(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
@@ -1665,27 +1651,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.journeyPrimary,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'COMING SOON',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
+                                  _comingSoonBadge(),
                                 ],
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                t.subtitle ?? 'Unlock wisdom with others',
+                                localized(ref, en: t.subtitle ?? 'Unlock wisdom with others', hi: t.subtitleHindi),
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   color: AppColors.zinc400,
@@ -1839,7 +1810,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    t.title,
+                    localized(ref, en: t.title, hi: t.titleHindi),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.cormorantGaramond(
                       fontSize: 17,
@@ -1852,7 +1823,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    t.subtitle ?? 'Begin your path',
+                    localized(ref, en: t.subtitle ?? 'Begin your path', hi: t.subtitleHindi),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 12,
@@ -1924,7 +1895,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                t.title,
+                localized(ref, en: t.title, hi: t.titleHindi),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cormorantGaramond(
                   fontSize: 17,
@@ -2178,7 +2149,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          text.title,
+                          localized(ref, en: text.title, hi: text.titleHindi),
                           style: GoogleFonts.crimsonPro(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -2280,7 +2251,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          story.title,
+                          localized(ref, en: story.title, hi: story.titleHindi),
                           style: GoogleFonts.crimsonPro(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -2339,21 +2310,16 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     color: AppColors.manuscriptDark,
                   ),
                   child: ClipOval(
-                    child: deity.imageUrl != null && deity.imageUrl!.isNotEmpty
-                        ? AppNetworkImage(
-                            imageUrl: deity.imageUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Icon(
-                                Icons.person,
-                                color: AppColors.matteGold,
-                                size: 32,
-                              ),
-                          )
-                        : Icon(
-                            Icons.person,
-                            color: AppColors.matteGold,
-                            size: 32,
-                          ),
+                    child: DeityPortrait(
+                      imageUrl: deity.imageUrl,
+                      slug: deity.slug,
+                      fit: BoxFit.cover,
+                      fallback: const Icon(
+                        Icons.person,
+                        color: AppColors.matteGold,
+                        size: 32,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2598,51 +2564,64 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _buildListenContent() {
-    if (!_isPremium) {
-      return const SizedBox.shrink();
-    }
-    return Stack(
-      children: [
-        GranthalayaAudioProgressSync(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: GranthalayaAudioContent(
-                  onPlay: (info) async {
-                    await ref.read(nowPlayingProvider.notifier).setTrackAndPlay(
-                          title: info.title,
-                          subtitle: info.subtitle,
-                          coverUrl: info.coverUrl,
-                          audioUrl: info.audioUrl,
-                        );
-                    await ref.read(granthalayaDataSourceProvider).upsertUserAudioProgress(
-                          title: info.title,
-                          tag: info.subtitle ?? '',
-                          subtitle: info.subtitle,
-                          imageUrl: info.coverUrl,
-                          audioUrl: info.audioUrl,
-                          currentTimeSeconds: 0,
-                          totalTimeSeconds: 0,
-                        );
-                    ref.invalidate(userAudioProgressProvider);
-                  },
-                ),
-              ),
-              Consumer(
-                builder: (context, ref, _) {
-                  final state = ref.watch(nowPlayingProvider);
-                  if (state == null) return const SizedBox.shrink();
-                  return GranthalayaAudioMiniPlayer(
-                    onClose: () => ref.read(nowPlayingProvider.notifier).clear(),
-                  );
-                },
-              ),
-            ],
-          ),
+  Widget _comingSoonBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.journeyPrimary,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'COMING SOON',
+        style: GoogleFonts.inter(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          letterSpacing: 0.5,
         ),
-      ],
+      ),
+    );
+  }
+
+  /// Listen is a v1 placeholder until recorded chant/narration audio is uploaded.
+  /// Audio screens remain in the repo; this path no longer opens them.
+  Widget _buildListenContent() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.headphones,
+              size: 48,
+              color: AppColors.matteGold.withValues(alpha: 0.85),
+            ),
+            const SizedBox(height: 16),
+            _comingSoonBadge(),
+            const SizedBox(height: 16),
+            Text(
+              'Sacred audio is being recorded',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Chants, narrations, and guided listening will appear here once they are ready. Read and Journey are available now.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.zinc400,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2736,37 +2715,13 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Sacred Library',
-                  style: GoogleFonts.crimsonPro(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.matteGold.withOpacity(0.9),
-                  ),
-                ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {},
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: AppColors.matteGold.withOpacity(0.2)),
-                      ),
-                      child: Icon(Icons.tune,
-                          size: 16,
-                          color: AppColors.matteGold.withOpacity(0.6)),
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              'Sacred Library',
+              style: GoogleFonts.crimsonPro(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.matteGold.withOpacity(0.9),
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -3147,7 +3102,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        story.title,
+                        localized(ref, en: story.title, hi: story.titleHindi),
                         style: GoogleFonts.crimsonPro(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -3157,18 +3112,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (story.titleHindi != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          story.titleHindi!,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.matteGold.withOpacity(0.6),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -3532,36 +3475,13 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Explore Deities',
-                  style: GoogleFonts.crimsonPro(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.matteGold.withOpacity(0.9),
-                  ),
-                ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {},
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        'See All',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.matteGold.withOpacity(0.6),
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              'Explore Deities',
+              style: GoogleFonts.crimsonPro(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.matteGold.withOpacity(0.9),
+              ),
             ),
           ),
           const SizedBox(height: 32),
@@ -3581,7 +3501,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     separatorBuilder: (_, __) => const SizedBox(width: 32),
                     itemBuilder: (_, i) {
                       final (name, url) = items[i];
-                      return _buildDeityCircle(name, url, onTap: () {});
+                      // Known gap (low priority): fallback circles only render if
+                      // the live deities query fails. They have no detail payload.
+                      return _buildDeityCircle(name, url, slug: name, onTap: () {});
                     },
                   ),
                 );
@@ -3599,6 +3521,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     return _buildDeityCircle(
                       d.name,
                       d.imageUrl ?? '',
+                      slug: d.slug,
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -3616,7 +3539,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  Widget _buildDeityCircle(String name, String imageUrl, {VoidCallback? onTap}) {
+  Widget _buildDeityCircle(String name, String imageUrl, {String? slug, VoidCallback? onTap}) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -3652,10 +3575,11 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   color: AppColors.manuscriptDark,
                 ),
                 child: ClipOval(
-                  child: AppNetworkImage(
+                  child: DeityPortrait(
                     imageUrl: imageUrl,
+                    slug: slug,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.person,
+                    fallback: const Icon(Icons.person,
                         color: AppColors.matteGold, size: 32),
                   ),
                 ),
@@ -3895,7 +3819,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      text.title,
+                      localized(ref, en: text.title, hi: text.titleHindi),
                       style: GoogleFonts.crimsonPro(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -3905,18 +3829,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (text.titleHindi != null) ...[                   
-                      const SizedBox(height: 2),
-                      Text(
-                        text.titleHindi!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: AppColors.matteGold.withOpacity(0.6),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -3949,303 +3861,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     return AntarmargPlaceholder(
       compact: true,
       godName: deityName.isEmpty ? null : deityName,
-    );
-  }
-
-  Widget _buildResourceLibrarySection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 2,
-                color: AppColors.matteGold.withOpacity(0.3),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Resource Library',
-                style: GoogleFonts.crimsonPro(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.matteGold.withOpacity(0.9),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Consumer(
-            builder: (context, ref, _) {
-              final cardsAsync = ref.watch(resourceCardsProvider);
-              final cards = cardsAsync.valueOrNull ?? [];
-              final fallback = [
-                ResourceCardModel(
-                    id: '1',
-                    title: 'Terminology',
-                    subtitle: 'Sanskrit Glossary',
-                    iconName: 'menu_book'),
-                ResourceCardModel(
-                    id: '2',
-                    title: 'Pronunciation',
-                    subtitle: 'Chanting Rules',
-                    iconName: 'record_voice_over'),
-              ];
-              final items = cards.isNotEmpty ? cards : fallback;
-              return Row(
-                children: [
-                  if (items.isNotEmpty)
-                    Expanded(
-                      child: _buildResourceCard(
-                        icon: _iconFromName(items[0].iconName),
-                        title: items[0].title,
-                        subtitle: items[0].subtitle,
-                      ),
-                    ),
-                  if (items.length > 1) ...[
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildResourceCard(
-                        icon: _iconFromName(items[1].iconName),
-                        title: items[1].title,
-                        subtitle: items[1].subtitle,
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResourceCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color(0xFF1A1A1A).withOpacity(0.6),
-                const Color(0xFF0F0F0F).withOpacity(0.9),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.matteGold.withOpacity(0.1)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.matteGold.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: AppColors.matteGold, size: 22),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFF1F5F9),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  color: AppColors.matteGold.withOpacity(0.4),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDeepDiveSection() {
-    return Consumer(
-      builder: (context, ref, _) {
-        final deepDiveAsync = ref.watch(deepDiveProvider);
-        final articles = deepDiveAsync.valueOrNull ?? [];
-        final article = articles.isNotEmpty
-            ? articles.first
-            : DeepDiveModel(
-                id: '1',
-                title: "The Nature of 'Atman'",
-                quote:
-                    '"The Self is not born, nor does it ever die... Unborn, eternal, ever-existing, and primeval."',
-                durationLabel: '4 min read',
-              );
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 48, 16, 48),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {},
-              borderRadius: BorderRadius.circular(32),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFF1A1A1A).withOpacity(0.6),
-                      const Color(0xFF0F0F0F).withOpacity(0.9),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(32),
-                  border: Border.all(
-                    color: AppColors.matteGold.withOpacity(0.18),
-                    width: 1.5,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    const Positioned(
-                      top: 0,
-                      right: 0,
-                      child: Opacity(
-                        opacity: 0.1,
-                        child: Icon(Icons.psychology,
-                            size: 64, color: AppColors.matteGold),
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.matteGold.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color:
-                                        AppColors.matteGold.withOpacity(0.2)),
-                              ),
-                              child: Text(
-                                'Deep Dive',
-                                style: GoogleFonts.inter(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.matteGold,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                            ),
-                            Icon(Icons.share,
-                                color: AppColors.matteGold.withOpacity(0.5),
-                                size: 20),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          article.title,
-                          style: GoogleFonts.crimsonPro(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.only(left: 16),
-                          decoration: BoxDecoration(
-                            border: Border(
-                                left: BorderSide(
-                                    color: AppColors.matteGold.withOpacity(0.2),
-                                    width: 2)),
-                          ),
-                          child: Text(
-                            article.quote,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                              color: const Color(0xFF94A3B8),
-                              height: 1.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.schedule,
-                                    size: 16,
-                                    color:
-                                        AppColors.matteGold.withOpacity(0.4)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  article.durationLabel ?? '4 min read',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.matteGold.withOpacity(0.6),
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppColors.matteGold,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.matteGold.withOpacity(0.2),
-                                    blurRadius: 12,
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                'Read Article',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 

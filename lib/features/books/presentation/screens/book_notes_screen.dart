@@ -7,6 +7,7 @@ import '../../data/repositories/chapter_repository.dart';
 import '../../data/services/verse_notes_service.dart';
 
 /// Shows verse notes (shlok copy + user comment) for the book.
+/// Notes are user-authored; there is no `title_hindi` on this surface (AM-62).
 class BookNotesScreen extends ConsumerStatefulWidget {
   final BookModel book;
 

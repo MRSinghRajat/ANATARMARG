@@ -135,8 +135,8 @@ class _SanctuaryShopSheetState extends State<SanctuaryShopSheet>
     _tabController = TabController(length: _tabCount, vsync: this);
   }
 
-  /// Whether an item requires premium (rare+ rarity or deity images).
-  /// High-level (Legendary) and Deity items are Pro-only; cannot be bought with karma.
+  /// Whether an item requires Pro (exclusive-tier items and deity images).
+  /// Exclusive-tier and deity items are Pro-only; cannot be bought with karma.
   bool _requiresPremium(ShopItem item) {
     if (item.categoryKey == 'deityImage') return true;
     return item.rarity.isProOnly;

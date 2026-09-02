@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/services/app_session_reset.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
@@ -286,13 +289,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           const Spacer(),
-          if (kDebugMode)
+          if (kDebugMode) ...[
+            IconButton(
+              tooltip: 'AM-19 Crashlytics test — remove after console confirm',
+              onPressed: () async {
+                if (Firebase.apps.isEmpty) return;
+                await FirebaseCrashlytics.instance
+                    .setCrashlyticsCollectionEnabled(true);
+                FirebaseCrashlytics.instance.crash();
+              },
+              icon: const Icon(Icons.bug_report, color: Colors.white38, size: 20),
+            ),
             IconButton(
               onPressed: () {
                 Navigator.pushNamed(context, AppRouter.subscriptionDevSettings);
               },
               icon: const Icon(Icons.developer_mode, color: Colors.white38, size: 20),
             ),
+          ],
         ],
       ),
     );
@@ -763,6 +777,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
         
         if (confirmed == true) {
+          await AppSessionReset.onSignOut();
           await SupabaseService().client?.auth.signOut();
           if (mounted) {
             Navigator.pushNamedAndRemoveUntil(

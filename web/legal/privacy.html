@@ -9,53 +9,57 @@
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
     .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
     h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
-    p { margin: 0 0 1rem; white-space: pre-line; }
+    p, li { margin: 0 0 0.75rem; }
+    .draft { background: #fff6e5; border: 1px solid #e6c98a; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p class="meta">Antar Marg · Last updated: March 24, 2026</p>
+  <p class="meta">Antar Marg · Last updated: August 30, 2026</p>
+  <p class="draft"><strong>Draft for review.</strong> This is not legal advice. Have a lawyer (or at least a careful human read) before hosting this at a public URL or submitting to App Store Connect.</p>
 
-  <h2>1. Introduction</h2>
-  <p>This Privacy Policy describes how Antar Marg (“we,” “us”) collects, uses, and shares information when you use our mobile application. By using the App, you agree to this policy.</p>
+  <h2>1. Who we are</h2>
+  <p>This policy describes how Antar Marg (“the App”) collects and uses information. The App is a Hindu/Vedic daily-practice, library, and sanctuary experience for iOS.</p>
 
-  <h2>2. Information we collect</h2>
-  <p>• Account and profile: information you provide when you sign in (e.g. email, name, profile photo if you choose), and preferences such as language.
-• Usage: how you interact with the App (e.g. features used, progress, reading or listening activity) to operate and improve the service.
-• Device and diagnostics: device type, OS version, app version, and crash or performance data to maintain reliability.
-• Purchases: subscription status and transaction identifiers processed by Apple (and partners such as RevenueCat) — we do not receive your full payment card details.
-• Communications: messages you send to us for support.</p>
+  <h2>2. What we collect</h2>
+  <ul>
+    <li><strong>Account.</strong> If you sign in with Google or Sign in with Apple, we receive the identifier and the name/email those providers share with us. We store the account in Supabase Auth.</li>
+    <li><strong>Practice and progress.</strong> Daily tasks, habits, streaks, reading progress, bookmarks, notes, journey progress, and sanctuary customizations are stored in Supabase (and cached on-device) so they persist across sessions.</li>
+    <li><strong>Purchases.</strong> Subscription status and transaction identifiers are processed by Apple and RevenueCat. We do not receive your full payment card number.</li>
+    <li><strong>Push token.</strong> If you allow notifications, we store a device push token (Firebase Cloud Messaging / APNs) so we can send the reminders you opted into.</li>
+    <li><strong>Diagnostics.</strong> Crash reports via Firebase Crashlytics (release builds) and funnel events via Firebase Analytics: onboarding complete, paywall viewed, purchase completed, tab viewed. Events use your Supabase user id only — not your email or name.</li>
+    <li><strong>On-device preferences.</strong> Language, sound, and notification toggles stay on the device.</li>
+  </ul>
+  <p>We do <strong>not</strong> operate a live AI chatbot. Verse “AI commentary” is pre-written text stored in our database, not a live model call from your device.</p>
 
-  <h2>3. How we use information</h2>
-  <p>We use information to provide and personalize the App, authenticate users, process subscriptions, send notifications you opt into, analyze usage in aggregate, fix bugs, comply with law, and protect safety and security.</p>
+  <h2>3. Why we use it</h2>
+  <p>To run the App (auth, sync, purchases), send notifications you enable, fix crashes, understand which screens people reach (in aggregate), and comply with law. We do not sell personal information to data brokers or advertisers.</p>
 
-  <h2>4. How we share information</h2>
-  <p>We share data with service providers who help us run the App, such as:
-• Cloud/database and authentication (e.g. Supabase or similar backend)
-• Subscription and entitlement management (e.g. RevenueCat)
-• Push notifications (e.g. Firebase Cloud Messaging / Apple Push Notification service)
-• Sign-in providers (Apple, Google) according to their policies
-We require processors to use data only as instructed. We may disclose information if required by law or to protect rights and safety.</p>
+  <h2>4. Who we share it with (processors)</h2>
+  <ul>
+    <li>Supabase — authentication, database, storage</li>
+    <li>Firebase (Google) — push, Crashlytics, Analytics</li>
+    <li>RevenueCat — subscription entitlements</li>
+    <li>Apple / Google — sign-in and App Store billing</li>
+  </ul>
+  <p>These providers process data on our behalf under their own terms. We may disclose information if required by law or to protect safety.</p>
 
-  <h2>5. Storage and retention</h2>
-  <p>We retain information as long as needed to provide the App and for legitimate business purposes (e.g. legal, tax, fraud prevention). You may request deletion of your account where applicable; some data may be retained as required by law.</p>
+  <h2>5. Retention and deletion</h2>
+  <p>We keep account and progress data while your account exists. You can sign out anytime; signing out clears this device’s cached user data. To delete an account, contact the support email on the App Store listing. Some records may be retained where the law requires it (e.g. purchase receipts).</p>
 
-  <h2>6. Your choices and rights</h2>
-  <p>Depending on where you live, you may have rights to access, correct, delete, or export personal data, or to object to certain processing. Contact us to exercise these rights. You can disable push notifications in device or App settings.</p>
+  <h2>6. Your choices</h2>
+  <p>You can refuse sign-in (limited local use), disable notifications, and manage subscriptions in iOS Settings. Depending on your region you may have rights to access, correct, or delete personal data — contact us to exercise them.</p>
 
   <h2>7. Children</h2>
-  <p>The App is not directed at children under 13 (or the minimum age required in your region). We do not knowingly collect personal information from children. If you believe we have, contact us and we will delete it.</p>
+  <p>The App is not directed at children under 13 (or the minimum digital age in your region). We do not knowingly collect their personal information.</p>
 
-  <h2>8. International users</h2>
-  <p>If you use the App from outside the country where we operate, your information may be processed in other countries where we or our providers operate, subject to applicable safeguards.</p>
+  <h2>8. International transfers</h2>
+  <p>Supabase, Firebase, and RevenueCat may process data in the United States or other countries where they operate.</p>
 
-  <h2>9. Security</h2>
-  <p>We use reasonable technical and organizational measures to protect information. No method of transmission over the internet is 100% secure.</p>
+  <h2>9. Changes</h2>
+  <p>We will update the “Last updated” date when this policy changes. Material changes may also be noted in an App Store release.</p>
 
-  <h2>10. Changes</h2>
-  <p>We may update this Privacy Policy. We will post the new version in the App and update the “Last updated” date. Material changes may be communicated as required by law.</p>
-
-  <h2>11. Contact</h2>
-  <p>Privacy questions: use the support contact shown on the App Store listing or our website.</p>
+  <h2>10. Contact</h2>
+  <p>Use the support contact on the App Store listing or the email published on antarmarg.app.</p>
 </body>
 </html>

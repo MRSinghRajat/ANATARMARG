@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
@@ -155,7 +156,7 @@ class _AllStoriesListenScreenState extends ConsumerState<AllStoriesListenScreen>
                           child: Text(story.deitySlug!.toUpperCase(), style: GoogleFonts.cinzel(fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1)),
                         ),
                       const SizedBox(height: 2),
-                      Text(story.title, style: GoogleFonts.crimsonPro(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(localized(ref, en: story.title, hi: story.titleHindi), style: GoogleFonts.crimsonPro(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
                       const Spacer(),
                       Text('${story.estimatedMinutes}m', style: GoogleFonts.inter(fontSize: 9, color: Colors.white.withValues(alpha: 0.5))),
                     ],

@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/daily_story_model.dart';
 
-class StoryReaderScreen extends StatefulWidget {
+class StoryReaderScreen extends ConsumerStatefulWidget {
   final DailyStoryModel story;
 
   const StoryReaderScreen({super.key, required this.story});
 
   @override
-  State<StoryReaderScreen> createState() => _StoryReaderScreenState();
+  ConsumerState<StoryReaderScreen> createState() => _StoryReaderScreenState();
 }
 
-class _StoryReaderScreenState extends State<StoryReaderScreen>
+class _StoryReaderScreenState extends ConsumerState<StoryReaderScreen>
     with TickerProviderStateMixin {
   late final PageController _pageController;
   late AnimationController _fadeController;
@@ -22,13 +24,17 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
   late Animation<double> _decorFadeAnimation;
 
   int _currentPage = 0;
-  bool _showHindi = false;
+  /// Null = follow [languageProvider]; true/false = mid-read override (AM-61).
+  bool? _overrideHindi;
 
   static const _bg1 = Color(0xFF0D0B08);
   static const _bg2 = Color(0xFF1A1510);
   static const _parchment = Color(0xFF1E1A14);
   static const _gold = Color(0xFFC5A059);
   static const _goldLight = Color(0xFFE2C999);
+
+  bool get _showHindi =>
+      _overrideHindi ?? (ref.watch(languageProvider) == 'hi');
 
   @override
   void initState() {
@@ -182,7 +188,7 @@ class _StoryReaderScreenState extends State<StoryReaderScreen>
 
   Widget _buildLangButton(String label, bool active) {
     return GestureDetector(
-      onTap: () => setState(() => _showHindi = label == 'HI'),
+      onTap: () => setState(() => _overrideHindi = label == 'HI'),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

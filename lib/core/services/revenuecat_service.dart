@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:purchases_flutter/purchases_flutter.dart' hide PurchaseResult;
 
+import 'app_analytics.dart';
+
 /// RevenueCat service for managing in-app purchases and subscriptions.
 /// 
 /// This service handles:
@@ -100,12 +102,6 @@ class RevenueCatService {
     return _entitlementId;
   }
 
-  /// Legacy Guru id — treated as Pro for AI limits.
-  String? get _legacyGuruEntitlementId {
-    final v = dotenv.env['REVENUECAT_GURU_ENTITLEMENT_ID']?.trim();
-    return (v != null && v.isNotEmpty) ? v : null;
-  }
-
   bool get _debugMode => dotenv.env['REVENUECAT_DEBUG_MODE']?.toLowerCase() == 'true';
 
   bool _entitlementActive(CustomerInfo? info, String id) {
@@ -122,11 +118,7 @@ class RevenueCatService {
 
   /// Pro subscription (highest tier).
   bool hasActiveProEntitlement([CustomerInfo? info]) {
-    final i = info ?? _customerInfo;
-    if (_entitlementActive(i, _proEntitlementId)) return true;
-    final legacy = _legacyGuruEntitlementId;
-    if (legacy != null && _entitlementActive(i, legacy)) return true;
-    return false;
+    return _entitlementActive(info, _proEntitlementId);
   }
 
   /// Any paid subscription (Plus or Pro) — unlocks app premium features.
@@ -323,6 +315,7 @@ class RevenueCatService {
       _subscriptionStatusController.add(isNowPremium);
 
       debugPrint('RevenueCat: Purchase successful. Premium: $isNowPremium');
+      await AppAnalytics.logPurchaseCompleted(productId: package.identifier);
 
       return SubscriptionPurchaseOutcome(
         success: true,
@@ -356,7 +349,7 @@ class RevenueCatService {
     }
   }
 
-  /// Non-subscription products (e.g. AI Guru credit packs). [productIds] are App Store / Play product identifiers.
+  /// Non-subscription products. [productIds] are App Store / Play product identifiers.
   Future<List<StoreProduct>> getStoreProducts(List<String> productIds) async {
     if (!_isInitialized || productIds.isEmpty) return [];
     try {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
@@ -168,7 +169,7 @@ class _AllSacredTextsListenScreenState extends ConsumerState<AllSacredTextsListe
                           child: Text(text.deitySlug!.toUpperCase(), style: GoogleFonts.cinzel(fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1)),
                         ),
                       const SizedBox(height: 2),
-                      Text(text.title, style: GoogleFonts.crimsonPro(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(localized(ref, en: text.title, hi: text.titleHindi), style: GoogleFonts.crimsonPro(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
                       const Spacer(),
                       Text('${text.typeLabel}${text.durationSeconds != null ? ' · ${text.durationSeconds! ~/ 60}m' : ''}', style: GoogleFonts.inter(fontSize: 9, color: Colors.white.withValues(alpha: 0.5))),
                     ],

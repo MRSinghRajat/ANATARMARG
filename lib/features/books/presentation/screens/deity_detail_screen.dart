@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/widgets/app_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../shared/widgets/antarmarg_placeholder.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../../data/models/book_model.dart';
@@ -11,6 +12,7 @@ import 'sacred_text_reader_screen.dart';
 import 'sacred_story_reader_screen.dart';
 import 'book_detail_screen.dart';
 import '../../data/services/granthalaya_recent_service.dart';
+import '../widgets/deity_portrait.dart';
 
 class DeityDetailScreen extends ConsumerStatefulWidget {
   final DeityModel deity;
@@ -148,13 +150,13 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
         background: Stack(
           fit: StackFit.expand,
           children: [
-            if (d.imageUrl != null)
-              AppNetworkImage(
-                imageUrl: d.imageUrl!,
-                fit: BoxFit.cover,
-                color: Colors.black.withValues(alpha: 0.3),
-                colorBlendMode: BlendMode.darken,
-              ),
+            DeityPortrait(
+              imageUrl: d.imageUrl,
+              slug: d.slug,
+              fit: BoxFit.cover,
+              color: Colors.black.withValues(alpha: 0.3),
+              colorBlendMode: BlendMode.darken,
+            ),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -176,6 +178,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Deity name in both scripts: scripture-body exception (AM-58).
                   if (d.titleHindi != null)
                     Text(
                       d.titleHindi!,
@@ -480,7 +483,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              text.title,
+              localized(ref, en: text.title, hi: text.titleHindi),
               style: GoogleFonts.crimsonPro(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -489,16 +492,6 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            if (text.titleHindi != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                text.titleHindi!,
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: Colors.white54),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
             const Spacer(),
             Row(
               children: [
@@ -588,7 +581,7 @@ class _DeityDetailScreenState extends ConsumerState<DeityDetailScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              story.title,
+              localized(ref, en: story.title, hi: story.titleHindi),
               style: GoogleFonts.crimsonPro(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/services/coin_service.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/models/journey_models.dart';
 import '../providers/journey_providers.dart';
 class JourneyMilestoneDetailScreen extends ConsumerStatefulWidget {
@@ -80,6 +82,7 @@ class _JourneyMilestoneDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
     if (_loading) {
       return Scaffold(
         backgroundColor: AppColors.ashramBackgroundDark,
@@ -114,6 +117,10 @@ class _JourneyMilestoneDetailScreenState
       );
     }
     final m = _milestone!;
+    final title = localizedLang(lang, en: m.title, hi: m.titleHindi);
+    final description = m.description == null && m.descriptionHindi == null
+        ? null
+        : localizedLang(lang, en: m.description ?? '', hi: m.descriptionHindi);
     final journeyAsync = ref.watch(userJourneyProvider(widget.userJourneyId));
     final userJourney = journeyAsync.valueOrNull;
     final journeyLocked =
@@ -131,7 +138,7 @@ class _JourneyMilestoneDetailScreenState
       backgroundColor: AppColors.ashramBackgroundDark,
       appBar: AppBar(
         title: Text(
-          m.title,
+          title,
           style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: AppColors.zinc100),
           overflow: TextOverflow.ellipsis,
         ),
@@ -186,7 +193,7 @@ class _JourneyMilestoneDetailScreenState
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    m.title,
+                    title,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 22,
@@ -194,17 +201,6 @@ class _JourneyMilestoneDetailScreenState
                       color: AppColors.zinc100,
                     ),
                   ),
-                  if (m.titleHindi != null && m.titleHindi!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      m.titleHindi!,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.crimsonPro(
-                        fontSize: 16,
-                        color: AppColors.zinc400,
-                      ),
-                    ),
-                  ],
                   // Coin reward pill
                   if (coinReward > 0) ...[
                     const SizedBox(height: 14),
@@ -229,7 +225,7 @@ class _JourneyMilestoneDetailScreenState
             ),
 
             // ── Description / Significance ─────────────────────────────
-            if (m.description != null && m.description!.isNotEmpty) ...[
+            if (description != null && description.isNotEmpty) ...[
               const SizedBox(height: 24),
               Text(
                 'SIGNIFICANCE',
@@ -248,7 +244,7 @@ class _JourneyMilestoneDetailScreenState
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  m.description!,
+                  description,
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     height: 1.65,

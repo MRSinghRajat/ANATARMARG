@@ -1,0 +1,145 @@
+"Issue key (working ref)","Issue Type","Epic Name","Priority","Summary","Labels","Description"
+"AM-1","Story","iOS Release Blockers","Highest","Restore Firebase iOS config (GoogleService-Info.plist)","ios,blocker","CONTEXT: ios/Runner.xcodeproj/project.pbxproj references GoogleService-Info.plist as a build resource; lib/main.dart:81 and lib/core/services/push_notification_service.dart:14 call Firebase.initializeApp() unconditionally. File is missing from ios/Runner/. Archive fails or app crashes on launch.
+REQUIRES HUMAN ACTION: Download the real GoogleService-Info.plist for com.antarmarg.app from the Firebase console and place it at ios/Runner/GoogleService-Info.plist.
+ACCEPTANCE CRITERIA:
+- ios/Runner/GoogleService-Info.plist exists with BUNDLE_ID = com.antarmarg.app
+- New scripts/check_ios_release_config.sh fails loudly if the file is missing/mismatched, invoked at top of scripts/build_testflight.sh
+- flutter build ipa completes without a missing-resource error
+VERIFY: Run scripts/build_testflight.sh end to end; confirm no Firebase init crash on launch."
+"AM-2","Story","Supabase Schema Integrity","Highest","Recover missing production-table migrations","backend,supabase,blocker","CONTEXT: sacred_stories, sacred_texts, daily_task_templates, push_tokens, user_journeys, user_daily_tasks are referenced/altered by tracked migrations but never CREATE TABLE'd in supabase/migrations/. A fresh environment cannot reproduce production.
+REQUIRES HUMAN ACTION FIRST: supabase link --project-ref qyikatemonzykqamtvod (confirm this is production via .env SUPABASE_URL first), then supabase db pull. Report the diff before writing any migration -- do not apply anything to production silently.
+ACCEPTANCE CRITERIA:
+- db pull diff captured and reviewed
+- New numbered migrations added for all six tables matching live schema exactly (columns, types, defaults, FKs)
+- Each new migration includes correct RLS policy (cross-reference SUPABASE_ALLOW_SACRED_STORIES_INSERT.sql, SUPABASE_FIX_SACRED_STORIES_SELECT.sql, SUPABASE_ALLOW_SACRED_TEXTS_SEED.sql, SUPABASE_SEED_SACRED_TEXTS.sql, SUPABASE_PUSH_TOKENS.sql as reference, but see AM-4 before copying permissive policies forward)
+- Full supabase/migrations/ replay succeeds on a brand-new empty project
+VERIFY: supabase db reset + replay all migrations; diff resulting schema against production db pull output.
+PARALLEL-SAFE WITH: AM-3, AM-5. Should land before AM-6."
+"AM-3","Story","Supabase Schema Integrity","Highest","Fix migrations that fail on a clean run","backend,supabase,blocker","CONTEXT: Two concrete bugs break a fresh migration replay:
+1) supabase/migrations/20240101000020_garbh_sanskar_planning_mode.sql:10 uses 'CREATE POLICY IF NOT EXISTS' -- invalid Postgres syntax.
+2) supabase/migrations/20240101000035_journey_milestones_is_required.sql alters journey_milestones before it's created in 20240101000036_journey_schema_completeness.sql (comment admits the ordering is wrong).
+ACCEPTANCE CRITERIA:
+- 20240101000020 rewritten to idempotent DROP POLICY IF EXISTS + CREATE POLICY (or a DO $$ block checking pg_policies)
+- Reorder/renumber migration 35 vs 36 (check which has actually run in prod before renumbering an applied migration) OR move the CREATE TABLE IF NOT EXISTS block from 36 into 35
+- Fresh supabase db reset replay no longer errors on either file
+VERIFY: Full replay on an empty database.
+PARALLEL-SAFE WITH: AM-2, AM-4, AM-5."
+"AM-4","Story","Supabase Schema Integrity","Highest","Lock down public-write RLS policies","backend,supabase,security,blocker","CONTEXT: verses/verse_translations (20240101000009_allow_seed.sql) and story_pages (20240101000019_story_pages.sql) carry permanent FOR INSERT/UPDATE WITH CHECK (true) 'seed' policies never revoked. prayers (20240101000006_prayers_schema.sql) allows insert/update from any authenticated user despite a comment claiming admin-only. parvas and quest_stages (20240101000000_tables.sql) never had RLS enabled at all. Anyone with the anon key (bundled in the app, also hardcoded in ~25 scripts/) can currently write to these tables directly.
+ACCEPTANCE CRITERIA:
+- New migration drops the (true) policies on verses, verse_translations, story_pages -- writes become service-role-only
+- prayers insert/update policy changed from auth.role() = 'authenticated' to a real admin check or service-role-only
+- RLS enabled on parvas and quest_stages with public-SELECT-only policy (matching books/deities/chapters pattern)
+- Confirm no client-side app code depends on the removed permissive policies
+VERIFY: Attempt anon-key insert into verses and parvas, confirm rejection; confirm app reads still work.
+PARALLEL-SAFE WITH: AM-2, AM-3, AM-5."
+"AM-5","Story","Supabase Schema Integrity","Highest","Verify and fix Storage RLS","backend,supabase,security,blocker","CONTEXT: scripts/disable_storage_rls.sql does ALTER TABLE storage.objects DISABLE ROW LEVEL SECURITY (global, all buckets) with no companion re-enable script anywhere. scripts/fix_storage_rls.sql is a narrower bucket-scoped alternative (sacred-stories bucket). Unclear which was last run against production.
+REQUIRES HUMAN ACTION: query live project first (pg_policies for storage.objects, pg_class.relrowsecurity) -- report findings before changing anything.
+ACCEPTANCE CRITERIA:
+- Current live state confirmed and documented
+- If disabled project-wide: re-enable, then add bucket-scoped policies per scripts/fix_storage_rls.sql pattern (public read for public buckets, owner-scoped write for user-upload buckets)
+- scripts/disable_storage_rls.sql deleted or clearly marked do-not-run
+- Final intended policy per bucket documented in the source-of-truth script
+VERIFY: Anonymous write to a read-only bucket rejected; legitimate reads (chant audio, deity images, story images) still work.
+PARALLEL-SAFE WITH: AM-2, AM-3, AM-4."
+"AM-6","Story","Supabase Schema Integrity","Medium","Archive redundant SQL files and consolidate migration folders","backend,supabase,tech-debt,cleanup","CONTEXT: 13 of 20 root-level SUPABASE_*.sql files are byte-identical to a migration already in supabase/migrations/. A stray supabase_migrations/ folder (singular, CLI never reads it) contains add_is_premium_to_books_and_stories.sql.
+ACCEPTANCE CRITERIA:
+- 13 confirmed-duplicate root SQL files moved to archive/legacy-sql/ with a README explaining supersession
+- supabase_migrations/add_is_premium_to_books_and_stories.sql folded into a properly numbered supabase/migrations/ file (after AM-2 gives sacred_stories a real migration source)
+- Stray supabase_migrations/ folder removed once empty
+- SUPABASE_CHANTS_SCHEMA.sql reviewed (has a seed INSERT the migration dropped) -- add the seed row to a migration if still wanted, else archive with a note
+VERIFY: Repo root free of loose SUPABASE_*.sql files; supabase/migrations/ is single source of truth.
+RUN AFTER: AM-2 (so nothing is archived before its content is confirmed captured)."
+"AM-7","Story","Monetization Security","Highest","Close the AI Guru credit self-grant bypass","security,monetization,backend,critical","CONTEXT: supabase/migrations/20240101000034_guru_ai_weekly_credits.sql defines sync_guru_ai_tier_to_profile(p_tier), grant_guru_ai_purchased_credits(p_amount), and consume_guru_ai_credit() as SECURITY DEFINER functions GRANTed to 'authenticated' with no check against an actual RevenueCat entitlement. Any authenticated user can call these directly and grant themselves Pro-tier AI credits for free, bypassing RevenueCat entirely. HIGHEST-IMPACT FIX IN THE BACKLOG.
+DESIGN APPROACH (pick one, document the choice): Option A (recommended) -- Edge Function receiving RevenueCat webhooks, verified signature, sole caller of the two grant functions (service role key), REVOKE EXECUTE from authenticated. Option B (faster, weaker) -- keep client-callable but require a receipt/transaction id verified server-side via RevenueCat REST API before applying.
+ACCEPTANCE CRITERIA:
+- REVOKE EXECUTE on sync_guru_ai_tier_to_profile and grant_guru_ai_purchased_credits FROM authenticated
+- Edge Function (or receipt-verification RPC) performs the grant only after confirming entitlement in RevenueCat
+- consume_guru_ai_credit() remains callable by authenticated but reviewed against going negative / bypassing weekly cap
+- lib/features/ai_guru/services/guru_ai_credits_service.dart and lib/features/chat/presentation/screens/spiritual_chat_screen.dart (~lines 87, 399) updated to call the new secured path
+- Manual test: calling sync_guru_ai_tier_to_profile('pro') with only an authenticated JWT (no purchase) fails
+VERIFY: Scripted test with free-tier JWT and no purchase -- rejected. Real (sandbox) RevenueCat purchase still results in correct tier applied end to end.
+PARALLEL-SAFE WITH: AM-8, AM-9, AM-10. BLOCKS: AM-16."
+"AM-8","Story","Monetization Security","Highest","Add premium checks inside the journey screens themselves","security,monetization,flutter,critical","CONTEXT: journey_home_screen.dart, journey_setup_screen.dart, journey_task_detail_screen.dart, journey_milestone_detail_screen.dart (lib/features/journey/presentation/screens/) have NO premium/isPremium check anywhere (zero grep matches). Only some entry points gate correctly -- books_library_screen.dart:143-148 (_tryOpenJourneySetup) checks isPremium properly, but lib/features/ai_guru/services/guru_link_navigation.dart:11-28 pushes the same routes with no check. A free user can open a Pro journey for free via an AI Guru chat link.
+ACCEPTANCE CRITERIA:
+- All four journey screens check JourneyType.isPremium/requiredPlan (or JourneyTask.isPremium) against current user status at entry, redirect to paywall if not qualified -- matching the pattern in books_library_screen.dart:143-148
+- guru_link_navigation.dart also gets a check for a fast friendly redirect (defense in depth, not strictly required once screens are safe)
+- Existing correct entry points keep working unchanged for non-premium users
+VERIFY: As a free-tier test account, tap a premium journey link from an AI Guru chat reply -- confirm redirect to paywall instead of opening.
+PARALLEL-SAFE WITH: AM-7, AM-9, AM-10."
+"AM-9","Story","Monetization Security","Highest","Guard PREMIUM_GRANT_ALL against release builds","security,monetization,flutter,quick-fix","CONTEXT: lib/core/config/app_config.dart:43-48 reads PREMIUM_GRANT_ALL from the bundled .env at runtime with no kReleaseMode check. .env ships as a release asset. If ever left true for a release build, every user gets Pro for free with nothing in code stopping it.
+ACCEPTANCE CRITERIA:
+- premiumGrantAll getter changed to 'return !kReleaseMode && (dotenv.env[""PREMIUM_GRANT_ALL""]?.toLowerCase() == ""true"");' or equivalent -- hard-false in any release build regardless of .env
+- Comment added explaining why, to prevent future 'simplification'
+- Existing debug/beta workflows relying on this flag still work in debug/profile builds
+VERIFY: Release-mode build with PREMIUM_GRANT_ALL=true in .env -- confirm AppConfig.premiumGrantAll evaluates false.
+PARALLEL-SAFE WITH: AM-7, AM-8, AM-10."
+"AM-10","Story","Monetization Security","Highest","Move OpenAI calls behind a Supabase Edge Function","security,monetization,backend,cost-risk","CONTEXT: GPT_API_KEY loaded client-side via dotenv (app_config.dart:17-18); app calls api.openai.com directly from guru_api_service.dart:103-161 and gpt_api_service.dart:347-367. Because .env ships inside the release IPA as a bundled asset, the key is extractable from the shipped binary -- anyone who pulls it can spend against the developer's OpenAI account outside the app's credit system entirely.
+ACCEPTANCE CRITERIA:
+- New Supabase Edge Function (e.g. guru-chat) holds GPT_API_KEY as an Edge Function secret (never shipped to client), calls OpenAI server-side, returns response
+- Edge Function checks/consumes the user's AI Guru credit (via consume_guru_ai_credit(), see AM-7) atomically with the API call
+- guru_api_service.dart updated to call the Edge Function instead of api.openai.com directly
+- GPT_API_KEY removed from .env/.env.example and anything bundled client-side; lives only as a Supabase secret
+- Note: gpt_api_service.dart is part of the dead content module (AM-11) -- if AM-11 runs first, this file's direct-call problem disappears with it, don't duplicate effort
+VERIFY: Chat works end to end through the Edge Function; GPT_API_KEY no longer appears in a built IPA (strings check or inspect bundled .env asset).
+PARALLEL-SAFE WITH: AM-7, AM-8, AM-9."
+"AM-11","Story","Dead Code Cleanup","High","Remove the dead content (verse-of-day) module","tech-debt,cleanup,flutter","CONTEXT: lib/features/content/data/repositories/verse_of_day_repository.dart:29-49 never calls Supabase or GPT -- returns one hardcoded fallback verse daily. Real live verse-of-the-day path is lib/features/ashram/data/repositories/ashram_daily_verse_repository.dart. lib/features/content/data/datasources/gpt_api_service.dart (incl. getVerseOfTheDay() line 265) has no callers outside its own file.
+ACCEPTANCE CRITERIA:
+- grep -r 'features/content' lib/ (check verse_full_screen.dart specifically -- if its UI style is still used elsewhere, keep/extract that widget before deleting the rest)
+- Delete verse_of_day_repository.dart and gpt_api_service.dart (content module) once confirmed unreferenced
+- Remove AppConfig.splashGifPath (app_config.dart:12) -- unused constant, points at a non-existent asset
+- flutter analyze and full smoke run show no broken imports
+VERIFY: App builds and runs; verse-of-the-day still shows correctly via the Ashram path.
+PARALLEL-SAFE WITH: AM-12, AM-13, AM-14, AM-15, AM-16."
+"AM-12","Story","Dead Code Cleanup","High","Reconcile and clean up the ai_guru module -- do not delete blindly","tech-debt,cleanup,flutter,needs-verification","CONTEXT -- DISCREPANCY TO RESOLVE FIRST: One audit pass reported the entire lib/features/ai_guru/ tree (config/, constants/, models/, repositories/, presentation/providers/, ~1235 lines) as zero-imported from outside. A separate audit pass, tracing monetization logic, found lib/features/ai_guru/services/guru_api_service.dart, guru_ai_credits_service.dart, guru_link_navigation.dart, and guru_user_tier.dart ACTIVELY CALLED from lib/features/chat/presentation/screens/spiritual_chat_screen.dart (~lines 87, 399) -- these back the real live AI Guru chat tab.
+ACCEPTANCE CRITERIA:
+- Run a fresh grep (package:antarmarg/features/ai_guru or equivalent relative-import search) against the current tree; produce a definitive referenced/unreferenced file list
+- DO NOT DELETE services/guru_api_service.dart, guru_ai_credits_service.dart, guru_link_navigation.dart, guru_user_tier.dart unless the fresh grep genuinely shows them unreferenced
+- Delete only subfolders/files the fresh grep confirms dead (candidates: config/, constants/, models/, repositories/, presentation/providers/ -- verify each individually)
+- If the chat/ai_guru split looks confusing after cleanup, leave a note rather than restructuring -- restructuring is out of scope
+VERIFY: App builds; AI Guru chat tab fully functional (send message, confirm credit deduction, confirm chat link navigation still works).
+PARALLEL-SAFE WITH: AM-11, AM-13, AM-14, AM-15, AM-16."
+"AM-13","Story","Dead Code Cleanup","High","Remove the dead standalone garbh_sanskar screens and routes","tech-debt,cleanup,flutter","CONTEXT: GarbhSanskarSetupScreen, GarbhSanskarHomeScreen + 3 other screens under lib/features/garbh_sanskar/ (~5406 lines) have router entries in lib/core/utils/app_router.dart:146-151 (/garbh-sanskar-setup, /garbh-sanskar-home) but NO caller anywhere pushes those routes. Live Garbh Sanskar path goes through the generic journey engine (lib/features/journey/), entered via books_library_screen.dart:181 with a slug argument, resolved by journey_repository.dart:549-586.
+ACCEPTANCE CRITERIA:
+- Confirm via grep that AppRouter.garbhSanskarSetup/garbhSanskarHome are never referenced in a pushNamed call
+- Delete the two route entries from app_router.dart:146-151
+- Delete lib/features/garbh_sanskar/ presentation layer (screens) confirmed unreferenced; check whether data-layer files (models/repositories) are shared with the generic journey engine before deleting those
+- flutter analyze shows no broken imports
+VERIFY: App builds; the real Garbh Sanskar journey (Granthalaya -> Journey tab) still opens and functions.
+PARALLEL-SAFE WITH: AM-11, AM-12, AM-14, AM-15, AM-16."
+"AM-14","Story","Dead Code Cleanup","High","Decide the fate of Quests, Gamification, Shop, and Stats","product-decision,cleanup,flutter","CONTEXT: lib/features/quests/ (QuestsScreen, ParvaQuestPathScreen, ParvaTimelineScreen, ~1161 lines), lib/features/gamification/ (LeaderboardScreen, ~287 lines), lib/features/shop/ (ShopScreen, ~624 lines), lib/features/stats/ (StatsScreen, ~291 lines) are fully built with real Supabase datasources but NOT reachable from the 5-tab navigation. They ship visible mock data if opened directly (quests_screen.dart:29-32 hardcodes '_userName = Bala Sadhu'; leaderboard_screen.dart:275 hardcodes 'rank: 42').
+REQUIRES HUMAN DECISION FIRST: (a) wire into real navigation with real data before launch, (b) remove for v1 (recommended default), or (c) keep unreachable code as-is (not recommended -- confuses future contributors/agents).
+ACCEPTANCE CRITERIA (assuming decision = remove for v1):
+- Confirm via grep none of the 6 screens are referenced from reachable navigation
+- Delete the 4 feature presentation layers; check whether coin/currency data layer (coin_service.dart etc.) is shared with the LIVE sanctuary shop (sanctuary_shop_sheet.dart) before deleting anything in lib/shared/
+- Delete unused datasources (supabase_quest_stage_datasource.dart, supabase_parva_datasource.dart) only if nothing else reads parvas/quest_stages -- cross-check against AM-4
+ACCEPTANCE CRITERIA (if decision = wire in instead): out of scope for this backlog -- needs its own stories
+VERIFY: App builds and runs; 5-tab navigation unaffected; no dangling references.
+PARALLEL-SAFE WITH: AM-11, AM-12, AM-13, AM-15, AM-16."
+"AM-15","Story","Dead Code Cleanup","Low","Remove minor dead files","tech-debt,cleanup,flutter","CONTEXT: lib/features/home/presentation/screens/test_ui_screen.dart (a '3D WebView test UI' screen) has zero references anywhere and duplicates asset-serving logic the real Aangan 3D temple screen also uses.
+ACCEPTANCE CRITERIA:
+- Confirm zero references via grep
+- Delete test_ui_screen.dart
+- Quick sweep for other single-file dead screens missed by the main audit (grep each screen class name across the tree) -- small mop-up, don't scope-creep into a full re-audit
+VERIFY: App builds; no missing-file errors.
+PARALLEL-SAFE WITH: AM-11, AM-12, AM-13, AM-14, AM-16."
+"AM-16","Story","Test Coverage & Release Hygiene","High","Add automated tests for premium/purchase gating","testing,monetization,flutter","CONTEXT: Zero automated tests currently cover PremiumService, RevenueCat entitlement checks, PREMIUM_GRANT_ALL behavior, or paywall gating logic -- the app's only monetized path is completely untested. test/ has 7 files, none touching this.
+ACCEPTANCE CRITERIA:
+- Unit tests for PremiumService: premium-true path, premium-false path, dev-mode override only activating in debug builds
+- Test or documented manual-QA step confirming AppConfig.premiumGrantAll resolves false in release mode (verify kReleaseMode mockability before assuming a unit test is possible)
+- Widget/integration test: free-tier user redirected to paywall opening a premium journey (post-AM-8), premium-tier user is not
+- New tests follow existing project conventions (check test/config_test.dart, test/widget_test.dart for house style)
+VERIFY: flutter test passes including new tests; confirm new tests actually fail against pre-fix code (temporarily revert AM-8/AM-9 locally) before considering done.
+SHOULD FOLLOW: AM-7, AM-8, AM-9. PARALLEL-SAFE WITH: AM-11 through AM-15."
+"AM-17","Story","Test Coverage & Release Hygiene","High","Release hygiene: debug flags and logging","tech-debt,ios,flutter","CONTEXT: REVENUECAT_DEBUG_MODE=true left on in .env (noisy, not a security issue). Ungated print() calls will run in release builds: lib/core/repositories/daily_streak_repository.dart:28,71,95; lib/core/services/supabase_service.dart:36,80,239; lib/features/quests/data/datasources/supabase_quest_stage_datasource.dart:25,53; supabase_parva_datasource.dart:24,44,71,102; lib/features/ashram/data/repositories/achievement_repository.dart (6 spots); spiritual_progress_repository.dart (5 spots); lib/features/home/data/services/user_presence_service.dart:30,126; lib/features/chat/data/repositories/feeling_repository.dart:31,52. NOTE: several of these files may be deleted entirely by AM-14 -- check that outcome first to avoid duplicate work.
+ACCEPTANCE CRITERIA:
+- .env and .env.example set/document REVENUECAT_DEBUG_MODE=false as release default
+- All listed print() calls surviving AM-14's cleanup converted to debugPrint() or wrapped in if (kDebugMode)
+- .env.example updated to document currently-missing keys: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_AUTH_REDIRECT_URL, GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID (remove GPT_API_KEY from this list if AM-10 has moved it server-side by then)
+VERIFY: grep -rn 'print(' lib/ | grep -v debugPrint returns nothing outside gated kDebugMode blocks; release build produces no console spam under normal use.
+PARALLEL-SAFE WITH: AM-11 through AM-16."
+"AM-18","Story","Documentation Refresh","Medium","Update stale project docs to match the current app","docs","CONTEXT: docs/PROJECT_STATUS_AND_WORKING_FEATURES.md and docs/MVP_ROADMAP_ONE_PAGE.md both describe an old 5-tab layout (Aangan/Prayer/Ashram/Granthalya/Self) and a SharedPreferences-only PremiumService.instance.setPremium(true) model. Neither matches the current app (Aangan/AI Guru/Ashram/Granthalaya/Profile tabs; RevenueCat-backed premium).
+ACCEPTANCE CRITERIA:
+- Both docs rewritten to describe the actual current tab structure, feature set, and premium model -- OR explicitly marked 'ARCHIVED -- see docs/CONFLUENCE_APP_OVERVIEW.md' at the top if superseded rather than updated in place
+- docs/CONFLUENCE_APP_OVERVIEW.md becomes the canonical current-state reference; cross-linked from these files
+VERIFY: A new contributor/agent reading docs/ gets an accurate picture with no contradictions between files.
+PARALLEL-SAFE WITH: everything."

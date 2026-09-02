@@ -65,9 +65,11 @@ dependencies:
   # WebView (for 3D Test UI)
   webview_flutter: ^4.10.0
 
-  # Push Notifications (FCM / Apple APNs)
+  # Push Notifications (FCM / Apple APNs) + Crashlytics / Analytics
   firebase_core: ^3.8.0
   firebase_messaging: ^15.0.0
+  firebase_crashlytics: ^4.3.0
+  firebase_analytics: ^11.4.0
 
   # Local scheduled notifications (daily "tasks ready")
   flutter_local_notifications: ^18.0.1
@@ -99,53 +101,10 @@ flutter:
     - assets/animations/
     # Only startup / Profile background loop is bundled; all other audio comes from Supabase (URLs).
     - assets/sounds/backgroundmusic.mp3
-    - assets/fonts/
+    - assets/fonts/  # google_fonts local files (Poppins-Regular.ttf, …); do not also list under fonts: (double-embeds)
     - assets/html/   # includes temple.glb for 3D Mandir (~64 MB)
     - assets/onboarding_intro/
     - .env
-
-  fonts:
-    - family: Cormorant Garamond
-      fonts:
-        - asset: assets/fonts/CormorantGaramond-Regular.ttf
-        - asset: assets/fonts/CormorantGaramond-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/CormorantGaramond-Italic.ttf
-          style: italic
-
-    - family: Crimson Pro
-      fonts:
-        - asset: assets/fonts/CrimsonPro-Regular.ttf
-        - asset: assets/fonts/CrimsonPro-Bold.ttf
-          weight: 700
-
-    - family: Inter
-      fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-        - asset: assets/fonts/Inter-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
-          weight: 700
-
-    - family: Libre Baskerville
-      fonts:
-        - asset: assets/fonts/LibreBaskerville-Regular.ttf
-        - asset: assets/fonts/LibreBaskerville-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/LibreBaskerville-Italic.ttf
-          style: italic
-
-    - family: Plus Jakarta Sans
-      fonts:
-        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
-        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
-          weight: 700
 
 flutter_launcher_icons:
   android: "launcher_icon"

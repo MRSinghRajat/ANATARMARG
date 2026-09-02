@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
+import '../../../../core/services/app_analytics.dart';
 import '../../../../core/services/revenuecat_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
@@ -36,6 +37,7 @@ class PaywallScreen extends StatefulWidget {
 
   /// Show paywall as a modal bottom sheet
   static Future<bool?> showAsBottomSheet(BuildContext context) {
+    AppAnalytics.logPaywallViewed(source: 'custom_sheet');
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -61,6 +63,7 @@ class PaywallScreen extends StatefulWidget {
 
   /// Show paywall as a full screen dialog
   static Future<bool?> showAsDialog(BuildContext context) {
+    AppAnalytics.logPaywallViewed(source: 'custom_dialog');
     return Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -85,6 +88,7 @@ class PaywallScreen extends StatefulWidget {
   /// dismissed without a new purchase; `null` if the sheet was dismissed
   /// without a result.
   static Future<bool?> showRevenueCatPaywallOrCustom(BuildContext context) async {
+    await AppAnalytics.logPaywallViewed(source: 'revenuecat');
     final rc = RevenueCatService.instance;
     if (!rc.isInitialized) {
       try {
@@ -115,6 +119,9 @@ class PaywallScreen extends StatefulWidget {
         await PremiumService.instance.refreshPremiumStatus();
         if (result == PaywallResult.purchased ||
             result == PaywallResult.restored) {
+          if (result == PaywallResult.purchased) {
+            await AppAnalytics.logPurchaseCompleted();
+          }
           return true;
         }
         if (result == PaywallResult.error) {

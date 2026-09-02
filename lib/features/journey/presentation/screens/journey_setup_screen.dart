@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/models/journey_models.dart';
 import '../providers/journey_providers.dart';
 import '../theme/journey_ashram_theme.dart';
@@ -138,6 +140,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
     final typeAsync = ref.watch(journeyTypeBySlugProvider(widget.slug));
     return Theme(
       data: _ashramJourneyTheme(context),
@@ -176,9 +179,9 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
               _currentStep = 0;
             }
             if (_visibleQuestions.isEmpty) {
-              return _buildSubmitSection(context, journeyType);
+              return _buildSubmitSection(context, journeyType, lang);
             }
-            return _buildForm(context, journeyType);
+            return _buildForm(context, journeyType, lang);
           },
           loading: () => Center(
             child: CircularProgressIndicator(color: JourneyAshramTheme.accent),
@@ -230,10 +233,13 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
     });
   }
 
-  Widget _buildForm(BuildContext context, JourneyType journeyType) {
+  Widget _buildForm(BuildContext context, JourneyType journeyType, String lang) {
+    final title = localizedLang(lang, en: journeyType.title, hi: journeyType.titleHindi);
+    final subtitle = localizedLang(lang, en: journeyType.subtitle ?? '', hi: journeyType.subtitleHindi);
+    final description = localizedLang(lang, en: journeyType.description ?? '', hi: journeyType.descriptionHindi);
     final visible = _visibleQuestions;
     if (_currentStep >= visible.length) {
-      return _buildSubmitSection(context, journeyType);
+      return _buildSubmitSection(context, journeyType, lang);
     }
     final q = visible[_currentStep];
     final key = q['key'] as String? ?? '';
@@ -252,7 +258,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              journeyType.title,
+              title,
               style: GoogleFonts.inter(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -260,14 +266,25 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                 height: 1.25,
               ),
             ),
-            if (journeyType.subtitle != null) ...[
+            if (subtitle.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
-                journeyType.subtitle!,
+                subtitle,
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   color: AppColors.zinc500,
                   height: 1.4,
+                ),
+              ),
+            ],
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                description,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppColors.zinc500,
+                  height: 1.45,
                 ),
               ),
             ],
@@ -520,7 +537,9 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
     );
   }
 
-  Widget _buildSubmitSection(BuildContext context, JourneyType journeyType) {
+  Widget _buildSubmitSection(BuildContext context, JourneyType journeyType, String lang) {
+    final title = localizedLang(lang, en: journeyType.title, hi: journeyType.titleHindi);
+    final description = localizedLang(lang, en: journeyType.description ?? '', hi: journeyType.descriptionHindi);
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -544,7 +563,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    journeyType.title,
+                    title,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 20,
@@ -553,6 +572,18 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                       height: 1.3,
                     ),
                   ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      description,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: AppColors.zinc500,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

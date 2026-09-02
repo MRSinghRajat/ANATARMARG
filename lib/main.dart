@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart'
+    show kDebugMode, kIsWeb, LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -49,6 +52,35 @@ void _deferredInit() async {
   CompressedImageCache.instance.initialize();
 }
 
+Future<void> _initSupabase() async {
+  try {
+    await SupabaseService().initialize();
+  } catch (e) {
+    if (kDebugMode) {
+      print('Supabase initialization failed: $e. App will use local data.');
+    }
+  }
+}
+
+Future<void> _initFirebase() async {
+  try {
+    await Firebase.initializeApp();
+    // FCM: register before runApp (iOS release can crash if this runs after runApp).
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
+    await FirebaseCrashlytics.instance
+        .setCrashlyticsCollectionEnabled(!kDebugMode);
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  } catch (e) {
+    if (kDebugMode) print('Firebase init failed: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -62,32 +94,25 @@ void main() async {
     await dotenv.load(fileName: ".env");
     if (kDebugMode) {
       print('=== ENV LOADED ===');
-      final hasGptKey = dotenv.env['GPT_API_KEY']?.isNotEmpty ?? false;
-      print('AI Guru (GPT) API: ${hasGptKey ? "ENABLED (key present)" : "DISABLED (missing or empty GPT_API_KEY in .env)"}');
     }
   } catch (e) {
     if (kDebugMode) print('Error loading .env file: $e');
   }
 
-  // Initialize Supabase (optional - app works without it)
-  try {
-    await SupabaseService().initialize();
-  } catch (e) {
-    if (kDebugMode) print('Supabase initialization failed: $e. App will use local data.');
-  }
+  // Independent of each other; a failure in one must not cancel the other.
+  await Future.wait<void>([
+    _initSupabase(),
+    _initFirebase(),
+  ]);
 
-  // Firebase must be initialized before runApp (required by Firebase APIs)
-  try {
-    await Firebase.initializeApp();
-    // FCM: register before runApp (iOS release can crash if this runs after runApp).
-    if (!kIsWeb) {
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    }
-  } catch (e) {
-    if (kDebugMode) print('Firebase init failed: $e');
-  }
+  LicenseRegistry.addLicense(() async* {
+    final license = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['google_fonts'], license);
+  });
 
-  GoogleFonts.config.allowRuntimeFetching = true;
+  // All 11 families live in assets/fonts/. A missing file must fail locally
+  // (fallback typeface) instead of silently hitting fonts.gstatic.com.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   runApp(
     const ProviderScope(
@@ -165,13 +190,20 @@ class _AntarMargAppState extends State<AntarMargApp> {
     }
   }
 
+  bool _pushingHome = false;
+
   void _navigateHome() {
-    if (_navigatorKey.currentContext != null) {
-      Navigator.of(_navigatorKey.currentContext!).pushNamedAndRemoveUntil(
-        AppRouter.home,
-        (route) => false,
-      );
-    }
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null || _pushingHome) return;
+    if (ModalRoute.of(ctx)?.settings.name == AppRouter.home) return;
+    _pushingHome = true;
+    Navigator.of(ctx).pushNamedAndRemoveUntil(
+      AppRouter.home,
+      (route) => false,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pushingHome = false;
+    });
   }
 
   @override

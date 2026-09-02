@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/animated_guide.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
 
-class OnboardingHomeTourScreen extends StatelessWidget {
+class OnboardingHomeTourScreen extends ConsumerWidget {
   const OnboardingHomeTourScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.primaryBackground,
       ),
       child: Column(
         children: [
-          // Character
           Expanded(
             child: Center(
               child: Column(
@@ -24,22 +25,22 @@ class OnboardingHomeTourScreen extends StatelessWidget {
                     width: 570,
                     height: 570,
                   ),
-                  
                   const SizedBox(height: 32),
-                  
                   Text(
-                    'Welcome to Your Home',
+                    localized(ref, en: 'Welcome to Your Home', hi: 'आपके घर में स्वागत है'),
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                   ),
-                  
                   const SizedBox(height: 16),
-                  
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      'This is your spiritual home. Complete daily tasks, read scriptures, and earn coins to customize it.',
+                      localized(
+                        ref,
+                        en: 'This is your spiritual home. Complete daily tasks, read scriptures, and earn coins to customize it.',
+                        hi: 'यह आपका आध्यात्मिक घर है। दैनिक कार्य पूरे करें, शास्त्र पढ़ें, और सिक्के कमाकर इसे सजाएँ।',
+                      ),
                       style: Theme.of(context).textTheme.bodyLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -48,14 +49,16 @@ class OnboardingHomeTourScreen extends StatelessWidget {
               ),
             ),
           ),
-          
-          // Navigation Preview
           Container(
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
                 Text(
-                  'Navigate using the bottom bar:',
+                  localized(
+                    ref,
+                    en: 'Navigate using the bottom bar:',
+                    hi: 'नीचे की पट्टी से नेविगेट करें:',
+                  ),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 16),

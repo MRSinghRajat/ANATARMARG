@@ -14,7 +14,6 @@ class AppStrings {
   static const _en = <String, String>{
     // Nav
     'nav_aangan': 'AANGAN',
-    'nav_ai_guru': 'AI GURU',
     'nav_ashram': 'ASHRAM',
     'nav_granthalya': 'GRANTHALYA',
     'nav_profile': 'PROFILE',
@@ -98,17 +97,6 @@ class AppStrings {
     'your_sacred_space': 'Your Sacred Space',
     'preview_mode': 'PREVIEW MODE',
 
-    // Chat / AI Guru
-    'ai_guru': 'AI Guru',
-    'how_are_you_feeling_today': 'How are you feeling today?',
-    'how_are_you_feeling_today_with_name': 'How are you feeling today, {name}?',
-    'new_consultation': 'New Consultation',
-    'delete_conversation': 'Delete Conversation?',
-    'delete': 'Delete',
-    'cancel': 'Cancel',
-    'type_message': 'Type a message...',
-    'clear_history': 'Clear History',
-
     // Books / Granthalya
     'granthalya': 'Granthalya',
     'sacred_library': 'Sacred Library',
@@ -159,7 +147,6 @@ class AppStrings {
   static const _hi = <String, String>{
     // Nav
     'nav_aangan': 'आँगन',
-    'nav_ai_guru': 'AI गुरु',
     'nav_ashram': 'आश्रम',
     'nav_granthalya': 'ग्रंथालय',
     'nav_profile': 'प्रोफ़ाइल',
@@ -243,17 +230,6 @@ class AppStrings {
     'aangan': 'आँगन',
     'your_sacred_space': 'आपका पवित्र स्थान',
     'preview_mode': 'पूर्वावलोकन',
-
-    // Chat / AI Guru
-    'ai_guru': 'AI गुरु',
-    'how_are_you_feeling_today': 'आज आप कैसा महसूस कर रहे हैं?',
-    'how_are_you_feeling_today_with_name': 'आज आप कैसा महसूस कर रहे हैं, {name}?',
-    'new_consultation': 'नया परामर्श',
-    'delete_conversation': 'बातचीत हटाएं?',
-    'delete': 'हटाएं',
-    'cancel': 'रद्द करें',
-    'type_message': 'संदेश लिखें...',
-    'clear_history': 'इतिहास साफ़ करें',
 
     // Books / Granthalya
     'granthalya': 'ग्रंथालय',

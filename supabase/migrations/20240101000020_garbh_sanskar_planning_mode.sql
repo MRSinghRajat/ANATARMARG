@@ -7,6 +7,7 @@ ALTER TABLE user_pregnancy_journey
   CHECK (mode IN ('planning', 'prenatal', 'postnatal', 'completed'));
 
 -- Allow delete for users so they can remove their journey
-CREATE POLICY IF NOT EXISTS "Users can delete own journey"
+DROP POLICY IF EXISTS "Users can delete own journey" ON user_pregnancy_journey;
+CREATE POLICY "Users can delete own journey"
   ON user_pregnancy_journey FOR DELETE
   USING (auth.uid() = user_id);

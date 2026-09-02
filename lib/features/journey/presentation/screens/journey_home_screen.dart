@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../theme/journey_ashram_theme.dart';
 import '../../../../core/utils/app_router.dart';
@@ -9,6 +10,7 @@ import '../../data/models/journey_models.dart';
 import '../providers/journey_providers.dart';
 import '../widgets/journey_phase_chips.dart';
 import '../../../navigation/presentation/providers/main_navigation_intent_provider.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../../../shared/widgets/bottom_nav_bar.dart';
 
 // Task-type badge colours (generic — driven by task.taskType from DB)
@@ -167,6 +169,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
       ...rpcCompletedToday,
       ...displayedTasks.where((t) => t.isCompleted).map((t) => t.task.id),
     };
+    final lang = ref.watch(languageProvider);
 
     final sortedMilestones = List<JourneyMilestone>.from(milestones)
       ..sort((a, b) {
@@ -190,7 +193,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
         (dailyPathComplete || milestonesComplete);
 
     final subtitle = _buildSubtitle(userJourney);
-    final journeyTitle = journeyType?.title ?? 'My Journey';
+    final journeyTitle = localizedLang(lang, en: journeyType?.title ?? 'My Journey', hi: journeyType?.titleHindi);
 
     final selectedChipPhaseId = browsePhaseId ?? phase?.id;
     final isPreviewingOtherPhase =
@@ -199,7 +202,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
     if (isPreviewingOtherPhase) {
       for (final p in phases) {
         if (p.id == browsePhaseId) {
-          previewPhaseTitle = p.title;
+          previewPhaseTitle = localizedLang(lang, en: p.title, hi: p.titleHindi);
           break;
         }
       }
@@ -282,6 +285,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
               userJourney: userJourney,
               phases: phases,
               currentPhase: phase,
+              lang: lang,
               todaysDoneCount: completedTaskIdsToday
                   .where((id) => todaysTasks.any((t) => t.task.id == id))
                   .length,
@@ -299,6 +303,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                 children: [
                   JourneyPhaseChips(
                     phases: phases,
+                    lang: lang,
                     calendarPhaseId: phase?.id,
                     selectedPhaseId: selectedChipPhaseId,
                     completedPhaseIds: phases
@@ -415,6 +420,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                   padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
                   child: _DailyTaskRow(
                     task: twc.task,
+                    lang: lang,
                     isCompleted: isDoneToday,
                     checkboxEnabled: checkboxEnabled,
                     primary: AppColors.primaryOrange,
@@ -512,10 +518,10 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                   ...upcomingMilestones.map((m) => Padding(
                         padding: const EdgeInsets.only(right: 16),
                         child: _MilestoneCard(
-                          title: m.title,
+                          title: localizedLang(lang, en: m.title, hi: m.titleHindi),
                           subtitle: m.isRequired
-                              ? (m.description ?? 'Required samskara')
-                              : (m.description ?? 'Optional milestone'),
+                              ? (localizedLang(lang, en: m.description ?? 'Required samskara', hi: m.descriptionHindi))
+                              : (localizedLang(lang, en: m.description ?? 'Optional milestone', hi: m.descriptionHindi)),
                           label: m.isRequired ? 'REQUIRED' : 'OPTIONAL',
                           isRequired: m.isRequired,
                           isCompleted: false,
@@ -531,8 +537,8 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                   ...completedMilestones.map((m) => Padding(
                         padding: const EdgeInsets.only(right: 16),
                         child: _MilestoneCard(
-                          title: m.title,
-                          subtitle: m.description ?? 'Completed',
+                          title: localizedLang(lang, en: m.title, hi: m.titleHindi),
+                          subtitle: localizedLang(lang, en: m.description ?? 'Completed', hi: m.descriptionHindi),
                           label: 'COMPLETED',
                           completedDate: _formatMilestoneDate(completedDates[m.id]),
                           isRequired: m.isRequired,
@@ -617,8 +623,10 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
     WidgetsBinding.instance.addPostFrameCallback((_) {
       afterNavigation?.call(container);
       if (openBooksTab) {
+        // Land back on Granthalaya's Journey mode (index 2), not the Read
+        // default — the user was managing a journey, they should stay there.
         container.read(mainNavIntentProvider.notifier).state =
-            const MainNavIntent(NavItem.books);
+            const MainNavIntent(NavItem.books, granthalayaTabIndex: 2);
       }
     });
   }
@@ -656,7 +664,10 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
         );
       }
     } else if (value == 'switch') {
-      _popToMainShell(context);
+      // Return to Granthalaya's Journey list so the user can pick a
+      // different journey — previously this just went to the Aangan home
+      // tab with no way to actually switch anything.
+      _popToMainShell(context, openBooksTab: true);
     }
   }
 
@@ -687,6 +698,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
 
 class _DailyTaskRow extends StatelessWidget {
   final JourneyTask task;
+  final String lang;
   final bool isCompleted;
   final bool checkboxEnabled;
   final Color primary;
@@ -697,6 +709,7 @@ class _DailyTaskRow extends StatelessWidget {
 
   const _DailyTaskRow({
     required this.task,
+    required this.lang,
     required this.isCompleted,
     required this.checkboxEnabled,
     required this.primary,
@@ -785,7 +798,7 @@ class _DailyTaskRow extends StatelessWidget {
                     const SizedBox(height: 4),
                     // Title
                     Text(
-                      task.title,
+                      localizedLang(lang, en: task.title, hi: task.titleHindi),
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -969,6 +982,7 @@ class _JourneyProgressBanner extends StatelessWidget {
   final UserJourney userJourney;
   final List<JourneyPhase> phases;
   final JourneyPhase? currentPhase;
+  final String lang;
   final int todaysDoneCount;
   final int todaysTotalCount;
 
@@ -976,6 +990,7 @@ class _JourneyProgressBanner extends StatelessWidget {
     required this.userJourney,
     required this.phases,
     required this.currentPhase,
+    required this.lang,
     required this.todaysDoneCount,
     required this.todaysTotalCount,
   });
@@ -1030,18 +1045,13 @@ class _JourneyProgressBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        currentPhase?.title ?? 'Your Journey',
+                        localizedLang(lang, en: currentPhase?.title ?? 'Your Journey', hi: currentPhase?.titleHindi),
                         style: GoogleFonts.inter(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: AppColors.zinc100,
                         ),
                       ),
-                      if (currentPhase?.titleHindi != null)
-                        Text(
-                          currentPhase!.titleHindi!,
-                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.zinc500),
-                        ),
                     ],
                   ),
                 ),
@@ -1070,6 +1080,7 @@ class _JourneyProgressBanner extends StatelessWidget {
               phases: phases,
               currentPhase: currentPhase,
               phaseAccent: phaseAccent,
+              lang: lang,
             ),
             const SizedBox(height: 14),
             // Today's completion ratio
@@ -1106,11 +1117,13 @@ class _PhaseDotRow extends StatelessWidget {
   final List<JourneyPhase> phases;
   final JourneyPhase? currentPhase;
   final Color phaseAccent;
+  final String lang;
 
   const _PhaseDotRow({
     required this.phases,
     required this.currentPhase,
     required this.phaseAccent,
+    required this.lang,
   });
 
   @override
@@ -1138,7 +1151,7 @@ class _PhaseDotRow extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: Tooltip(
-              message: phase.title,
+              message: localizedLang(lang, en: phase.title, hi: phase.titleHindi),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 width: isCurrent ? 28 : 8,

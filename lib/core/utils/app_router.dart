@@ -17,12 +17,11 @@ import '../../features/subscription/presentation/screens/paywall_screen.dart';
 import '../../features/subscription/presentation/screens/customer_center_screen.dart';
 import '../../features/subscription/presentation/screens/subscription_dev_settings.dart';
 import '../../features/legal/presentation/screens/legal_document_screen.dart';
-import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_setup_screen.dart';
-import '../../features/garbh_sanskar/presentation/screens/garbh_sanskar_home_screen.dart';
 import '../../features/journey/presentation/screens/journey_setup_screen.dart';
 import '../../features/journey/presentation/screens/journey_home_screen.dart';
 import '../../features/journey/presentation/screens/journey_task_detail_screen.dart';
 import '../../features/journey/presentation/screens/journey_milestone_detail_screen.dart';
+import '../../features/journey/presentation/widgets/journey_premium_gate.dart';
 import '../../features/books/presentation/screens/sacred_text_audio_screen.dart';
 import '../../features/books/presentation/screens/book_audio_detail_screen.dart';
 import '../../features/books/presentation/screens/story_audio_screen.dart';
@@ -49,8 +48,6 @@ class AppRouter {
   static const String paywall = '/paywall';
   static const String customerCenter = '/customer-center';
   static const String subscriptionDevSettings = '/subscription-dev-settings';
-  static const String garbhSanskarSetup = '/garbh-sanskar-setup';
-  static const String garbhSanskarHome = '/garbh-sanskar-home';
   static const String journeySetup = '/journey/setup';
   static const String journeyHome = '/journey/home';
   static const String journeyTask = '/journey/task';
@@ -143,17 +140,14 @@ class AppRouter {
           builder: (_) => const _SubscriptionDevBlocked(),
           settings: settings,
         );
-      case garbhSanskarSetup:
-        return MaterialPageRoute(
-            builder: (_) => const GarbhSanskarSetupScreen());
-      case garbhSanskarHome:
-        return MaterialPageRoute(
-            builder: (_) => const GarbhSanskarHomeScreen());
       case journeySetup: {
         final args = settings.arguments as Map<String, dynamic>?;
         final slug = args?['slug'] as String? ?? '';
         return MaterialPageRoute(
-          builder: (_) => JourneySetupScreen(slug: slug),
+          builder: (_) => JourneyPremiumGate(
+            slug: slug,
+            child: JourneySetupScreen(slug: slug),
+          ),
           settings: settings,
         );
       }
@@ -161,7 +155,10 @@ class AppRouter {
         final args = settings.arguments is Map<String, dynamic> ? settings.arguments as Map<String, dynamic>? : null;
         final userJourneyId = (args != null ? args['userJourneyId'] as String? : null) ?? '';
         return MaterialPageRoute(
-          builder: (_) => JourneyHomeScreen(userJourneyId: userJourneyId),
+          builder: (_) => JourneyPremiumGate(
+            userJourneyId: userJourneyId,
+            child: JourneyHomeScreen(userJourneyId: userJourneyId),
+          ),
           settings: settings,
         );
       }
@@ -170,9 +167,12 @@ class AppRouter {
         final userJourneyId = args?['userJourneyId'] as String? ?? '';
         final taskId = args?['taskId'] as String? ?? '';
         return MaterialPageRoute(
-          builder: (_) => JourneyTaskDetailScreen(
+          builder: (_) => JourneyPremiumGate(
             userJourneyId: userJourneyId,
-            taskId: taskId,
+            child: JourneyTaskDetailScreen(
+              userJourneyId: userJourneyId,
+              taskId: taskId,
+            ),
           ),
           settings: settings,
         );
@@ -182,9 +182,12 @@ class AppRouter {
         final userJourneyId = args?['userJourneyId'] as String? ?? '';
         final milestoneId = args?['milestoneId'] as String? ?? '';
         return MaterialPageRoute(
-          builder: (_) => JourneyMilestoneDetailScreen(
+          builder: (_) => JourneyPremiumGate(
             userJourneyId: userJourneyId,
-            milestoneId: milestoneId,
+            child: JourneyMilestoneDetailScreen(
+              userJourneyId: userJourneyId,
+              milestoneId: milestoneId,
+            ),
           ),
           settings: settings,
         );

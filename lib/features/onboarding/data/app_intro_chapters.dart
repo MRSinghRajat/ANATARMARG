@@ -23,22 +23,13 @@ const List<AppIntroChapter> kAppIntroChapters = [
     icon: Icons.temple_buddhist,
   ),
   AppIntroChapter(
-    titleEn: 'Granthalaya — read and listen',
-    titleHi: 'ग्रंथालय — पढ़ें और सुनें',
+    titleEn: 'Granthalaya — read and journey',
+    titleHi: 'ग्रंथालय — पढ़ें और यात्रा करें',
     bodyEn:
-        'Sacred texts, stories, and audio journeys live here. Tap what draws you; you can read quietly or press play and listen.',
+        'Sacred texts, stories, and life-stage journeys live here. Listening is coming soon.',
     bodyHi:
-        'पवित्र ग्रंथ, कथाएँ और ऑडियो यात्राएँ यहाँ हैं। जो आकर्षित करे उस पर टैप करें — चुपचाप पढ़ें या बजाकर सुनें।',
+        'पवित्र ग्रंथ, कथाएँ और जीवन-यात्राएँ यहाँ हैं। श्रवण शीघ्र आ रहा है।',
     icon: Icons.menu_book_rounded,
-  ),
-  AppIntroChapter(
-    titleEn: 'AI Guru — gentle guidance',
-    titleHi: 'AI गुरु — सहज मार्गदर्शन',
-    bodyEn:
-        'Ask questions in simple words. Replies are meant to support your path; some features may use credits over time.',
-    bodyHi:
-        'साधारण शब्दों में प्रश्न पूछें। उत्तर आपके मार्ग का साथ देने के लिए हैं; कुछ सुविधाओं में समय के साथ क्रेडिट लग सकते हैं।',
-    icon: Icons.auto_awesome_rounded,
   ),
   AppIntroChapter(
     titleEn: 'Longer journeys',

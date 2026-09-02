@@ -6,9 +6,8 @@ A gamified spiritual learning app that guides users through ancient Indian wisdo
 
 - **Animated Guide**: Old sadhu character (CustomPainter)
 - **Daily Tasks**: 3 tasks per day (water, prayer, food) completed by reading scripture
-- **Gamification**: Coins, points, items with rarity levels (common, rare, epic)
-- **Books Library**: Mahabharata, Ramayan, Bhagavad Gita with AI chat
-- **Home Customization**: Ancient Indian home with items and upgrades
+- **Books Library**: Mahabharata, Ramayan, Bhagavad Gita (read / journeys; listen is Coming Soon)
+- **Sanctuary**: Aangan customization (traditional / festival / sacred / exclusive looks)
 - **Stats & Leaderboards**: Daily reset leaderboards and progress tracking
 - **Ambient Sounds**: Bird chirping, sitar music, forest sounds
 
@@ -16,7 +15,8 @@ A gamified spiritual learning app that guides users through ancient Indian wisdo
 
 - Flutter 3.0+
 - Riverpod (State Management)
-- GPT API (Content Generation)
+- Supabase (auth + content)
+- RevenueCat (subscriptions)
 - SQLite (Local Database)
 - AudioPlayers (Ambient Sounds)
 

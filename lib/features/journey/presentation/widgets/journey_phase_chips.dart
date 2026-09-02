@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/models/journey_models.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class JourneyPhaseChips extends StatelessWidget {
   final List<JourneyPhase> phases;
+  final String lang;
   /// Phase determined by calendar / journey logic (today).
   final String? calendarPhaseId;
   /// Highlighted chip: browse selection, or calendar when not browsing.
@@ -15,6 +17,7 @@ class JourneyPhaseChips extends StatelessWidget {
   const JourneyPhaseChips({
     super.key,
     required this.phases,
+    this.lang = 'en',
     this.calendarPhaseId,
     this.selectedPhaseId,
     this.completedPhaseIds = const {},
@@ -76,7 +79,7 @@ class JourneyPhaseChips extends StatelessWidget {
                           child: Icon(Icons.check_rounded, size: 16, color: color.withValues(alpha: 0.9)),
                         ),
                       Text(
-                        p.title,
+                        localizedLang(lang, en: p.title, hi: p.titleHindi),
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,

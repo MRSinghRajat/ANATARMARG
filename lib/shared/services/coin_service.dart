@@ -199,6 +199,14 @@ class CoinService {
     _coinController.add(_currentBalance);
   }
 
+  /// Zero in-memory balance, then reload for the current (or guest) user prefix.
+  Future<void> resetSession() async {
+    _currentBalance = 0;
+    _lifetimeEarned = 0;
+    _coinController.add(0);
+    await initialize();
+  }
+
   void dispose() {
     _coinController.close();
   }

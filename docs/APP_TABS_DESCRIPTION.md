@@ -1,6 +1,6 @@
 # Antarmarg — Complete Description of All Tabs
 
-The app has **5 main tabs** in the bottom navigation bar (left to right):
+The app has **4 main tabs** in the bottom navigation bar (left to right):
 
 ---
 
@@ -13,29 +13,13 @@ The app has **5 main tabs** in the bottom navigation bar (left to right):
 - **Two sub-tabs:**
   - **AATMA** — Customizable Om symbol and sanctuary; draggable bottom sheet to **shop** for customizations (Om style, ring style, colors, animation style, deity image, etc.). Purchases use in-app coins. Customization syncs to Ashram when applied.
   - **MANDIR** — 3D temple view (WebView) with floor/customization from Aangan; same draggable shop for Mandir-specific items (e.g. ground type).
-- **Tap on sanctuary** — Optional “Begin” action can navigate to AI Guru (Chat) tab.
 - **No in-app notification on Aangan** — Notifications were moved to Ashram.
 
 **Purpose:** Personalize your sacred space (Aatma + Mandir), spend coins on visual customizations, and enjoy the animated Om experience. All animation in the app is concentrated here.
 
 ---
 
-## 2. **AI GURU** (Chat) — Tab index 1  
-**Icon:** Auto Awesome (sparkle)  
-**Label:** AI GURU
-
-**What it shows:**
-- **Spiritual AI chatbot** — Chat interface to ask questions and get guidance.
-- **Conversation history** — List of past conversations; tap to reopen or start a new one.
-- **Service selector** — Choose a spiritual “service” or context (e.g. general guidance, specific practice) before or during chat.
-- **Usage / limits** — Consultations may be metered (e.g. free tier limits); premium can unlock more.
-- **Messages** — User messages and AI replies with typing indicator; history persisted locally (and optionally to Supabase for logged-in users).
-
-**Purpose:** One-on-one spiritual Q&A and guidance via AI, with conversation history and optional service types.
-
----
-
-## 3. **ASHRAM** — Tab index 2  
+## 2. **ASHRAM** — Tab index 1  
 **Icon:** Temple (Buddhist temple)  
 **Label:** ASHRAM
 
@@ -55,23 +39,23 @@ The app has **5 main tabs** in the bottom navigation bar (left to right):
 
 ---
 
-## 4. **GRANTHALYA** (Books / Library) — Tab index 3  
+## 3. **GRANTHALYA** (Books / Library) — Tab index 2  
 **Icon:** Menu book  
 **Label:** GRANTHALYA
 
 **What it shows:**
-- **Sacred library** with three modes (tabs):
+- **Sacred library** with three toggle segments (v1 ships Read + Journey; Listen is Coming Soon):
   - **Read** — Sacred texts, sacred library (books/chapters), sacred stories, Explore Deities; continue reading, bookmarks; open texts/stories in reader.
-  - **Listen** — Audio content: chants, meditations, sacred texts audio, stories audio, etc.; mini player and full-screen player; progress and bookmarks.
-  - **Journey** — Life-stage journeys (e.g. pregnancy, parenting, student); start/continue/pause journeys; today’s journey tasks; “Sacred journeys for every stage of life”.
-- **Featured / categories** — Sacred texts on top, then library sections, stories, deities; Listen has categories (e.g. chants, meditation, sacred text audio).
-- **Premium** — Some content or features gated; upgrade banner for free users.
+  - **Listen** — Coming Soon placeholder (same gold `COMING SOON` badge as journey cards). Does not open the audio library or a paywall. Full Listen (chants, narrations, mini player) is a fast-follow once recorded audio is uploaded.
+  - **Journey** — Life-stage journeys (e.g. pregnancy, parenting, student); start/continue/pause journeys; today’s journey tasks; “Sacred journeys for every stage of life”. Free users can open the full catalog; journeys with `is_premium: true` show a lock and upgrade on tap; five catalog journeys are free (Navratri, Shravan Maas, Kartik Maas, Little Sadhu, Pitru Paksha).
+- **Featured / categories** — Sacred texts on top, then library sections, stories, deities (Read mode).
+- **Premium** — Per-item gates on premium books/chapters and premium journeys; Listen is not sold as Pro until audio exists.
 
-**Purpose:** Read sacred texts and stories, listen to chants/meditations/audio, and follow structured life-stage journeys (e.g. Garbh Sanskar).
+**Purpose:** Read sacred texts and stories, and follow structured life-stage journeys (e.g. Garbh Sanskar). Listening is announced as Coming Soon for v1.
 
 ---
 
-## 5. **PROFILE** (Self) — Tab index 4  
+## 4. **PROFILE** — Tab index 3  
 **Icon:** Person  
 **Label:** PROFILE
 
@@ -90,18 +74,25 @@ The app has **5 main tabs** in the bottom navigation bar (left to right):
 
 ## Summary Table
 
-| Tab        | Name (UI)  | Main content |
-|-----------|------------|----------------|
-| 0         | AANGAN     | Animated Om sanctuary (Aatma + Mandir), customization shop, no notification |
-| 1         | AI GURU    | Spiritual AI chat, conversation history, service selector |
-| 2         | ASHRAM     | Name + Level bar, notification pill (right), Today’s Tasks, My Habits, verse/story, Karma, FAB to add habit |
-| 3         | GRANTHALYA | Read (texts, stories, deities) / Listen (audio) / Journey (life-stage journeys) |
-| 4         | PROFILE    | Streak, level, stats, timeline, coins, premium, achievements, bookmarks, settings |
+| Tab | Name (UI) | Main content |
+|-----|-----------|--------------|
+| 0 | AANGAN | Animated Om sanctuary (Aatma + Mandir), customization shop |
+| 1 | ASHRAM | Name + Level bar, notification pill, Today’s Tasks, My Habits, verse/story, Karma |
+| 2 | GRANTHALYA | Read (texts, stories, deities) / Listen (Coming Soon) / Journey (life-stage journeys) |
+| 3 | PROFILE | Streak, level, stats, timeline, coins, premium, achievements, bookmarks, settings |
 
 ---
 
 ## Navigation details
 
-- **IndexedStack** — All 5 tabs are kept in memory; only the selected tab is visible; **TickerMode** disables animations on non-visible tabs (e.g. Aangan animations pause when you switch away).
-- **Order in bar** — Home (Aangan) → AI Guru → Ashram → Granthalaya → Profile.
+- **IndexedStack** — All 4 tabs are kept in memory; only the selected tab is visible; **TickerMode** disables animations on non-visible tabs (e.g. Aangan animations pause when you switch away).
+- **Order in bar** — Aangan → Ashram → Granthalaya → Profile.
 - **Daily streak** — On app launch, streak logic may show dialogs (e.g. first day, missed you, streak count); these are not a tab but overlay flows.
+
+## Monetization (free vs Pro)
+
+**Free tier:** Full daily-practice loop (Ashram tasks, habits, streaks), Aangan sanctuary with coin economy, sequential book/chapter unlock in Granthalaya, Journey catalog plus free journeys, and limited custom habits.
+
+**Pro tier ("Antar marg Pro") via RevenueCat:** Premium books/stories, AI Commentary on every verse (pre-generated static text in Supabase), premium journeys, advanced Ashram practices, and exclusive sanctuary customizations. Full Granthalaya Listen audio is Coming Soon (not a launch Pro entitlement). Quests/parvas are not a shipped tab (AM-14) and are not sold on the paywall.
+
+There is **no live AI chat** in the app — OpenAI is not called from the client and `GPT_API_KEY` is not bundled in release builds.

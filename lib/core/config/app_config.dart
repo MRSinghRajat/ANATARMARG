@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
@@ -11,11 +12,6 @@ class AppConfig {
   /// Splash / branding assets (optional)
   static const String splashGifPath = 'assets/animations/splash.gif';
   static const String appLogoPath = 'assets/images/app_logo.png';
-
-  // GPT API Configuration (loaded from .env)
-  static const String gptApiBaseUrl = 'https://api.openai.com/v1';
-  static String get gptApiKey =>
-      dotenv.isInitialized ? (dotenv.env['GPT_API_KEY'] ?? '') : '';
 
   // Coin Rewards
   static const int readingCompletionCoins = 20; // Base coins per chapter
@@ -38,13 +34,13 @@ class AppConfig {
   };
 
   /// When true, every user is treated as Pro (all premium gates unlock).
-  /// Default is false: Pro requires a real RevenueCat entitlement unless you set
-  /// `PREMIUM_GRANT_ALL=true` in `.env` (e.g. temporary beta override).
+  /// Ignored in release builds even if `.env` sets `PREMIUM_GRANT_ALL=true`.
+  /// Debug/profile only: set `PREMIUM_GRANT_ALL=true` for temporary beta override.
   static bool get premiumGrantAll {
+    if (kReleaseMode) return false;
     if (!dotenv.isInitialized) return false;
     final v = dotenv.env['PREMIUM_GRANT_ALL']?.trim().toLowerCase();
-    if (v == 'true' || v == '1' || v == 'yes') return true;
-    return false;
+    return v == 'true' || v == '1' || v == 'yes';
   }
 
   /// Show the gradient Pro label on Pro-only UI (e.g. Ashram section titles) even when the user has access.

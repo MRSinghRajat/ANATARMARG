@@ -30,7 +30,7 @@ class AppColors {
   static const Color heartRed = Color(0xFFE91E63); // Red for hearts
   static const Color flameOrange = Color(0xFFFF9800); // Orange for streaks
 
-  // Rarity Colors
+  // Item-tier colors (internal). User-facing copy uses Traditional / Festival / Sacred / Exclusive.
   static const Color commonColor = Color(0xFF9E9E9E); // Grey
   static const Color rareColor = Color(0xFF2196F3); // Blue
   static const Color epicColor = Color(0xFF9C27B0); // Purple
@@ -92,77 +92,6 @@ class AppColors {
   /// Black for black–gold gradient on Journey progress cards
   static const Color journeyBlack = Color(0xFF0A0A0A);
 
-  // AI Guru (from HTML design)
-  static const Color aiGuruPrimary = Color(0xFFEC5B13);
-  static const Color aiGuruGold = Color(0xFFD4AF37);
-  static const Color aiGuruSaffron = Color(0xFFF4A460);
-  static const Color aiGuruCream = Color(0xFFFFFDF5);
-  static const Color aiGuruBackgroundLight = Color(0xFFFDFAF2);
-  static const Color aiGuruBackgroundDark = Color(0xFF221610);
-
-  /// Full-screen AI Guru / spiritual chat backdrop (warm ember → plum / saffron glow).
-  static LinearGradient get aiGuruScreenGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF1C1410),
-          aiGuruBackgroundDark,
-          Color(0xFF18101C),
-          Color(0xFF2A1840),
-        ],
-        stops: [0.0, 0.32, 0.68, 1.0],
-      );
-
-  /// Bottom sheets and tall modals (AI Guru).
-  /// Opaque stops so the sheet does not blend with content behind the modal route.
-  static LinearGradient get aiGuruSheetGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          aiGuruBackgroundDark,
-          Color(0xFF1A0F18),
-          Color(0xFF2B1F38),
-          Color(0xFF3A2618),
-        ],
-        stops: [0.0, 0.4, 0.78, 1.0],
-      );
-
-  /// Assistant message bubbles (softer than cards).
-  static LinearGradient get aiGuruBubbleGradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          primaryOrange.withValues(alpha: 0.15),
-          deepPurple.withValues(alpha: 0.12),
-          aiGuruPrimary.withValues(alpha: 0.08),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      );
-
-  /// Bordered cards / streak-style panels on AI Guru screens.
-  static LinearGradient get aiGuruCardGradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          primaryOrange.withValues(alpha: 0.38),
-          deepPurple.withValues(alpha: 0.34),
-          aiGuruPrimary.withValues(alpha: 0.22),
-        ],
-        stops: const [0.0, 0.52, 1.0],
-      );
-
-  /// Chat input strip — continues the screen gradient subtly.
-  static LinearGradient get aiGuruInputBarGradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFF1A1214),
-          aiGuruBackgroundDark,
-          deepPurple.withValues(alpha: 0.28),
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      );
-
   // Panchang / Hindu calendar (reference HTML --gold, --saffron, --bg, etc.)
   static const Color panchangBg = Color(0xFF0C0904);
   static const Color panchangGold = Color(0xFFD4943A);
@@ -180,4 +109,15 @@ class AppColors {
   static const Color panchangGlass2 = Color(0x12FFDC8C); // 0.07
   static const Color panchangBorder = Color(0x1FD4943A); // 0.12
   static const Color panchangBorder2 = Color(0x38D4943A); // 0.22
+
+  // ── Canonical tokens (AM-50 Phase 1) ─────────────────────────────────
+  // New UI should use these three. Legacy names below stay until each
+  // screen migrates — do not remap the 762 hex literals in one pass.
+  /// Near-black canvas. Same value as [backgroundDark] / [ashramBackgroundDark].
+  /// Prefer this over [manuscriptDark] / [charcoalDark] (#121212).
+  static const Color canvas = Color(0xFF0F1115);
+  /// Brand gold. Same value as [journeyGold].
+  static const Color brandGold = Color(0xFFD4AF37);
+  /// Brand saffron. Same value as [journeyPrimary] / [ashramAccentSaffron] / [saffron].
+  static const Color brandSaffron = Color(0xFFFF9933);
 }

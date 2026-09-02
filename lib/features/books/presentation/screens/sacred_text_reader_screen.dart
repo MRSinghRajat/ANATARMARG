@@ -1,25 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/l10n/localized.dart';
+import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/models/granthalaya_models.dart';
 import '../../data/services/granthalaya_bookmarks_service.dart';
 import '../../data/services/granthalaya_recent_service.dart';
 import '../../data/services/reader_preferences_service.dart';
 import '../widgets/reader_settings_modal.dart';
 
-class SacredTextReaderScreen extends StatefulWidget {
+class SacredTextReaderScreen extends ConsumerStatefulWidget {
   final SacredTextModel sacredText;
   const SacredTextReaderScreen({super.key, required this.sacredText});
 
   @override
-  State<SacredTextReaderScreen> createState() => _SacredTextReaderScreenState();
+  ConsumerState<SacredTextReaderScreen> createState() => _SacredTextReaderScreenState();
 }
 
-class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
+class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _decorController;
-  bool _showHindi = true;
+  /// Null = follow [languageProvider]; true/false = mid-read override (AM-61).
+  bool? _overrideHindi;
   bool _showBenefits = false;
   bool _isBookmarked = false;
   final GranthalayaBookmarksService _bookmarksService =
@@ -29,6 +33,9 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
   ReaderFont _readerFont = ReaderFont.serif;
   ReaderTheme _readerTheme = ReaderTheme.paper;
   ReaderLayout _readerLayout = ReaderLayout.card;
+
+  bool get _showHindi =>
+      _overrideHindi ?? (ref.watch(languageProvider) == 'hi');
 
   static const _bg1 = Color(0xFF0D0B08);
   static const _bg2 = Color(0xFF1A1510);
@@ -168,7 +175,7 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      t.title,
+                      localized(ref, en: t.title, hi: t.titleHindi),
                       style: GoogleFonts.crimsonPro(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -177,14 +184,6 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (t.titleHindi != null)
-                      Text(
-                        t.titleHindi!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: _gold.withValues(alpha: 0.5),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -258,7 +257,7 @@ class _SacredTextReaderScreenState extends State<SacredTextReaderScreen>
 
   Widget _buildLangButton(String label, bool active) {
     return GestureDetector(
-      onTap: () => setState(() => _showHindi = label == 'HI'),
+      onTap: () => setState(() => _overrideHindi = label == 'HI'),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

@@ -1,3 +1,5 @@
+# ARCHIVED — superseded by docs/CONFLUENCE_APP_OVERVIEW.md and docs/JIRA_WORK_PLAN.md (2026-08-29).
+
 # ANTAR MARG – MVP Roadmap (1 page)
 
 **One-line:** Gamified spiritual learning app – home (Aangan), Prayer, Ashram, Books (Granthalya), Profile, with sequential chapter/verse unlock and premium full access.

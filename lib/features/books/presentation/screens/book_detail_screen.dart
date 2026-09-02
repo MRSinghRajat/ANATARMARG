@@ -358,6 +358,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                                 color: Colors.white,
                               ),
                             ),
+                            // Sanskrit is a sacred-script label, not Hindi (AM-58 / docs/LOCALIZATION.md).
                             if (widget.book.nameSanskrit != null) ...[
                               const SizedBox(height: 2),
                               Text(

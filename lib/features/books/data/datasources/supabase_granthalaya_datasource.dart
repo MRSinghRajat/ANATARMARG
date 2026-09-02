@@ -410,19 +410,47 @@ class SupabaseGranthalayaDataSource {
     }
   }
 
-  /// Fetch books that have audio (audio_url is not null/empty)
+  /// Fetch books that have book-level or chapter-level audio.
   Future<List<BookModel>> getBooksWithAudio() async {
     if (!_supabase.isInitialized) return [];
     try {
-      final response = await _supabase.client!
+      final client = _supabase.client!;
+      final fromBooks = await client
           .from(SupabaseConfig.booksTable)
           .select()
           .not('audio_url', 'is', null)
           .order('name', ascending: true);
-      final list = _toList(response);
-      return list
-          .map((j) => BookModel.fromJson(j as Map<String, dynamic>))
-          .toList();
+      final bookRows = _toList(fromBooks);
+      final byId = <String, BookModel>{};
+      for (final raw in bookRows) {
+        final json = raw as Map<String, dynamic>;
+        final book = BookModel.fromJson(json);
+        byId[book.id] = book;
+      }
+
+      final chapterRows = await client
+          .from(SupabaseConfig.chaptersTable)
+          .select('book_id')
+          .not('audio_url', 'is', null);
+      final chapterBookIds = _toList(chapterRows)
+          .map((raw) => (raw as Map<String, dynamic>)['book_id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final missing = chapterBookIds.where((id) => !byId.containsKey(id)).toList();
+      if (missing.isNotEmpty) {
+        final extra = await client
+            .from(SupabaseConfig.booksTable)
+            .select()
+            .inFilter('id', missing);
+        for (final raw in _toList(extra)) {
+          final book = BookModel.fromJson(raw as Map<String, dynamic>);
+          byId[book.id] = book;
+        }
+      }
+
+      final books = byId.values.toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      return books;
     } catch (e) {
       print('Error fetching books with audio: $e');
       return [];

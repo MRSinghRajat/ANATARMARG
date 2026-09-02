@@ -52,7 +52,7 @@ In the project root:
 ```bash
 cd /Users/mrsingh/Documents/VibeCoding/AnatarMarg/ANATARMARG
 flutter pub get
-flutter build ipa
+flutter build ipa --obfuscate --split-debug-info=build/debug-info
 ```
 
 - This creates a **release** build and an **IPA**.
@@ -105,7 +105,7 @@ For `--password` you can use an [app-specific password](https://appleid.apple.co
 
 ## One-command build (local)
 
-From the project root (runs tests then `flutter build ipa`):
+From the project root (runs tests then an obfuscated `flutter build ipa`; debug symbols land in `build/debug-info/`):
 
 ```bash
 ./scripts/build_testflight.sh
@@ -118,7 +118,7 @@ From the project root (runs tests then `flutter build ipa`):
 | Step | Action |
 |------|--------|
 | 1 | Bump `version: x.y.z+build` in `pubspec.yaml` (build number must be new). |
-| 2 | `flutter build ipa` (or Archive in Xcode). |
+| 2 | `./scripts/build_testflight.sh` (or Archive in Xcode). Keep `build/debug-info/` for Crashlytics. |
 | 3 | Upload IPA via Xcode Organizer **Distribute App** or `xcrun altool`. |
 | 4 | In App Store Connect → TestFlight, wait for processing, add testers. |
 

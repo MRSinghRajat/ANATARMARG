@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../shared/services/coin_service.dart';
@@ -37,7 +38,11 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
   int _mantraCount = 0;
   bool _isCompleting = false;
   final GlobalKey _completeButtonKey = GlobalKey();
-  bool _showHindiContent = false;
+  /// Null = follow [languageProvider]; true/false = mid-read override (AM-61).
+  bool? _overrideHindiContent;
+
+  bool get _showHindiContent =>
+      _overrideHindiContent ?? (ref.watch(languageProvider) == 'hi');
 
   Widget _appBarTitleWidget() {
     // Unconditional watches — never put ref.watch inside AsyncValue.when branches (Riverpod rule).
@@ -50,7 +55,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     return tasksAsync.when(
       data: (tasks) {
         final task = tasks.where((t) => t.id == widget.taskId).firstOrNull;
-        return _appBarTitleText(task?.title ?? 'Task');
+        return _appBarTitleText(
+          localized(ref, en: task?.title ?? 'Task', hi: task?.titleHindi),
+        );
       },
       loading: () => _appBarTitleText('Task'),
       error: (_, __) => _appBarTitleText('Task'),
@@ -170,9 +177,17 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             ? rawSecs.toInt().clamp(0, 999) ~/ 60
             : task.durationMinutes ?? 0;
 
-    final useHindi = _showHindiContent && (contentHindi != null || instructionHindi != null);
-    final mainText = _cleanContentText(useHindi ? (contentHindi ?? content ?? '') : (content ?? contentHindi ?? ''));
-    final instructionText = _cleanContentText(useHindi ? (instructionHindi ?? instruction ?? '') : (instruction ?? instructionHindi ?? ''));
+    final useHindi = _showHindiContent;
+    final mainText = _cleanContentText(localizedLang(
+      useHindi ? 'hi' : 'en',
+      en: content ?? '',
+      hi: contentHindi,
+    ));
+    final instructionText = _cleanContentText(localizedLang(
+      useHindi ? 'hi' : 'en',
+      en: instruction ?? '',
+      hi: instructionHindi,
+    ));
 
     final hasRef =
         refType != null && refType.isNotEmpty && refForLink != null && refForLink.isNotEmpty;
@@ -313,6 +328,11 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     int durationMinutes = 0,
   }) {
     final icon = task.icon ?? 'ॐ';
+    final displayTitle = localizedLang(
+      _showHindiContent ? 'hi' : 'en',
+      en: title,
+      hi: titleHindi,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -337,16 +357,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title.toUpperCase(),
+                    displayTitle.toUpperCase(),
                     style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5),
                   ),
-                  if (titleHindi != null && titleHindi.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      titleHindi,
-                      style: GoogleFonts.crimsonPro(fontSize: 15, color: Colors.white.withValues(alpha: 0.85)),
-                    ),
-                  ],
                   if (durationMinutes > 0) ...[
                     const SizedBox(height: 8),
                     Row(
@@ -380,8 +393,8 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _segmentChip(label: 'English', selected: !_showHindiContent, onTap: () => setState(() => _showHindiContent = false)),
-          _segmentChip(label: 'Hindi', selected: _showHindiContent, onTap: () => setState(() => _showHindiContent = true)),
+          _segmentChip(label: 'English', selected: !_showHindiContent, onTap: () => setState(() => _overrideHindiContent = false)),
+          _segmentChip(label: 'Hindi', selected: _showHindiContent, onTap: () => setState(() => _overrideHindiContent = true)),
         ],
       ),
     );
@@ -705,7 +718,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 ChoiceChip(
                   label: const Text('English'),
                   selected: !_showHindiContent,
-                  onSelected: (v) => setState(() => _showHindiContent = false),
+                  onSelected: (v) => setState(() => _overrideHindiContent = false),
                   selectedColor: AppColors.primaryOrange.withValues(alpha: 0.3),
                   labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.zinc500 : AppColors.primaryOrange),
                 ),
@@ -713,7 +726,7 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
                 ChoiceChip(
                   label: const Text('हिंदी'),
                   selected: _showHindiContent,
-                  onSelected: (v) => setState(() => _showHindiContent = true),
+                  onSelected: (v) => setState(() => _overrideHindiContent = true),
                   selectedColor: AppColors.primaryOrange.withValues(alpha: 0.3),
                   labelStyle: GoogleFonts.inter(fontSize: 13, color: _showHindiContent ? AppColors.primaryOrange : AppColors.zinc500),
                 ),
@@ -942,13 +955,9 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
             child: Text(task.icon!, style: const TextStyle(fontSize: 32)),
           ),
         Text(
-          task.title,
+          localizedLang(_showHindiContent ? 'hi' : 'en', en: task.title, hi: task.titleHindi),
           style: GoogleFonts.crimsonPro(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        if (task.titleHindi != null) ...[
-          const SizedBox(height: 4),
-          Text(task.titleHindi!, style: GoogleFonts.crimsonPro(fontSize: 16, color: Colors.white.withValues(alpha: 0.5))),
-        ],
         if (task.description != null && task.description!.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(task.description!, style: GoogleFonts.inter(fontSize: 14, color: Colors.white.withValues(alpha: 0.7), height: 1.5)),

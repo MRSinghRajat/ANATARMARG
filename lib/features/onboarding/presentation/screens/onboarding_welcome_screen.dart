@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/l10n/localized.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../shared/widgets/animated_guide.dart';
 
-class OnboardingWelcomeScreen extends StatelessWidget {
+class OnboardingWelcomeScreen extends ConsumerWidget {
   const OnboardingWelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -22,15 +24,11 @@ class OnboardingWelcomeScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Character
           const AnimatedGuide(
             width: 720,
             height: 720,
           ),
-          
           const SizedBox(height: 32),
-          
-          // App Name
           Text(
             AppConfig.appName.toUpperCase(),
             style: Theme.of(context).textTheme.displayLarge?.copyWith(
@@ -38,24 +36,22 @@ class OnboardingWelcomeScreen extends StatelessWidget {
                   color: AppColors.primaryText,
                 ),
           ),
-          
           const SizedBox(height: 8),
-          
-          // Tagline
           Text(
-            AppConfig.appTagline,
+            localized(ref, en: AppConfig.appTagline, hi: 'भीतर का मार्ग'),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: AppColors.secondaryText,
                 ),
           ),
-          
           const SizedBox(height: 48),
-          
-          // Description
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-              'Embark on a journey through ancient Indian wisdom. Learn from Mahabharata, Ramayan, and Geeta through daily reflection and guidance.',
+              localized(
+                ref,
+                en: 'Embark on a journey through ancient Indian wisdom. Learn from Mahabharata, Ramayan, and Geeta through daily reflection and guidance.',
+                hi: 'प्राचीन भारतीय ज्ञान की यात्रा पर निकलें। महाभारत, रामायण और गीता से प्रतिदिन चिंतन और मार्गदर्शन पाएँ।',
+              ),
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppColors.secondaryText,
                   ),

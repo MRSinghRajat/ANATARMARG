@@ -54,5 +54,21 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(BooksLibraryScreen), findsOneWidget);
     expect(find.text('Read'), findsWidgets);
+    expect(find.text('See All'), findsNothing);
+    expect(find.text('Resource Library'), findsNothing);
+    expect(find.text('Deep Dive'), findsNothing);
+    expect(find.text("The Nature of 'Atman'"), findsNothing);
+
+    await tester.tap(find.text('Listen'));
+    await tester.pump();
+    expect(find.text('COMING SOON'), findsWidgets);
+    expect(find.text('Sacred audio is being recorded'), findsOneWidget);
+    expect(find.textContaining('Spiritual journeys unlock'), findsNothing);
+    expect(find.textContaining('Listen mode and the full audio library'), findsNothing);
+
+    await tester.tap(find.text('Journey'));
+    await tester.pump();
+    expect(find.text('Our Spiritual Circle'), findsOneWidget);
+    expect(find.text('Sacred audio is being recorded'), findsNothing);
   });
 }

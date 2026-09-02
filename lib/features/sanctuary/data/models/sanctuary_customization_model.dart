@@ -909,7 +909,7 @@ extension GlowColorMeta on GlowColor {
   bool get isDefault => this == GlowColor.gold;
 }
 
-/// Single deity definition. Add new deities here and place image at assets/images/deities/{id}.png.
+/// Single deity definition. Add new deities here and place image at assets/images/deities/{id}.webp.
 class DeityConfig {
   final String id;
   final String displayName;
@@ -923,10 +923,10 @@ class DeityConfig {
     required this.description,
   });
 
-  String get assetPath => 'assets/images/deities/$id.png';
+  String get assetPath => 'assets/images/deities/$id.webp';
 }
 
-/// All available deities. To add more: add PNG to assets/images/deities/{id}.png and one entry here.
+/// All available deities. To add more: add WebP to assets/images/deities/{id}.webp and one entry here.
 const List<DeityConfig> deityConfigs = [
   DeityConfig(id: 'ganesha', displayName: 'Lord Ganesha', emoji: '🐘', description: 'Remover of obstacles'),
   DeityConfig(id: 'shiva', displayName: 'Lord Shiva', emoji: '🔱', description: 'The destroyer and transformer'),
@@ -1220,12 +1220,17 @@ enum ItemRarity {
 }
 
 extension ItemRarityMeta on ItemRarity {
+  /// User-facing tier name. Enum values stay for logic; copy is devotional, not loot-box.
   String get displayName {
     switch (this) {
-      case ItemRarity.common: return 'Common';
-      case ItemRarity.rare: return 'Rare';
-      case ItemRarity.epic: return 'Epic';
-      case ItemRarity.legendary: return 'Legendary';
+      case ItemRarity.common:
+        return 'Traditional';
+      case ItemRarity.rare:
+        return 'Festival';
+      case ItemRarity.epic:
+        return 'Sacred';
+      case ItemRarity.legendary:
+        return 'Exclusive';
     }
   }
 
@@ -1248,7 +1253,7 @@ extension ItemRarityMeta on ItemRarity {
     }
   }
 
-  /// High-level items (Legendary) are Pro-only; cannot be bought with karma.
+  /// Exclusive (Pro) items cannot be bought with karma.
   bool get isProOnly => this == ItemRarity.legendary;
 }
 
@@ -1470,7 +1475,7 @@ class MandirItems {
     MandirItem(id: 'dec_rangoli', name: 'Rangoli', emoji: '🎨', jsCall: "buy('rangoli','🎨','Rangoli',130)", cost: 130),
   ];
 
-  /// Deities: same slugs as [deityConfigs] → `assets/images/deities/{id}.png` in the 3D mandir.
+  /// Deities: same slugs as [deityConfigs] → `assets/images/deities/{id}.webp` in the 3D mandir.
   static final List<MandirItem> deities = List<MandirItem>.unmodifiable([
     ...deityConfigs.map(
       (d) => MandirItem(

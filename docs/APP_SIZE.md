@@ -1,56 +1,41 @@
-# Why the app is ~340 MB (and how to reduce it)
+# Why the app is large (and what we already cut)
 
-## What adds up to ~340 MB
+Measured **1 Sep 2026** after AM-32 / AM-35 / AM-39 (fonts bundled+subset, deity WebP). These are **on-disk asset** numbers from this repo, not an App Store “download size” — that still needs a signed release IPA on a device (see AM-38).
 
-Rough breakdown:
+## Bundled assets right now — **~72 MB** total (`du -sh assets`)
 
-| Source | Approx size | Notes |
-|--------|-------------|--------|
-| **Flutter engine + Dart AOT** | ~25–40 MB | Framework + your compiled code. |
-| **Native plugins** | ~80–150 MB | Firebase, Supabase, RevenueCat, Google/Apple Sign-In, WebView, etc. Each adds native libs. |
-| **Bundled assets** | ~75–80 MB | After removing duplicate (see below). |
-| **App Store / Play packaging** | +overhead | Bitcode, symbols, encryption – can add 20–50 MB. |
+| Asset | Size | Notes |
+|--------|------|--------|
+| **`assets/html/temple.glb`** | **64 MB** | Single largest file. AM-36 (re-export with texture compression) is the remaining big lever. |
+| **`assets/fonts/`** | **2.6 MB** | All 11 families the app actually uses, subset to used scripts/weights. Was ~2.8 MB for only 5 families. |
+| **`assets/images/deities/`** | **2.3 MB** | 12 WebP files at max 1024px. Was **47.8 MB** of 2048px PNGs (−45.6 MB). |
+| Other images / audio / html / onboarding | ~3 MB | |
 
-So **~340 MB** is normal for a Flutter app with auth, push, IAP, and rich assets.
-
----
+Flutter engine + Dart AOT + native plugins (Firebase, Supabase, RevenueCat, Sign-In, WebView, …) still dominate **install** size. Asset work does not change that part.
 
 ## What we already fixed
 
-- **Duplicate `temple.glb`** – The same 3D model (~64 MB) was in both `assets/html/` and `assets/models/`. The WebView only uses `assets/html/temple.glb`. The copy in `assets/models/` was removed and `assets/models/` was dropped from `pubspec.yaml`. **Saves ~64 MB** → you should see install size drop to around **~275 MB** after a clean build.
+- **Duplicate `temple.glb`** — a second 64 MB copy under `assets/models/` was removed earlier.
+- **Deity images (AM-35)** — 2048px PNGs → 1024px WebP. Sanctuary `Image.asset` and the 3D Mandir WebView both use `.webp`.
+- **Fonts (AM-32 + AM-39)** — Poppins, Tenor Sans, Outfit, Cinzel, Noto Sans/Serif Devanagari are bundled next to the original 5. `GoogleFonts.config.allowRuntimeFetching = false` so a missing file fails locally instead of hitting `fonts.gstatic.com`. Latin families are subset to Latin + punctuation; Devanagari families keep the Devanagari block. The `pubspec.yaml` `fonts:` section was removed so the same TTFs are not embedded twice.
 
----
+## Remaining large lever
 
-## Remaining large assets (optional to shrink)
+| Asset | Size | Option |
+|--------|------|--------|
+| **`assets/html/temple.glb`** | 64 MB | AM-36: re-export from the 3D source with KTX2/Basis textures and/or fewer polygons. Do not host-on-CDN until that is tried. |
 
-| Asset | Size | Option to reduce |
-|-------|------|-------------------|
-| **assets/html/temple.glb** | ~64 MB | Re-export from 3D tool with fewer polygons or LOD; or host online and load at runtime (adds network). |
-| **Rive (.riv)** | ~5 MB total | Remove unused animations; simplify in Rive editor. |
-| **Sounds (MP3/WAV)** | ~4 MB | Re-encode at lower bitrate (e.g. 96 kbps) or use shorter clips. |
-| **Fonts** | ~2.8 MB | Subset fonts to used glyphs; or drop a font family you don’t use. |
+## Release build (AM-38)
 
----
+`scripts/build_testflight.sh` now runs:
 
-## Plugin impact
+```bash
+flutter build ipa --obfuscate --split-debug-info=build/debug-info
+```
 
-These add noticeable native size:
+Keep `build/debug-info/` with the release. Crashlytics (AM-19) cannot symbolicate obfuscated crashes without it. `build/` is gitignored — archive the folder outside the repo.
 
-- **Firebase** (Core + Messaging)
-- **Supabase**
-- **RevenueCat** (Purchases)
-- **Google Sign-In** / **Sign in with Apple**
-- **WebView** (for 3D Mandir)
-- **Rive**
+## How to measure install size
 
-Removing a whole feature (e.g. one auth or IAP SDK) can save tens of MB, but only if you’re willing to drop that feature.
-
----
-
-## Quick checks
-
-- **Debug vs release**: Release builds are smaller. Measure install size with a **release** build (e.g. `flutter build apk --release` or archive in Xcode for iOS).
-- **ABI (Android)**: `flutter build apk --split-per-abi` produces one smaller APK per CPU type; the store may show a lower “download size” per device.
-- **iOS**: App Thinning and bitcode can reduce the size users actually download.
-
-After the duplicate-removal fix, do a clean build and check the new size; further reductions come from shrinking the GLB, Rive, sounds, and fonts as above.
+- **iOS**: archive via `./scripts/build_testflight.sh`, then App Store Connect → TestFlight → the build’s **install size**. Do not reuse the old ~340 / ~275 MB figures; they predate feature removal and this asset work.
+- **Sanity check without signing**: `flutter build ios --release --no-codesign` then `du -sh build/ios/iphoneos/Runner.app`.

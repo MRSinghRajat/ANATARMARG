@@ -64,9 +64,9 @@ enum BadgeColor {
       case BadgeColor.gold:
         return 'Gold';
       case BadgeColor.purple:
-        return 'Epic';
+        return 'Sacred';
       case BadgeColor.diamond:
-        return 'Legendary';
+        return 'Exclusive';
     }
   }
 

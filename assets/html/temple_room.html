@@ -140,8 +140,20 @@
     cam.updateProjectionMatrix();
   });
 
+  var scenePaused = false;
+  var animFrameId = null;
+  window.pauseMandirScene = function() {
+    scenePaused = true;
+    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+  };
+  window.resumeMandirScene = function() {
+    if (!scenePaused) return;
+    scenePaused = false;
+    animate();
+  };
   function animate() {
-    requestAnimationFrame(animate);
+    if (scenePaused) return;
+    animFrameId = requestAnimationFrame(animate);
     renderer.render(scene, cam);
   }
   animate();

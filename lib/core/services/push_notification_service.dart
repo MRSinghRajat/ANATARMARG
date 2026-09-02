@@ -68,6 +68,16 @@ class PushNotificationService {
 
   Future<void> _refreshTokenAndSave() async {
     try {
+      // iOS requires an APNS token before FCM getToken(); simulators never have one.
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        final apns = await _messaging.getAPNSToken();
+        if (apns == null) {
+          if (kDebugMode) {
+            print('Push: no APNS token yet (simulator or waiting); skip FCM getToken');
+          }
+          return;
+        }
+      }
       final token = await _messaging.getToken();
       if (token != null && token.isNotEmpty) {
         if (kDebugMode) print('FCM token obtained (length ${token.length})');

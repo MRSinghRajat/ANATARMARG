@@ -570,7 +570,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    item.rarity.name.toUpperCase(),
+                    item.rarity.displayName,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,

@@ -25,13 +25,11 @@ import '../../../../core/utils/sound_manager.dart';
 /// - Bottom 60%: Draggable shop UI for purchasing customizations
 /// - One-way sync to Ashram screen
 class AanganScreen extends ConsumerStatefulWidget {
-  final VoidCallback? onBeginTap;
   /// When true, this tab is visible; used to refetch notifications when user returns to Aangan.
   final bool isActive;
 
   const AanganScreen({
     super.key,
-    this.onBeginTap,
     this.isActive = true,
   });
 
@@ -40,7 +38,7 @@ class AanganScreen extends ConsumerStatefulWidget {
 }
 
 class _AanganScreenState extends ConsumerState<AanganScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   ProviderSubscription<int?>? _aanganPendingTabSubscription;
 
   final CoinService _coinService = CoinService();
@@ -97,6 +95,7 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _customizationLoaded = true;
     PremiumService.instance.isPremium.then((v) {
       if (mounted) setState(() => _isPremium = v);
@@ -161,17 +160,43 @@ class _AanganScreenState extends ConsumerState<AanganScreen>
         _isAatmaSheetMinimized = true;
         _isMandirSheetMinimized = true;
       });
+      _setMandirScenePaused(false);
+    } else if (!widget.isActive && oldWidget.isActive) {
+      _setMandirScenePaused(true);
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _aanganPendingTabSubscription?.close();
     _mandirSoundPrefsListenable.removeListener(_syncMandirWebViewBackgroundMusic);
     _customizationSubscription?.cancel();
     _premiumSubscription?.cancel();
     if (_mandirServerStarted && !kIsWeb) _assetServer.stop();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        _setMandirScenePaused(true);
+        break;
+      case AppLifecycleState.resumed:
+        _setMandirScenePaused(false);
+        break;
+    }
+  }
+
+  void _setMandirScenePaused(bool paused) {
+    final fn = paused ? 'pauseMandirScene' : 'resumeMandirScene';
+    _mandirWebViewController?.runJavaScript(
+      "if(typeof $fn==='function')$fn();",
+    );
   }
 
   void _minimizeAatmaSheet() {

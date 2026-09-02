@@ -37,7 +37,6 @@ import '../panchang/widgets/panchang_month_sheet.dart';
 import '../../../journey/data/journey_logic.dart';
 import '../../../journey/data/models/journey_models.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
-import '../../../ai_guru/presentation/providers/guru_providers.dart';
 import '../../../onboarding/presentation/screens/spiritual_onboarding_screen.dart';
 import '../../../profile/data/repositories/app_profile_repository.dart';
 import '../../../home/data/services/aangan_notification_service.dart';
@@ -136,7 +135,6 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
             _myHabitsExpanded = false;
           }
         });
-        ref.invalidate(guruUserTierProvider);
       }
     });
   }
@@ -199,13 +197,15 @@ class _AshramScreenState extends ConsumerState<AshramScreen> with WidgetsBinding
       if (mounted) setState(() => _habits = habits);
     });
 
-    // Initialize services
-    await Future.wait([
-      _taskService.initialize(),
-      _habitService.initialize(),
-    ]);
+    try {
+      await Future.wait([
+        _taskService.initialize(),
+        _habitService.initialize(),
+      ]).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Offline / timeout — still show whatever local data the services have.
+    }
 
-    // Update state with current data
     if (mounted) {
       setState(() {
         _tasks = _taskService.currentTasks;

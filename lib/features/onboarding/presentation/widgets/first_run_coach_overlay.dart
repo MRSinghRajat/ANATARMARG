@@ -30,9 +30,9 @@ const List<MainTabTourStep> kMainTabTourSteps = [
     titleEn: 'Your navigation bar',
     titleHi: 'आपकी नेविगेशन पट्टी',
     bodyEn:
-        'Five tabs sit below. Each Next step opens one tab so you can see the real screen behind this card.',
+        'Four tabs sit below. Each Next step opens one tab so you can see the real screen behind this card.',
     bodyHi:
-        'नीचे पाँच टैब हैं। हर "आगे" पर एक टैब खुलेगा ताकि आप असली स्क्रीन देख सकें।',
+        'नीचे चार टैब हैं। हर "आगे" पर एक टैब खुलेगा ताकि आप असली स्क्रीन देख सकें।',
   ),
   MainTabTourStep(
     titleEn: 'Aangan — your sacred home',
@@ -44,15 +44,6 @@ const List<MainTabTourStep> kMainTabTourSteps = [
     navigateTo: NavItem.home,
   ),
   MainTabTourStep(
-    titleEn: 'AI Guru — ask gently',
-    titleHi: 'AI गुरु — सहज पूछें',
-    bodyEn:
-        'Simple questions, gentle guidance — not medical or legal advice.',
-    bodyHi:
-        'सरल प्रश्न, सहज मार्गदर्शन — चिकित्सा या कानूनी सलाह नहीं।',
-    navigateTo: NavItem.chat,
-  ),
-  MainTabTourStep(
     titleEn: 'Ashram — daily practice',
     titleHi: 'आश्रम — दैनिक अभ्यास',
     bodyEn:
@@ -62,12 +53,12 @@ const List<MainTabTourStep> kMainTabTourSteps = [
     navigateTo: NavItem.ashram,
   ),
   MainTabTourStep(
-    titleEn: 'Granthalaya — read and listen',
-    titleHi: 'ग्रंथालय — पढ़ें और सुनें',
+    titleEn: 'Granthalaya — read and journey',
+    titleHi: 'ग्रंथालय — पढ़ें और यात्रा करें',
     bodyEn:
-        'Texts, stories, and audio when you have a quiet moment.',
+        'Texts, stories, and journeys when you have a quiet moment. Listening is coming soon.',
     bodyHi:
-        'ग्रंथ, कथाएँ, ऑडियो — जब समय मिले।',
+        'ग्रंथ, कथाएँ, यात्राएँ — जब समय मिले। श्रवण शीघ्र आ रहा है।',
     navigateTo: NavItem.books,
   ),
   MainTabTourStep(
@@ -94,6 +85,8 @@ const List<MainTabTourStep> kMainTabTourSteps = [
 class FirstRunCoachOverlay {
   FirstRunCoachOverlay._();
 
+  static OverlayEntry? _active;
+
   static Future<void> showIfNeeded({
     required BuildContext context,
     required GlobalKey bottomNavKey,
@@ -103,6 +96,7 @@ class FirstRunCoachOverlay {
   }) async {
     if (!force && !await AppIntroPrefs.shouldShowPostLoginTabTour()) return;
     if (!context.mounted) return;
+    if (_active != null) return;
 
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
@@ -114,10 +108,12 @@ class FirstRunCoachOverlay {
         onNavigate: onNavigate,
         hindi: hindi,
         onFinished: () {
+          _active = null;
           entry.remove();
         },
       ),
     );
+    _active = entry;
     overlay.insert(entry);
   }
 
@@ -177,7 +173,9 @@ class _FirstRunCoachLayerState extends ConsumerState<_FirstRunCoachLayer> {
 
   @override
   void dispose() {
-    ref.read(tabTourHighlightProvider.notifier).state = null;
+    try {
+      ref.read(tabTourHighlightProvider.notifier).state = null;
+    } catch (_) {}
     super.dispose();
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/services/app_analytics.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/aangan_notification_realtime_service.dart';
 import '../../../../core/services/daily_streak_service.dart';
@@ -11,7 +12,6 @@ import '../../../home/presentation/screens/aangan_screen.dart';
 import '../../../books/presentation/screens/books_library_screen.dart';
 import '../../../ashram/presentation/screens/ashram_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
-import '../../../chat/presentation/screens/spiritual_chat_screen.dart';
 import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
 import '../../../streak/presentation/screens/day1_streak_screen.dart';
 import '../../../streak/presentation/screens/missed_you_streak_screen.dart';
@@ -37,10 +37,13 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   final SanctuaryCustomizationService _customizationService =
       SanctuaryCustomizationService();
 
+  /// Per-shell key so a second MainNavigationScreen cannot collide.
+  final GlobalKey _bottomNavLayerKey =
+      GlobalKey(debugLabel: 'main_nav_bottom_bar');
+
   /// Keys for each bottom tab (tour spotlight + layout).
   late final Map<NavItem, GlobalKey> _navTabItemKeys = {
     NavItem.home: GlobalKey(debugLabel: 'nav_tab_home'),
-    NavItem.chat: GlobalKey(debugLabel: 'nav_tab_chat'),
     NavItem.ashram: GlobalKey(debugLabel: 'nav_tab_ashram'),
     NavItem.books: GlobalKey(debugLabel: 'nav_tab_books'),
     NavItem.profile: GlobalKey(debugLabel: 'nav_tab_profile'),
@@ -48,9 +51,6 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
 
   /// Tracks which tabs have been visited so we build them lazily.
   final Set<int> _initializedTabs = {0};
-
-  /// Incremented each time user switches to AI Guru tab so animations replay.
-  int _chatTabAnimationSeed = 0;
 
   @override
   void initState() {
@@ -61,6 +61,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       if (intent == null) return;
       final nav = intent.nav;
       final aTab = intent.aanganTabIndex;
+      final gTab = intent.granthalayaTabIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ref.read(mainNavIntentProvider.notifier).state = null;
@@ -68,9 +69,13 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         if (nav == NavItem.home && aTab != null) {
           ref.read(aanganPendingTabProvider.notifier).state = aTab;
         }
+        if (nav == NavItem.books && gTab != null) {
+          ref.read(granthalayaPendingTabProvider.notifier).state = gTab;
+        }
       });
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppAnalytics.logTabViewed(NavItem.home.name);
       _checkDailyStreak();
       _scheduleBackgroundTabWarm();
       _startAanganNotificationRealtime();
@@ -90,7 +95,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   /// Mount inactive tabs across subsequent frames so the first tap on each tab
   /// does not pay the full first-build cost in one interaction.
   void _scheduleBackgroundTabWarm() {
-    const order = <int>[4, 3, 2, 1];
+    const order = <int>[3, 2, 1];
     var i = 0;
     void step() {
       if (!mounted || i >= order.length) return;
@@ -171,7 +176,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
     final hindi = ref.read(languageProvider) == 'hi';
     await FirstRunCoachOverlay.showIfNeeded(
       context: context,
-      bottomNavKey: mainNavBottomBarLayerKey,
+      bottomNavKey: _bottomNavLayerKey,
       onNavigate: _navigateTo,
       hindi: hindi,
     );
@@ -206,8 +211,8 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       _currentItem = item;
       _currentIndex = newIndex;
       _initializedTabs.add(newIndex);
-      if (newIndex == 1) _chatTabAnimationSeed++;
     });
+    AppAnalytics.logTabViewed(item.name);
   }
 
   Widget _buildTab(int index) {
@@ -220,22 +225,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         child = AanganScreen(
           key: const ValueKey('aangan'),
           isActive: _currentIndex == 0,
-          onBeginTap: () => _navigateTo(NavItem.chat),
         );
         break;
       case 1:
-        child = SpiritualChatScreen(
-          key: const ValueKey('chat'),
-          animationSeed: _chatTabAnimationSeed,
-        );
-        break;
-      case 2:
         child = const AshramScreen(key: ValueKey('ashram'));
         break;
-      case 3:
+      case 2:
         child = const BooksLibraryScreen(key: ValueKey('books'));
         break;
-      case 4:
+      case 3:
         child = const ProfileScreen(key: ValueKey('profile'));
         break;
       default:
@@ -272,15 +270,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _currentIndex == 2
+        backgroundColor: _currentIndex == 1
             ? AppColors.ashramBackgroundDark
             : AppColors.primaryBackground,
         body: IndexedStack(
           index: _currentIndex,
-          children: List.generate(5, _buildTab),
+          children: List.generate(4, _buildTab),
         ),
         bottomNavigationBar: BottomNavBar(
-          layerKey: mainNavBottomBarLayerKey,
+          layerKey: _bottomNavLayerKey,
           itemKeys: _navTabItemKeys,
           currentItem: _currentItem,
           onTap: _navigateTo,
@@ -293,14 +291,12 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
     switch (item) {
       case NavItem.home:
         return 0;
-      case NavItem.chat:
-        return 1;
       case NavItem.ashram:
-        return 2;
+        return 1;
       case NavItem.books:
-        return 3;
+        return 2;
       case NavItem.profile:
-        return 4;
+        return 3;
     }
   }
 }

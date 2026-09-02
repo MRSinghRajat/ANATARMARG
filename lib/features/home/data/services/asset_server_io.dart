@@ -23,8 +23,13 @@ class AssetServer {
         // Remove the leading slash to match the asset path in pubspec.yaml
         final assetPath = path.substring(1);
         final data = await rootBundle.load(assetPath);
+        final contentType = path.endsWith('.webp')
+            ? 'image/webp'
+            : path.endsWith('.jpg') || path.endsWith('.jpeg')
+                ? 'image/jpeg'
+                : 'image/png';
         request.response.headers
-          ..set('Content-Type', 'image/png')
+          ..set('Content-Type', contentType)
           ..set('Access-Control-Allow-Origin', '*');
         request.response.add(data.buffer.asUint8List());
         await request.response.close();
