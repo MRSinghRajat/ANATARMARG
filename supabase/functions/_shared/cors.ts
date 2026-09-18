@@ -1,7 +1,7 @@
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-account-deletion-worker-secret",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 export function jsonResponse(body: unknown, status = 200): Response {

@@ -1,77 +1,71 @@
+// Authenticated native Apple code capture. The exchanged, cryptographically
+// verified Apple subject must match the caller's verified linked identity.
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { requireUser, supabaseAdmin } from "../_shared/supabase.ts";
+import { supabaseAdmin, supabaseUserClient } from "../_shared/supabase.ts";
 import {
-  appleEnvFromDeno,
-  decodeAppleIdTokenSub,
   exchangeAppleAuthorizationCode,
+  isLinkedAppleSubject,
+  loadAppleConfig,
 } from "../_shared/apple.ts";
 
-type StoreRequest = {
-  authorizationCode?: string;
-};
-
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
-
   if (req.method !== "POST") {
     return jsonResponse({ ok: false, error: "method_not_allowed" }, 405);
   }
-
-  const authHeader = req.headers.get("Authorization");
-  const user = await requireUser(authHeader);
-  if (!user) {
+  const auth = req.headers.get("Authorization");
+  if (!auth) {
     return jsonResponse({ ok: false, error: "not_authenticated" }, 401);
   }
-
-  let body: StoreRequest;
+  const { data, error } = await supabaseUserClient(auth).auth.getUser();
+  if (error || !data.user) {
+    return jsonResponse({ ok: false, error: "not_authenticated" }, 401);
+  }
+  let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as StoreRequest;
+    body = await req.json();
   } catch {
     return jsonResponse({ ok: false, error: "invalid_json" }, 400);
   }
-
-  const authorizationCode = body.authorizationCode?.trim();
-  if (!authorizationCode) {
+  if (
+    typeof body?.authorizationCode !== "string" || !body.authorizationCode ||
+    body.authorizationCode.length > 8192
+  ) {
     return jsonResponse(
-      { ok: false, error: "missing_authorization_code" },
+      { ok: false, error: "invalid_authorization_code" },
       400,
     );
   }
-
-  const env = appleEnvFromDeno();
-  const token = await exchangeAppleAuthorizationCode(env, authorizationCode);
-  if (token.error || !token.refresh_token) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "apple_token_exchange_failed",
-        apple_error: token.error ?? null,
-        apple_error_description: token.error_description ?? null,
-      },
-      502,
+  const config = loadAppleConfig();
+  if (!config) return jsonResponse({ ok: false, error: "not_configured" }, 503);
+  try {
+    const exchange = await exchangeAppleAuthorizationCode(
+      config,
+      body.authorizationCode,
     );
+    if (!exchange) {
+      return jsonResponse({ ok: false, error: "exchange_failed" }, 502);
+    }
+    if (!isLinkedAppleSubject(data.user.identities, exchange.subject)) {
+      return jsonResponse({ ok: false, error: "apple_identity_mismatch" }, 403);
+    }
+    // RPC checks the linked identity again under the deletion lock, so a
+    // concurrent deletion cannot recreate a credential after cleanup.
+    const { error: storeError } = await supabaseAdmin().rpc(
+      "store_apple_auth_token",
+      {
+        p_user_id: data.user.id,
+        p_subject: exchange.subject,
+        p_refresh_token: exchange.refreshToken,
+      },
+    );
+    if (storeError) {
+      return jsonResponse({ ok: false, error: "store_failed" }, 409);
+    }
+    return jsonResponse({ ok: true });
+  } catch {
+    return jsonResponse({ ok: false, error: "apple_capture_failed" }, 502);
   }
-
-  const appleSub = token.id_token
-    ? decodeAppleIdTokenSub(token.id_token)
-    : null;
-
-  const admin = supabaseAdmin();
-  const { error } = await admin.from("apple_auth_store").upsert(
-    {
-      user_id: user.id,
-      apple_sub: appleSub,
-      refresh_token: token.refresh_token,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-
-  if (error) {
-    return jsonResponse({ ok: false, error: "db_upsert_failed" }, 500);
-  }
-
-  return jsonResponse({ ok: true }, 200);
 });
