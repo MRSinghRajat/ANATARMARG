@@ -21,6 +21,7 @@ import '../../../subscription/presentation/screens/paywall_screen.dart';
 import '../providers/language_provider.dart';
 import '../widgets/bookmarked_section.dart';
 import 'language_settings_screen.dart';
+import 'about_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../../../core/services/compressed_image_cache.dart';
 import '../../../sanctuary/data/services/sanctuary_customization_service.dart';
@@ -240,7 +241,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: _buildSignOutButton(),
                       ),
                     ),
-                    
+
+                    // Delete Account — Apple requires in-app account
+                    // deletion; a guest with no account has nothing to
+                    // delete, so this only shows when signed in.
+                    if (SupabaseService().currentUserId != null)
+                      SliverToBoxAdapter(
+                        child: Center(child: _buildDeleteAccountButton()),
+                      ),
+
                     const SliverToBoxAdapter(
                       child: SizedBox(height: 24),
                     ),
@@ -685,10 +694,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const Divider(color: Colors.white12, height: 1),
               _buildSettingsTile(
                 icon: Icons.info_outline,
-                title: 'About',
-                onTap: () {
-                  // TODO: Show about dialog
-                },
+                title: ref.watch(languageProvider) == 'hi' ? 'ऐप के बारे में' : 'About',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+                ),
               ),
             ],
           ),
@@ -795,6 +804,248 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         style: GoogleFonts.poppins(
           color: Colors.red.withOpacity(0.8),
           fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  /// L06: in-app account deletion (required by Apple's account-deletion
+  /// guideline for apps that support account creation). Requires the user
+  /// to type DELETE to confirm — deliberately more friction than sign-out —
+  /// and is explicit that this does not cancel any App Store subscription,
+  /// since deleting the account cannot reach into Apple's billing system.
+  Widget _buildDeleteAccountButton() {
+    return TextButton(
+      onPressed: _showDeleteAccountDialog,
+      child: Text(
+        'Delete Account',
+        style: GoogleFonts.poppins(
+          color: Colors.red.withOpacity(0.5),
+          fontSize: 12,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteAccountDialog() async {
+    final confirmController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final canDelete =
+              confirmController.text.trim().toUpperCase() == 'DELETE';
+          return AlertDialog(
+            backgroundColor: AppColors.cardDark,
+            title: Text(
+              'Delete Account',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This permanently deletes your account and all associated '
+                  'data — journeys, progress, notes and bookmarks. This '
+                  'cannot be undone.',
+                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'This does not cancel an active subscription. Cancel it '
+                  'separately in iPhone Settings → your name → Subscriptions, '
+                  'or it will keep renewing.',
+                  style: GoogleFonts.poppins(
+                    color: Colors.amber.shade200,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Type DELETE to confirm.',
+                  style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: confirmController,
+                  autofocus: true,
+                  style: GoogleFonts.poppins(color: Colors.white),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.poppins(color: Colors.white54),
+                ),
+              ),
+              TextButton(
+                onPressed: canDelete
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                child: Text(
+                  'Delete Account',
+                  style: GoogleFonts.poppins(
+                    color: canDelete ? Colors.red : Colors.white24,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    confirmController.dispose();
+
+    if (confirmed == true) {
+      await _deleteAccount();
+    }
+  }
+
+  /// Pending requests are durable: the background worker can finish even
+  /// after this device signs out or the Auth account has been removed.
+  Future<void> _deleteAccount({bool isRetry = false}) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final result = await SupabaseService().deleteAccount();
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // close the spinner
+
+    if (result.errorCode == 'apple_reauthentication_required') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Confirm with Apple'),
+          content: const Text('Confirm your Apple account so we can disconnect '
+              'Sign in with Apple when deleting your account. Your data has not been deleted yet.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Continue')),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      final ready = await SupabaseService().prepareAppleAccountDeletion();
+      if (!mounted) return;
+      if (ready) {
+        await _deleteAccount(isRetry: true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Apple confirmation could not be completed. Use the Apple account linked here and try again.'),
+        ));
+      }
+      return;
+    }
+
+    if (result.success) {
+      if (result.pending) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Deletion requested'),
+            content: const Text('Your app data has been removed. We are finishing '
+                'account removal and disconnecting any linked Apple sign-in. '
+                'This will continue after you sign out.'),
+            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK'))],
+          ),
+        );
+        if (!mounted) return;
+      }
+      await AppSessionReset.onSignOut();
+      await SupabaseService().clearDeletedAccountSession();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.login,
+        (route) => false,
+      );
+      return;
+    }
+
+    if (result.partial) {
+      // Your data is already gone server-side; only removing the account
+      // itself failed. Retrying the same call is safe and usually enough —
+      // offer that first rather than pushing the user straight to support.
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppColors.cardDark,
+          title: Text(
+            'Almost done',
+            style: GoogleFonts.poppins(color: Colors.white),
+          ),
+          content: Text(
+            isRetry
+                ? 'Still could not finish removing the account, though your '
+                    'data is deleted. You can try again, or stop here and '
+                    'contact support — your data will not come back either way.'
+                : 'Your data was deleted, but we could not fully remove the '
+                    'account yet. This is usually temporary — try again?',
+            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                'Stop here',
+                style: GoogleFonts.poppins(color: Colors.white54),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                'Try again',
+                style: GoogleFonts.poppins(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (retry == true) {
+        await _deleteAccount(isRetry: true);
+        return;
+      }
+      // The account technically still exists but its data does not — there
+      // is nothing usable left locally either way, so still sign out.
+      await AppSessionReset.onSignOut();
+      await SupabaseService().clearDeletedAccountSession();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.login,
+        (route) => false,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your data was deleted. Contact support to finish removing the account.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Could not delete your account (${result.errorCode ?? 'unknown error'}). '
+          'Please try again or contact support.',
         ),
       ),
     );
