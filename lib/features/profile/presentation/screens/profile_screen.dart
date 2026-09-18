@@ -638,37 +638,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               
               const Divider(color: Colors.white12, height: 1),
-              _buildSettingsTile(
-                icon: Icons.cleaning_services_outlined,
-                title: 'Clear image cache',
-                subtitle: 'Compressed cache (~1024px per image)',
-                trailing: _isClearingCache
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
-                      )
-                    : const Icon(Icons.chevron_right, color: Colors.white38),
-                onTap: _isClearingCache ? null : _clearImageCache,
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildSettingsTile(
-                icon: Icons.refresh_rounded,
-                title: 'Reset Aangan to Default',
-                subtitle: 'Restore Aangan customization to default',
-                onTap: () async {
-                  await SanctuaryCustomizationService().resetToDefault();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Aangan reset to default'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                },
-              ),
-              const Divider(color: Colors.white12, height: 1),
+              if (kDebugMode) ...[
+                _buildSettingsTile(
+                  icon: Icons.cleaning_services_outlined,
+                  title: 'Clear image cache',
+                  subtitle: 'Compressed cache (~1024px per image)',
+                  trailing: _isClearingCache
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                        )
+                      : const Icon(Icons.chevron_right, color: Colors.white38),
+                  onTap: _isClearingCache ? null : _clearImageCache,
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                _buildSettingsTile(
+                  icon: Icons.refresh_rounded,
+                  title: 'Reset Aangan to Default',
+                  subtitle: 'Restore Aangan customization to default',
+                  onTap: () async {
+                    await SanctuaryCustomizationService().resetToDefault();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Aangan reset to default'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const Divider(color: Colors.white12, height: 1),
+              ],
               _buildSettingsTile(
                 icon: Icons.article_outlined,
                 title: 'Terms of Service',
