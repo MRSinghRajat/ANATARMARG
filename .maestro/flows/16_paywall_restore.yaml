@@ -1,0 +1,20 @@
+appId: com.antarmarg.app
+---
+# Customer Center / paywall: Restore is reachable. Full purchase sandbox is
+# out of scope for simulator Maestro.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- tapOn:
+    text: ".*Plans.*|.*Active.*|Upgrade for Mandir.*"
+- waitForAnimationToEnd:
+    timeout: 5000
+- scrollUntilVisible:
+    element: ".*Restore.*"
+    direction: DOWN
+    timeout: 12000
+- assertVisible: ".*Restore.*"

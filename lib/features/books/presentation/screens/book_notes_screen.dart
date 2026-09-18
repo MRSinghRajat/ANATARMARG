@@ -106,20 +106,24 @@ class _BookNotesScreenState extends ConsumerState<BookNotesScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _chapterById[note.chapterId] != null
-                          ? '${_chapterById[note.chapterId]!.displayTitle} • Shloka ${note.shlokaNumber}'
-                          : 'Shloka ${note.shlokaNumber}',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.warmOrange,
-                          ),
+                    Expanded(
+                      child: Text(
+                        _chapterById[note.chapterId] != null
+                            ? '${_chapterById[note.chapterId]!.displayTitle} • Shloka ${note.shlokaNumber}'
+                            : 'Shloka ${note.shlokaNumber}',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.warmOrange,
+                            ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20),
                       color: AppColors.tertiaryText,
+                      visualDensity: VisualDensity.compact,
                       onPressed: () async {
                         await _notesService.removeNote(note.verseId, note.note);
                         if (mounted) await _loadNotes();

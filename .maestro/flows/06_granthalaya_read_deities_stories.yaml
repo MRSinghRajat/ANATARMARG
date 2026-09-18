@@ -1,0 +1,33 @@
+appId: com.antarmarg.app
+---
+# AM-45: 12 deities including Vishnu / Narasimha / Kartikeya / Indra.
+# AM-42/53: placeholder test stories must not appear.
+#
+# Nested horizontal ListView: scrollUntilVisible RIGHT on the page misses
+# Vishnu even though it is live in the catalog (order_index 9). Swipe the
+# deity row after Shiva is on screen.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_read"
+- waitForAnimationToEnd:
+    timeout: 4000
+- scrollUntilVisible:
+    element: "Explore Deities"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Explore Deities"
+- scrollUntilVisible:
+    element:
+      id: "deity_vishnu"
+    direction: DOWN
+    timeout: 15000
+- assertVisible:
+    id: "deity_vishnu"
+- assertNotVisible: "Test mythology"
+- assertNotVisible: "Test leela"
+- assertNotVisible: "Test moral"
+- assertNotVisible: "Test Story"

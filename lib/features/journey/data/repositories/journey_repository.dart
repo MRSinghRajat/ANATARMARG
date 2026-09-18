@@ -1,44 +1,64 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/services/supabase_service.dart';
+import '../local/local_journey_store.dart';
 import '../models/journey_models.dart';
+import '../starter/starter_journey_fallback.dart';
 
 /// Repository for journey catalog, user journeys, and completions.
 ///
 /// Reporting / profile: use [getAllJourneys], task rows in `user_journey_task_completions`,
 /// and samskara rows in `user_milestone_completions` (plus milestone `is_required` from catalog).
 class JourneyRepository {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  SupabaseClient? get _supabase => SupabaseService().client;
 
   // ─── Catalog ─────────────────────────────────────────────────────────────
 
   Future<List<JourneyType>> getJourneyTypes() async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) {
+        return [starterJourneyType()];
+      }
+      final res = await client
           .from('journey_types')
           .select()
           .eq('is_active', true)
           .order('display_order', ascending: true);
       final list = res as List;
-      return list.map((e) => JourneyType.fromJson(e as Map<String, dynamic>)).toList();
+      final types =
+          list.map((e) => JourneyType.fromJson(e as Map<String, dynamic>)).toList();
+      // Ensure the free starter is always discoverable, even before backend import.
+      if (!types.any((t) => t.slug == kStarterJourneySlug)) {
+        types.insert(0, starterJourneyType());
+      }
+      types.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+      return types;
     } catch (e) {
       print('JourneyRepository.getJourneyTypes: $e');
-      return [];
+      return [starterJourneyType()];
     }
   }
 
   Future<JourneyType?> getJourneyTypeBySlug(String slug) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) {
+        return slug == kStarterJourneySlug ? starterJourneyType() : null;
+      }
+      final res = await client
           .from('journey_types')
           .select()
           .eq('slug', slug)
           .eq('is_active', true)
           .maybeSingle();
-      if (res == null) return null;
+      if (res == null) {
+        return slug == kStarterJourneySlug ? starterJourneyType() : null;
+      }
       return JourneyType.fromJson(res as Map<String, dynamic>);
     } catch (e) {
       print('JourneyRepository.getJourneyTypeBySlug: $e');
-      return null;
+      return slug == kStarterJourneySlug ? starterJourneyType() : null;
     }
   }
 
@@ -46,7 +66,9 @@ class JourneyRepository {
   /// Requires RLS policy allowing update on journey_types if used from app.
   Future<bool> updateJourneyTypeCardImage(String journeyTypeId, String? imageUrl) async {
     try {
-      await _supabase
+      final client = _supabase;
+      if (client == null) return false;
+      await client
           .from('journey_types')
           .update({'card_image_url': imageUrl})
           .eq('id', journeyTypeId);
@@ -61,7 +83,9 @@ class JourneyRepository {
   /// Uses get_journey_type_member_counts() RPC.
   Future<Map<String, int>> getJourneyTypeMemberCounts() async {
     try {
-      final res = await _supabase.rpc('get_journey_type_member_counts');
+      final client = _supabase;
+      if (client == null) return {};
+      final res = await client.rpc('get_journey_type_member_counts');
       final list = res as List? ?? [];
       final map = <String, int>{};
       for (final e in list) {
@@ -81,24 +105,36 @@ class JourneyRepository {
   /// Returns tasks with phase info embedded — no need for separate getPhases().
   Future<List<JourneyTask>> getTasksForJourney(String journeySlug) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) {
+        return journeySlug == kStarterJourneySlug ? starterJourneyTasks() : [];
+      }
+      final res = await client
           .from('v_journey_tasks_full')
           .select()
           .eq('journey_slug', journeySlug)
           .order('phase_order', ascending: true)
           .order('display_order', ascending: true);
       final list = res as List;
-      return list.map((e) => JourneyTask.fromJson(e as Map<String, dynamic>)).toList();
+      final tasks =
+          list.map((e) => JourneyTask.fromJson(e as Map<String, dynamic>)).toList();
+      if (tasks.isEmpty && journeySlug == kStarterJourneySlug) {
+        return starterJourneyTasks();
+      }
+      return tasks;
     } catch (e) {
       print('JourneyRepository.getTasksForJourney: $e');
-      return [];
+      return journeySlug == kStarterJourneySlug ? starterJourneyTasks() : [];
     }
   }
 
   /// Fetch tasks by journey_type_id (for providers that have the ID, not the slug).
   Future<List<JourneyTask>> getTasksByJourneyTypeId(String journeyTypeId) async {
     try {
-      final res = await _supabase
+      if (journeyTypeId == kStarterJourneyTypeId) return starterJourneyTasks();
+      final client = _supabase;
+      if (client == null) return [];
+      final res = await client
           .from('v_journey_tasks_full')
           .select()
           .eq('journey_type_id', journeyTypeId)
@@ -116,7 +152,12 @@ class JourneyRepository {
   /// Link: journey_tasks.slug = journey_content_pool.task_slug. Returns raw rows for universal rendering.
   Future<List<Map<String, dynamic>>> getContentPoolByTaskSlug(String taskSlug, {String? journeyTypeId}) async {
     try {
-      var query = _supabase.from('journey_content_pool').select().eq('task_slug', taskSlug);
+      if (journeyTypeId == kStarterJourneyTypeId) {
+        return starterContentPoolForTaskSlug(taskSlug);
+      }
+      final client = _supabase;
+      if (client == null) return [];
+      var query = client.from('journey_content_pool').select().eq('task_slug', taskSlug);
       if (journeyTypeId != null && journeyTypeId.isNotEmpty) {
         query = query.eq('journey_type_id', journeyTypeId);
       }
@@ -157,7 +198,9 @@ class JourneyRepository {
     String gender = 'both',
   }) async {
     try {
-      var query = _supabase
+      final client = _supabase;
+      if (client == null) return [];
+      var query = client
           .from('v_journey_content_resolved')
           .select()
           .eq('journey_type_id', journeyTypeId)
@@ -180,7 +223,10 @@ class JourneyRepository {
 
   Future<List<JourneyMilestone>> getMilestones(String journeyTypeId) async {
     try {
-      final res = await _supabase
+      if (journeyTypeId == kStarterJourneyTypeId) return [];
+      final client = _supabase;
+      if (client == null) return [];
+      final res = await client
           .from('journey_milestones')
           .select()
           .eq('journey_type_id', journeyTypeId)
@@ -197,7 +243,10 @@ class JourneyRepository {
   /// Generic: works for any journey type — just insert rows with that type's id.
   Future<List<Map<String, dynamic>>> getWisdomPool(String journeyTypeId) async {
     try {
-      final res = await _supabase
+      if (journeyTypeId == kStarterJourneyTypeId) return [];
+      final client = _supabase;
+      if (client == null) return [];
+      final res = await client
           .from('journey_content_pool')
           .select()
           .eq('journey_type_id', journeyTypeId)
@@ -217,7 +266,15 @@ class JourneyRepository {
   /// so it never throws when multiple active journeys exist (allowed since migration 25).
   Future<UserJourney?> getActiveJourney(String userId) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) {
+        final local = await LocalJourneyStore.getAllJourneysForUser(userId);
+        final active = local.where((j) => j.isActive).toList()
+          ..sort((a, b) =>
+              (b.startDate ?? DateTime(0)).compareTo(a.startDate ?? DateTime(0)));
+        return active.isNotEmpty ? active.first : null;
+      }
+      final res = await client
           .from('user_journeys')
           .select()
           .eq('user_id', userId)
@@ -235,13 +292,25 @@ class JourneyRepository {
 
   Future<List<UserJourney>> getAllJourneys(String userId) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) {
+        final local = await LocalJourneyStore.getAllJourneysForUser(userId);
+        local.sort((a, b) =>
+            (b.startDate ?? DateTime(0)).compareTo(a.startDate ?? DateTime(0)));
+        return local;
+      }
+      final res = await client
           .from('user_journeys')
           .select()
           .eq('user_id', userId)
           .order('start_date', ascending: false);
       final list = res as List;
-      return list.map((e) => UserJourney.fromJson(e as Map<String, dynamic>)).toList();
+      final remote =
+          list.map((e) => UserJourney.fromJson(e as Map<String, dynamic>)).toList();
+      final local = await LocalJourneyStore.getAllJourneysForUser(userId);
+      return [...remote, ...local]
+        ..sort((a, b) =>
+            (b.startDate ?? DateTime(0)).compareTo(a.startDate ?? DateTime(0)));
     } catch (e) {
       print('JourneyRepository.getAllJourneys: $e');
       return [];
@@ -254,7 +323,18 @@ class JourneyRepository {
     required String journeyTypeId,
   }) async {
     try {
-      final res = await _supabase
+      final local = await LocalJourneyStore.getAllJourneysForUser(userId);
+      final localMatch = local
+          .where((j) =>
+              j.journeyTypeId == journeyTypeId && (j.isActive || j.isPaused))
+          .toList()
+        ..sort((a, b) =>
+            (b.startDate ?? DateTime(0)).compareTo(a.startDate ?? DateTime(0)));
+      if (localMatch.isNotEmpty) return localMatch.first;
+
+      final client = _supabase;
+      if (client == null) return null;
+      final res = await client
           .from('user_journeys')
           .select()
           .eq('user_id', userId)
@@ -273,7 +353,12 @@ class JourneyRepository {
 
   Future<UserJourney?> getUserJourneyById(String userJourneyId) async {
     try {
-      final res = await _supabase
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        return await LocalJourneyStore.getJourneyById(userJourneyId);
+      }
+      final client = _supabase;
+      if (client == null) return null;
+      final res = await client
           .from('user_journeys')
           .select()
           .eq('id', userJourneyId)
@@ -294,20 +379,59 @@ class JourneyRepository {
     DateTime? targetDate,
   }) async {
     try {
+      final normalizedMeta = Map<String, dynamic>.from(metadata);
+      if (journeyTypeId == kStarterJourneyTypeId) {
+        normalizedMeta.putIfAbsent('duration_days', () => 7);
+        normalizedMeta.putIfAbsent('slug', () => kStarterJourneySlug);
+      }
       final insert = <String, dynamic>{
         'user_id': userId,
         'journey_type_id': journeyTypeId,
         'status': 'active',
-        'metadata': metadata,
+        'metadata': normalizedMeta,
         'start_date': (startDate ?? DateTime.now()).toIso8601String().split('T').first,
         if (targetDate != null) 'target_date': targetDate.toIso8601String().split('T').first,
       };
-      final res = await _supabase
-          .from('user_journeys')
-          .insert(insert)
-          .select()
-          .single();
-      return UserJourney.fromJson(res as Map<String, dynamic>);
+      final client = _supabase;
+      if (client != null) {
+        try {
+          final res =
+              await client.from('user_journeys').insert(insert).select().single();
+          return UserJourney.fromJson(res as Map<String, dynamic>);
+        } on PostgrestException catch (e) {
+          // If starter content isn't imported yet (FK), fall back locally for testing.
+          if (journeyTypeId == kStarterJourneyTypeId && e.code == '23503') {
+            final local = UserJourney(
+              id: 'local_${DateTime.now().millisecondsSinceEpoch}_starter',
+              userId: userId,
+              journeyTypeId: journeyTypeId,
+              status: 'active',
+              startDate: startDate ?? DateTime.now(),
+              targetDate: targetDate,
+              metadata: normalizedMeta,
+            );
+            await LocalJourneyStore.upsertJourney(local);
+            return local;
+          }
+          rethrow;
+        }
+      }
+
+      if (journeyTypeId == kStarterJourneyTypeId) {
+        final local = UserJourney(
+          id: 'local_${DateTime.now().millisecondsSinceEpoch}_starter',
+          userId: userId,
+          journeyTypeId: journeyTypeId,
+          status: 'active',
+          startDate: startDate ?? DateTime.now(),
+          targetDate: targetDate,
+          metadata: normalizedMeta,
+        );
+        await LocalJourneyStore.upsertJourney(local);
+        return local;
+      }
+
+      throw StateError('Supabase is not configured');
     } on PostgrestException catch (e) {
       print('JourneyRepository.startJourney: $e');
       if (e.code == '23505' &&
@@ -328,10 +452,34 @@ class JourneyRepository {
 
   Future<void> pauseJourney(String userJourneyId) async {
     try {
-      await _supabase.from('user_journeys').update({
-        'status': 'paused',
-        'paused_at': DateTime.now().toIso8601String(),
-      }).eq('id', userJourneyId);
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        final uj = await LocalJourneyStore.getJourneyById(userJourneyId);
+        if (uj == null) return;
+        await LocalJourneyStore.upsertJourney(
+          UserJourney(
+            id: uj.id,
+            userId: uj.userId,
+            journeyTypeId: uj.journeyTypeId,
+            currentPhaseId: uj.currentPhaseId,
+            status: 'paused',
+            startDate: uj.startDate,
+            targetDate: uj.targetDate,
+            pausedAt: DateTime.now(),
+            resumedAt: uj.resumedAt,
+            completedAt: uj.completedAt,
+            metadata: uj.metadata,
+            planAtStart: uj.planAtStart,
+            companionUserId: uj.companionUserId,
+          ),
+        );
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_journeys').update({
+            'status': 'paused',
+            'paused_at': DateTime.now().toIso8601String(),
+          }).eq('id', userJourneyId);
     } catch (e) {
       print('JourneyRepository.pauseJourney: $e');
       rethrow;
@@ -340,10 +488,34 @@ class JourneyRepository {
 
   Future<void> resumeJourney(String userJourneyId) async {
     try {
-      await _supabase.from('user_journeys').update({
-        'status': 'active',
-        'resumed_at': DateTime.now().toIso8601String(),
-      }).eq('id', userJourneyId);
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        final uj = await LocalJourneyStore.getJourneyById(userJourneyId);
+        if (uj == null) return;
+        await LocalJourneyStore.upsertJourney(
+          UserJourney(
+            id: uj.id,
+            userId: uj.userId,
+            journeyTypeId: uj.journeyTypeId,
+            currentPhaseId: uj.currentPhaseId,
+            status: 'active',
+            startDate: uj.startDate,
+            targetDate: uj.targetDate,
+            pausedAt: uj.pausedAt,
+            resumedAt: DateTime.now(),
+            completedAt: uj.completedAt,
+            metadata: uj.metadata,
+            planAtStart: uj.planAtStart,
+            companionUserId: uj.companionUserId,
+          ),
+        );
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_journeys').update({
+            'status': 'active',
+            'resumed_at': DateTime.now().toIso8601String(),
+          }).eq('id', userJourneyId);
     } catch (e) {
       print('JourneyRepository.resumeJourney: $e');
       rethrow;
@@ -352,7 +524,13 @@ class JourneyRepository {
 
   Future<void> deleteJourney(String userJourneyId) async {
     try {
-      await _supabase.from('user_journeys').delete().eq('id', userJourneyId);
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        await LocalJourneyStore.deleteJourney(userJourneyId);
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_journeys').delete().eq('id', userJourneyId);
     } catch (e) {
       print('JourneyRepository.deleteJourney: $e');
       rethrow;
@@ -361,9 +539,33 @@ class JourneyRepository {
 
   Future<void> updateCurrentPhase(String userJourneyId, String phaseId) async {
     try {
-      await _supabase.from('user_journeys').update({
-        'current_phase_id': phaseId,
-      }).eq('id', userJourneyId);
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        final uj = await LocalJourneyStore.getJourneyById(userJourneyId);
+        if (uj == null) return;
+        await LocalJourneyStore.upsertJourney(
+          UserJourney(
+            id: uj.id,
+            userId: uj.userId,
+            journeyTypeId: uj.journeyTypeId,
+            currentPhaseId: phaseId,
+            status: uj.status,
+            startDate: uj.startDate,
+            targetDate: uj.targetDate,
+            pausedAt: uj.pausedAt,
+            resumedAt: uj.resumedAt,
+            completedAt: uj.completedAt,
+            metadata: uj.metadata,
+            planAtStart: uj.planAtStart,
+            companionUserId: uj.companionUserId,
+          ),
+        );
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_journeys').update({
+            'current_phase_id': phaseId,
+          }).eq('id', userJourneyId);
     } catch (e) {
       print('JourneyRepository.updateCurrentPhase: $e');
       rethrow;
@@ -375,7 +577,17 @@ class JourneyRepository {
   Future<List<String>> getCompletedTaskIdsToday(String userId, String userJourneyId) async {
     final today = DateTime.now().toIso8601String().split('T').first;
     try {
-      final res = await _supabase
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        final set = await LocalJourneyStore.getCompletedTaskIdsForDate(
+          userId: userId,
+          userJourneyId: userJourneyId,
+          yyyyMmDd: today,
+        );
+        return set.toList();
+      }
+      final client = _supabase;
+      if (client == null) return [];
+      final res = await client
           .from('user_journey_task_completions')
           .select('task_id')
           .eq('user_id', userId)
@@ -385,6 +597,41 @@ class JourneyRepository {
       return list.map((e) => e['task_id'] as String).toList();
     } catch (e) {
       print('JourneyRepository.getCompletedTaskIdsToday: $e');
+      return [];
+    }
+  }
+
+  /// Task ids with a completion row on or after [sinceDate] (inclusive, local
+  /// calendar date) — or ever, if [sinceDate] is null. This reuses the
+  /// existing `user_journey_task_completions` history (one row per
+  /// user/task/day, per its own upsert conflict key) rather than requiring a
+  /// schema change: L04 needs completion *history*, not just today's set, to
+  /// enforce `once` (pass `sinceDate: null`) and `weekly` (pass
+  /// `sinceDate: JourneyLogic.weekStart(now)`) recurrence correctly.
+  Future<List<String>> getCompletedTaskIds(
+    String userId,
+    String userJourneyId, {
+    DateTime? sinceDate,
+  }) async {
+    try {
+      final builder = _supabase
+          .from('user_journey_task_completions')
+          .select('task_id')
+          .eq('user_id', userId)
+          .eq('user_journey_id', userJourneyId);
+      final res = sinceDate == null
+          ? await builder
+          : await builder.gte(
+              'completed_date',
+              DateTime(sinceDate.year, sinceDate.month, sinceDate.day)
+                  .toIso8601String()
+                  .split('T')
+                  .first,
+            );
+      final list = res as List;
+      return list.map((e) => e['task_id'] as String).toSet().toList();
+    } catch (e) {
+      print('JourneyRepository.getCompletedTaskIds: $e');
       return [];
     }
   }
@@ -414,18 +661,29 @@ class JourneyRepository {
     }
     final today = DateTime.now().toIso8601String().split('T').first;
     try {
-      await _supabase.from('user_journey_task_completions').upsert({
-        'user_id': userId,
-        'user_journey_id': userJourneyId,
-        'task_id': taskId,
-        'completed_date': today,
-        'completed_at': DateTime.now().toIso8601String(),
-        'duration_seconds': durationSeconds,
-        'mantra_count_done': mantraCountDone,
-        'notes': notes,
-        'photo_url': photoUrl,
-        'coins_earned': coinReward ?? 0,
-      }, onConflict: 'user_id,task_id,completed_date');
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        await LocalJourneyStore.upsertTaskCompletion(
+          userId: userId,
+          userJourneyId: userJourneyId,
+          taskId: taskId,
+          yyyyMmDd: today,
+        );
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_journey_task_completions').upsert({
+            'user_id': userId,
+            'user_journey_id': userJourneyId,
+            'task_id': taskId,
+            'completed_date': today,
+            'completed_at': DateTime.now().toIso8601String(),
+            'duration_seconds': durationSeconds,
+            'mantra_count_done': mantraCountDone,
+            'notes': notes,
+            'photo_url': photoUrl,
+            'coins_earned': coinReward ?? 0,
+          }, onConflict: 'user_id,task_id,completed_date');
     } catch (e) {
       print('JourneyRepository.completeTask: $e');
       rethrow;
@@ -440,7 +698,18 @@ class JourneyRepository {
   }) async {
     final today = DateTime.now().toIso8601String().split('T').first;
     try {
-      await _supabase
+      if (LocalJourneyStore.isLocalId(userJourneyId)) {
+        await LocalJourneyStore.removeTaskCompletion(
+          userId: userId,
+          userJourneyId: userJourneyId,
+          taskId: taskId,
+          yyyyMmDd: today,
+        );
+        return;
+      }
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client
           .from('user_journey_task_completions')
           .delete()
           .eq('user_id', userId)
@@ -457,7 +726,10 @@ class JourneyRepository {
 
   Future<List<String>> getCompletedMilestoneIds(String userId, String userJourneyId) async {
     try {
-      final res = await _supabase
+      if (LocalJourneyStore.isLocalId(userJourneyId)) return [];
+      final client = _supabase;
+      if (client == null) return [];
+      final res = await client
           .from('user_milestone_completions')
           .select('milestone_id')
           .eq('user_id', userId)
@@ -473,7 +745,10 @@ class JourneyRepository {
   /// Returns milestoneId -> completedAt for showing completion dates in UI.
   Future<Map<String, DateTime>> getCompletedMilestoneDates(String userId, String userJourneyId) async {
     try {
-      final res = await _supabase
+      if (LocalJourneyStore.isLocalId(userJourneyId)) return {};
+      final client = _supabase;
+      if (client == null) return {};
+      final res = await client
           .from('user_milestone_completions')
           .select('milestone_id, completed_at')
           .eq('user_id', userId)
@@ -518,7 +793,10 @@ class JourneyRepository {
       throw StateError('Not authorized');
     }
     try {
-      await _supabase.from('user_milestone_completions').insert({
+      if (LocalJourneyStore.isLocalId(userJourneyId)) return;
+      final client = _supabase;
+      if (client == null) throw StateError('Supabase is not configured');
+      await client.from('user_milestone_completions').insert({
         'user_id': userId,
         'user_journey_id': userJourneyId,
         'milestone_id': milestoneId,
@@ -589,7 +867,9 @@ class JourneyRepository {
     }
 
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) return null;
+      final res = await client
           .from(tableName)
           .select()
           .eq('id', parsedId)
@@ -607,7 +887,9 @@ class JourneyRepository {
   /// Fetch a single task by id from the view.
   Future<JourneyTask?> getTaskById(String taskId) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) return null;
+      final res = await client
           .from('v_journey_tasks_full')
           .select()
           .eq('id', taskId)
@@ -623,7 +905,9 @@ class JourneyRepository {
   /// Fetch a single milestone by id.
   Future<JourneyMilestone?> getMilestoneById(String milestoneId) async {
     try {
-      final res = await _supabase
+      final client = _supabase;
+      if (client == null) return null;
+      final res = await client
           .from('journey_milestones')
           .select()
           .eq('id', milestoneId)

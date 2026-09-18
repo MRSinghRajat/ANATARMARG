@@ -1671,7 +1671,10 @@ class _JourneyCard extends ConsumerWidget {
       ...rpcCompleted,
       ...tasks.where((t) => t.isCompleted).map((t) => t.task.id),
     };
-    final dayProg = JourneyLogic.journeyDayProgress(userJourney);
+    final dayProg = JourneyLogic.journeyDayProgress(
+      userJourney,
+      durationDays: journeyType?.durationDays,
+    );
     final currentDay = dayProg.currentDay;
     final title = journeyType?.title ?? 'Journey';
     final allTodayDone =

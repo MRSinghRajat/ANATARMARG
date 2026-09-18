@@ -1,0 +1,17 @@
+appId: com.antarmarg.app
+---
+# AM-27: Sign out clears session and lands on login (AppSessionReset).
+# If already logged out, asserts login screen directly.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow:
+    when:
+      visible: "PROFILE"
+    file: _sign_out_from_profile.yaml
+- waitForAnimationToEnd:
+    timeout: 10000
+# Login screen, or onboarding auth step after session clear.
+- assertVisible:
+    text: ".*Continue with Google.*|The Divine Path.*|Sign In / Create Account.*"

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/services/supabase_service.dart';
 import '../../data/journey_logic.dart';
 import '../../data/models/journey_models.dart';
 import '../../data/repositories/journey_repository.dart';
@@ -18,7 +18,7 @@ final journeyBrowsePhaseIdProvider =
 // ─── Auth (current user id) ─────────────────────────────────────────────────
 
 final currentUserIdProvider = Provider<String?>((ref) {
-  return Supabase.instance.client.auth.currentUser?.id;
+  return SupabaseService().client?.auth.currentUser?.id;
 });
 
 // ─── Catalog ────────────────────────────────────────────────────────────────
@@ -137,7 +137,17 @@ final todaysJourneyTasksProvider =
   if (allTasks.isEmpty) return [];
   final currentPhase = JourneyLogic.getCurrentPhaseFromTasks(journey, allTasks);
   if (currentPhase == null) return [];
-  final todaysTasks = JourneyLogic.getTodaysTasks(journey, currentPhase, allTasks);
+  final completedOnce =
+      await ref.watch(journeyCompletedOnceTaskIdsProvider(userJourneyId).future);
+  final completedThisWeek =
+      await ref.watch(journeyCompletedThisWeekTaskIdsProvider(userJourneyId).future);
+  final todaysTasks = JourneyLogic.getTodaysTasks(
+    journey,
+    currentPhase,
+    allTasks,
+    completedOnceTaskIds: completedOnce,
+    completedThisWeekTaskIds: completedThisWeek,
+  );
   final completedIds = await repo.getCompletedTaskIdsToday(journey.userId, userJourneyId);
   final completedSet = completedIds.toSet();
   return todaysTasks
@@ -155,6 +165,34 @@ final journeyCompletedTaskIdsTodayProvider =
   if (journey == null) return {};
   final repo = ref.read(journeyRepositoryProvider);
   final ids = await repo.getCompletedTaskIdsToday(journey.userId, userJourneyId);
+  return ids.toSet();
+});
+
+/// Task IDs with *any* completion, ever, for this user journey — used to
+/// enforce `once`-frequency tasks (L04). Distinct from "today"'s set: a
+/// `once` task completed yesterday must stay excluded, which the
+/// today-only query can never see by definition.
+final journeyCompletedOnceTaskIdsProvider =
+    FutureProvider.family<Set<String>, String>((ref, userJourneyId) async {
+  final journey = await ref.watch(userJourneyProvider(userJourneyId).future);
+  if (journey == null) return {};
+  final repo = ref.read(journeyRepositoryProvider);
+  final ids = await repo.getCompletedTaskIds(journey.userId, userJourneyId);
+  return ids.toSet();
+});
+
+/// Task IDs completed within the current local Monday-anchored calendar
+/// week — used to enforce `weekly`-frequency tasks (L04).
+final journeyCompletedThisWeekTaskIdsProvider =
+    FutureProvider.family<Set<String>, String>((ref, userJourneyId) async {
+  final journey = await ref.watch(userJourneyProvider(userJourneyId).future);
+  if (journey == null) return {};
+  final repo = ref.read(journeyRepositoryProvider);
+  final ids = await repo.getCompletedTaskIds(
+    journey.userId,
+    userJourneyId,
+    sinceDate: JourneyLogic.weekStart(DateTime.now()),
+  );
   return ids.toSet();
 });
 
@@ -182,11 +220,17 @@ final displayedJourneyTasksProvider =
     displayPhase = calendarPhase;
   }
   if (displayPhase == null) return [];
+  final completedOnce =
+      await ref.watch(journeyCompletedOnceTaskIdsProvider(userJourneyId).future);
+  final completedThisWeek =
+      await ref.watch(journeyCompletedThisWeekTaskIdsProvider(userJourneyId).future);
   final tasks = JourneyLogic.getTasksForDisplayedPhase(
     journey,
     displayPhase,
     calendarPhase,
     allTasks,
+    completedOnceTaskIds: completedOnce,
+    completedThisWeekTaskIds: completedThisWeek,
   );
   final completedSet =
       await ref.watch(journeyCompletedTaskIdsTodayProvider(userJourneyId).future);
@@ -334,6 +378,8 @@ void invalidateCachesForDeletedUserJourney(
   container.invalidate(todaysJourneyTasksProvider(userJourneyId));
   container.invalidate(displayedJourneyTasksProvider(userJourneyId));
   container.invalidate(journeyCompletedTaskIdsTodayProvider(userJourneyId));
+  container.invalidate(journeyCompletedOnceTaskIdsProvider(userJourneyId));
+  container.invalidate(journeyCompletedThisWeekTaskIdsProvider(userJourneyId));
   container.invalidate(currentPhaseProvider(userJourneyId));
   container.invalidate(journeyCompletedMilestoneIdsProvider(userJourneyId));
   container.invalidate(completedMilestoneDatesProvider(userJourneyId));

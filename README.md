@@ -41,8 +41,18 @@ A gamified spiritual learning app that guides users through ancient Indian wisdo
      ```bash
      cp .env.example .env
      ```
-   - Update `.env` with your Supabase credentials
-   - Set up GPT API key in `lib/core/config/app_config.dart`
+   - Update `.env` with the public Supabase client configuration, Google OAuth
+     client IDs, and RevenueCat public SDK key.
+   - Generate the distributable configuration before running Flutter:
+     ```bash
+     python3 scripts/prepare_app_config.py
+     python3 scripts/verify_app_config.py
+     ```
+   - Flutter bundles `.env.app`, an ignored file containing only allowlisted
+     client settings. Root `.env` is reserved for local configuration/tooling.
+     Never put private tokens or service-role keys in distributable settings.
+   - Regenerate `.env.app` when changing runtime settings or setting up a new
+     checkout. `run_app.sh` and `scripts/build_testflight.sh` do this for you.
 
 4. Run the app:
    ```bash
@@ -60,7 +70,14 @@ lib/
 
 ## Development Status
 
-🚧 **In Development** - Foundation phase
+MVP launch preparation is in progress. See [the execution plan](docs/MVP_LAUNCH_PLAN.md),
+[agent assignments](docs/LAUNCH_AGENT_TASKS.md), and
+[owner dependencies](docs/LAUNCH_OWNER_ACTIONS.md).
+
+The release command is `bash scripts/build_testflight.sh`. It verifies the
+generated configuration and scans the resulting IPA before it can be uploaded.
+Existing older builds are not made safe by regenerating configuration; rebuild
+and verify every distributed candidate.
 
 ## License
 

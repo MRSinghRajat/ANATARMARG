@@ -256,7 +256,12 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                     ),
                   ),
                 ),
-                PopupMenuButton<String>(
+                Semantics(
+                  identifier: 'journey_overflow_menu',
+                  button: true,
+                  label: 'Journey options',
+                  child: PopupMenuButton<String>(
+                  tooltip: 'Journey options',
                   icon: const Icon(Icons.more_vert_rounded, color: AppColors.zinc100, size: 24),
                   color: AppColors.ashramCardDark,
                   onSelected: (value) => _onMenuSelected(context, value),
@@ -269,6 +274,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                       PopupMenuItem(value: 'remove', child: Text('Remove journey', style: menuStyle)),
                     ];
                   },
+                ),
                 ),
               ],
             ),
@@ -290,6 +296,7 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
                   .where((id) => todaysTasks.any((t) => t.task.id == id))
                   .length,
               todaysTotalCount: todaysTasks.length,
+              durationDays: journeyType?.durationDays,
             ),
           ),
 
@@ -599,6 +606,10 @@ class _JourneyHomeBodyState extends ConsumerState<_JourneyHomeBody> with Widgets
       ref.invalidate(todaysJourneyTasksProvider(ujId));
       ref.invalidate(displayedJourneyTasksProvider(ujId));
       ref.invalidate(journeyCompletedTaskIdsTodayProvider(ujId));
+      // A completed `once`/`weekly` task must disappear from the list right
+      // away, not just after the next cold load — see L04.
+      ref.invalidate(journeyCompletedOnceTaskIdsProvider(ujId));
+      ref.invalidate(journeyCompletedThisWeekTaskIdsProvider(ujId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -985,6 +996,11 @@ class _JourneyProgressBanner extends StatelessWidget {
   final String lang;
   final int todaysDoneCount;
   final int todaysTotalCount;
+  /// Journey type's actual program length (e.g. 21, 40) — see
+  /// [JourneyLogic.journeyDayProgress]'s doc for why this must be passed
+  /// explicitly rather than left to default to 90 for every fixed-length
+  /// program.
+  final int? durationDays;
 
   const _JourneyProgressBanner({
     required this.userJourney,
@@ -993,12 +1009,14 @@ class _JourneyProgressBanner extends StatelessWidget {
     required this.lang,
     required this.todaysDoneCount,
     required this.todaysTotalCount,
+    this.durationDays,
   });
 
   @override
   Widget build(BuildContext context) {
     final pregnancyWeek = JourneyLogic.getCurrentPregnancyWeek(userJourney);
-    final progress = JourneyLogic.journeyDayProgress(userJourney);
+    final progress =
+        JourneyLogic.journeyDayProgress(userJourney, durationDays: durationDays);
 
     // Context pill text — pregnancy-specific if week available, else generic day
     final String contextLabel;

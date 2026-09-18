@@ -1,0 +1,20 @@
+appId: com.antarmarg.app
+---
+# AM-49: sanctuary shop must not show loot-tier copy (Common/Rare/Epic/Legendary).
+# User-facing rarity is Traditional/Festival/Sacred/Exclusive — those words may
+# not appear as tile labels (shop tiles currently show name + Karma cost).
+# Expanding the Aatma sheet must not crash.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "AATMA"
+- swipe:
+    start: "50%, 92%"
+    end: "50%, 40%"
+    duration: 500
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertNotVisible: "Common"
+- assertNotVisible: "Legendary"
+- assertNotVisible: "rare, epic, and legendary"

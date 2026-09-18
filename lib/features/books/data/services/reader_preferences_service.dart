@@ -11,12 +11,13 @@ class ReaderPreferencesService {
 
   Future<double> loadFontSize() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(keyFontSize) ?? 18.0;
+    final size = prefs.getDouble(keyFontSize) ?? 18.0;
+    return size.isFinite ? size.clamp(14.0, 32.0) : 18.0;
   }
 
   Future<void> saveFontSize(double size) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(keyFontSize, size);
+    await prefs.setDouble(keyFontSize, size.isFinite ? size.clamp(14.0, 32.0) : 18.0);
   }
 
   Future<ReaderTheme> loadTheme() async {

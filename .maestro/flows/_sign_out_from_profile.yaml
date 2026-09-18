@@ -1,0 +1,16 @@
+appId: com.antarmarg.app
+---
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- scrollUntilVisible:
+    element: "Sign Out"
+    direction: DOWN
+    timeout: 12000
+- tapOn: "Sign Out"
+- assertVisible: "Are you sure you want to sign out?"
+- tapOn:
+    text: "Sign Out"
+    index: 1
+- waitForAnimationToEnd:
+    timeout: 8000
