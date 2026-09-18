@@ -20,6 +20,9 @@ import '../../features/subscription/data/models/subscription_models.dart';
 class PremiumService {
   static const String _keyIsPremiumOverride = 'is_premium_override';
   static const String _keyDevModeEnabled = 'premium_dev_mode';
+
+  @visibleForTesting
+  static bool Function() isReleaseBuild = () => kReleaseMode;
   
   static PremiumService? _instance;
   static PremiumService get instance => _instance ??= PremiumService._();
@@ -34,6 +37,7 @@ class PremiumService {
   // Cached premium status
   bool? _cachedIsPremium;
   bool _devModeEnabled = false;
+  bool _loggedDevOverride = false;
 
   // Subscription status for detailed info
   SubscriptionStatus? _subscriptionStatus;
@@ -49,7 +53,7 @@ class PremiumService {
 
     // Check if dev mode is enabled
     final prefs = await SharedPreferences.getInstance();
-    _devModeEnabled = prefs.getBool(_keyDevModeEnabled) ?? false;
+    _devModeEnabled = isReleaseBuild() ? false : (prefs.getBool(_keyDevModeEnabled) ?? false);
     
     // Listen to RevenueCat subscription changes
     _revenueCat.subscriptionStatusStream.listen((isSubscribed) {
@@ -86,11 +90,14 @@ class PremiumService {
     if (AppConfig.premiumGrantAll) return true;
 
     // Check dev mode override first
-    if (_devModeEnabled) {
+    if (!isReleaseBuild() && _devModeEnabled) {
       final prefs = await SharedPreferences.getInstance();
       final override = prefs.getBool(_keyIsPremiumOverride);
       if (override != null) {
-        debugPrint('PremiumService: Using dev mode override: $override');
+        if (!_loggedDevOverride) {
+          _loggedDevOverride = true;
+          debugPrint('PremiumService: Using dev mode override: $override');
+        }
         return override;
       }
     }
@@ -118,7 +125,7 @@ class PremiumService {
     }
 
     // Check dev mode override first
-    if (_devModeEnabled) {
+    if (!isReleaseBuild() && _devModeEnabled) {
       final prefs = await SharedPreferences.getInstance();
       final override = prefs.getBool(_keyIsPremiumOverride);
       if (override != null) {
@@ -138,6 +145,7 @@ class PremiumService {
 
   /// Enable dev mode for testing premium features
   Future<void> enableDevMode() async {
+    if (isReleaseBuild()) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDevModeEnabled, true);
     _devModeEnabled = true;
@@ -146,21 +154,23 @@ class PremiumService {
 
   /// Disable dev mode
   Future<void> disableDevMode() async {
+    if (isReleaseBuild()) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDevModeEnabled, false);
     await prefs.remove(_keyIsPremiumOverride);
     _devModeEnabled = false;
+    _loggedDevOverride = false;
     await refreshPremiumStatus();
     debugPrint('PremiumService: Dev mode disabled');
   }
 
   /// Check if dev mode is enabled
-  bool get isDevModeEnabled => _devModeEnabled;
+  bool get isDevModeEnabled => isReleaseBuild() ? false : _devModeEnabled;
 
   /// Set premium status override (dev mode only)
   /// This is useful for testing premium features without making actual purchases.
   Future<void> setPremiumOverride(bool value) async {
-    if (!_devModeEnabled) {
+    if (isReleaseBuild() || !_devModeEnabled) {
       debugPrint('PremiumService: Dev mode not enabled, cannot set override');
       return;
     }
@@ -168,14 +178,17 @@ class PremiumService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyIsPremiumOverride, value);
     _cachedIsPremium = value;
+    _loggedDevOverride = false;
     _premiumStatusController.add(value);
     debugPrint('PremiumService: Premium override set to $value');
   }
 
   /// Clear premium override (dev mode only)
   Future<void> clearPremiumOverride() async {
+    if (isReleaseBuild()) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyIsPremiumOverride);
+    _loggedDevOverride = false;
     await refreshPremiumStatus();
     debugPrint('PremiumService: Premium override cleared');
   }

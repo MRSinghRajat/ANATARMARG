@@ -24,6 +24,43 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'shared/services/avatar_growth_service.dart';
 import 'shared/services/premium_service.dart';
 
+StreamSubscription<AuthState>? _supabaseAuthSubscription;
+
+void _wireSupabaseAuthToRevenueCat() {
+  final client = SupabaseService().client;
+  if (client == null) return;
+  if (_supabaseAuthSubscription != null) return;
+
+  // Restored session at cold start.
+  final existingUserId = client.auth.currentUser?.id;
+  if (existingUserId != null && existingUserId.isNotEmpty) {
+    RevenueCatService.instance.syncIdentity(existingUserId);
+  }
+
+  _supabaseAuthSubscription = client.auth.onAuthStateChange.listen((data) async {
+    switch (data.event) {
+      case AuthChangeEvent.signedIn:
+      case AuthChangeEvent.tokenRefreshed:
+      case AuthChangeEvent.userUpdated:
+        final id = data.session?.user.id ?? client.auth.currentUser?.id;
+        if (id != null && id.isNotEmpty) {
+          await RevenueCatService.instance.syncIdentity(id);
+        }
+        return;
+      case AuthChangeEvent.signedOut:
+      case AuthChangeEvent.userDeleted:
+        // Session expired or explicit sign-out: fail closed until next successful identity op.
+        await RevenueCatService.instance.logOut();
+        await PremiumService.instance.resetSession();
+        return;
+      case AuthChangeEvent.passwordRecovery:
+      case AuthChangeEvent.mfaChallengeVerified:
+      case AuthChangeEvent.initialSession:
+        return;
+    }
+  });
+}
+
 /// Runs after first frame so app shows quickly; reduces startup/login latency.
 void _deferredInit() async {
   try {
@@ -45,6 +82,7 @@ void _deferredInit() async {
   try {
     await RevenueCatService.instance.initialize();
     await PremiumService.instance.initialize();
+    _wireSupabaseAuthToRevenueCat();
     if (kDebugMode) print('RevenueCat initialized successfully');
   } catch (e) {
     if (kDebugMode) print('RevenueCat initialization failed: $e');
@@ -104,6 +142,10 @@ void main() async {
     _initSupabase(),
     _initFirebase(),
   ]);
+
+  // If Supabase is present, wire auth events early so restored sessions can
+  // queue identity sync even before RevenueCat initializes.
+  _wireSupabaseAuthToRevenueCat();
 
   LicenseRegistry.addLicense(() async* {
     final license = await rootBundle.loadString('assets/fonts/OFL.txt');

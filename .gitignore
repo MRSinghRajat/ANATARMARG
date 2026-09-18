@@ -83,6 +83,7 @@ app.*.map.json
 # Environment variables
 .env
 .env.local
+.flutter/
 
 # API Keys
 **/api_keys.dart
