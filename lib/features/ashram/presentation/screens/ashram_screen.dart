@@ -47,8 +47,12 @@ import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/services/premium_service.dart';
 import '../../../../shared/widgets/pro_gradient_badge.dart';
 
-/// Set to true to show the debug "Tap to change date" banner (e.g. for testing).
-const bool kShowDebugDateBanner = true;
+/// Opt-in debug-only banner to override the app date (local testing only).
+///
+/// Enable with:
+/// `flutter run --dart-define=AM_DEBUG_DATE_BANNER=true`
+const bool kShowDebugDateBanner =
+    bool.fromEnvironment('AM_DEBUG_DATE_BANNER', defaultValue: false);
 
 class AshramScreen extends ConsumerStatefulWidget {
   const AshramScreen({super.key});

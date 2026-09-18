@@ -18,9 +18,9 @@
 // this path at all.
 
 function base64url(bytes: Uint8Array): string {
-  let str = '';
+  let str = "";
   for (const b of bytes) str += String.fromCharCode(b);
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function base64urlFromString(s: string): string {
@@ -29,16 +29,16 @@ function base64urlFromString(s: string): string {
 
 async function importApplePrivateKey(pem: string): Promise<CryptoKey> {
   const pkcs8 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s+/g, '');
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s+/g, "");
   const raw = Uint8Array.from(atob(pkcs8), (c) => c.charCodeAt(0));
   return crypto.subtle.importKey(
-    'pkcs8',
+    "pkcs8",
     raw,
-    { name: 'ECDSA', namedCurve: 'P-256' },
+    { name: "ECDSA", namedCurve: "P-256" },
     false,
-    ['sign'],
+    ["sign"],
   );
 }
 
@@ -50,10 +50,10 @@ export interface AppleConfig {
 }
 
 export function loadAppleConfig(): AppleConfig | null {
-  const teamId = Deno.env.get('APPLE_TEAM_ID');
-  const keyId = Deno.env.get('APPLE_KEY_ID');
-  const clientId = Deno.env.get('APPLE_CLIENT_ID');
-  const privateKey = Deno.env.get('APPLE_PRIVATE_KEY');
+  const teamId = Deno.env.get("APPLE_TEAM_ID");
+  const keyId = Deno.env.get("APPLE_KEY_ID");
+  const clientId = Deno.env.get("APPLE_CLIENT_ID");
+  const privateKey = Deno.env.get("APPLE_PRIVATE_KEY");
   if (!teamId || !keyId || !clientId || !privateKey) return null;
   return { teamId, keyId, clientId, privateKey };
 }
@@ -62,14 +62,16 @@ export function loadAppleConfig(): AppleConfig | null {
 /// server-to-server call (token exchange and revoke). Valid for 5 minutes —
 /// generated fresh per call rather than cached, since these calls are
 /// infrequent (once per sign-in, once per deletion).
-export async function buildAppleClientSecret(config: AppleConfig): Promise<string> {
-  const header = { alg: 'ES256', kid: config.keyId };
+export async function buildAppleClientSecret(
+  config: AppleConfig,
+): Promise<string> {
+  const header = { alg: "ES256", kid: config.keyId };
   const nowSec = Math.floor(Date.now() / 1000);
   const payload = {
     iss: config.teamId,
     iat: nowSec,
     exp: nowSec + 300,
-    aud: 'https://appleid.apple.com',
+    aud: "https://appleid.apple.com",
     sub: config.clientId,
   };
   const encodedHeader = base64urlFromString(JSON.stringify(header));
@@ -78,7 +80,7 @@ export async function buildAppleClientSecret(config: AppleConfig): Promise<strin
 
   const key = await importApplePrivateKey(config.privateKey);
   const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
+    { name: "ECDSA", hash: "SHA-256" },
     key,
     new TextEncoder().encode(signingInput),
   );
@@ -94,9 +96,12 @@ export interface AppleTokenExchange {
   subject: string;
 }
 
-function decodeJwtPart(value: string): Uint8Array<ArrayBuffer> {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+function decodeJwtPart(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(
+    atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")),
+    (c) => c.charCodeAt(0),
+  );
 }
 
 // Verify Apple's signature, issuer, audience and lifetime before trusting sub.
@@ -106,40 +111,56 @@ export async function verifyAppleIdentityToken(
   clientId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<string> {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('invalid_apple_identity');
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("invalid_apple_identity");
   const header = JSON.parse(new TextDecoder().decode(decodeJwtPart(parts[0])));
   const claims = JSON.parse(new TextDecoder().decode(decodeJwtPart(parts[1])));
   const now = Math.floor(Date.now() / 1000);
-  if (header.alg !== 'RS256' || typeof header.kid !== 'string' ||
-      claims.iss !== 'https://appleid.apple.com' || claims.aud !== clientId ||
-      !Number.isFinite(claims.exp) || claims.exp <= now ||
-      !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
-      typeof claims.sub !== 'string' || !claims.sub) {
-    throw new Error('invalid_apple_identity');
+  if (
+    header.alg !== "RS256" || typeof header.kid !== "string" ||
+    claims.iss !== "https://appleid.apple.com" || claims.aud !== clientId ||
+    !Number.isFinite(claims.exp) || claims.exp <= now ||
+    !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
+    typeof claims.sub !== "string" || !claims.sub
+  ) {
+    throw new Error("invalid_apple_identity");
   }
-  const response = await fetcher('https://appleid.apple.com/auth/keys', {
+  const response = await fetcher("https://appleid.apple.com/auth/keys", {
     signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) throw new Error('apple_keys_unavailable');
+  if (!response.ok) throw new Error("apple_keys_unavailable");
   const jwks = await response.json();
   const jwk = jwks.keys?.find((key: JsonWebKey & { kid?: string }) =>
-    key.kid === header.kid && key.kty === 'RSA' && key.alg === 'RS256');
-  if (!jwk) throw new Error('unknown_apple_signing_key');
-  const key = await crypto.subtle.importKey('jwk', jwk,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key,
-    decodeJwtPart(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
-  if (!valid) throw new Error('invalid_apple_signature');
+    key.kid === header.kid && key.kty === "RSA" && key.alg === "RS256"
+  );
+  if (!jwk) throw new Error("unknown_apple_signing_key");
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const valid = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    decodeJwtPart(parts[2]),
+    new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+  );
+  if (!valid) throw new Error("invalid_apple_signature");
   return claims.sub;
 }
 
 export function isLinkedAppleSubject(
-  identities: Array<{ provider: string; identity_data?: Record<string, unknown> }> | undefined,
+  identities:
+    | Array<{ provider: string; identity_data?: Record<string, unknown> }>
+    | undefined,
   subject: string,
 ): boolean {
-  return identities?.some((identity) => identity.provider === 'apple' &&
-    identity.identity_data?.sub === subject) === true;
+  return identities?.some((identity) =>
+    identity.provider === "apple" &&
+    identity.identity_data?.sub === subject
+  ) === true;
 }
 
 export async function exchangeAppleAuthorizationCode(
@@ -147,22 +168,27 @@ export async function exchangeAppleAuthorizationCode(
   authorizationCode: string,
 ): Promise<AppleTokenExchange | null> {
   const clientSecret = await buildAppleClientSecret(config);
-  const res = await fetch('https://appleid.apple.com/auth/token', {
-    method: 'POST',
+  const res = await fetch("https://appleid.apple.com/auth/token", {
+    method: "POST",
     signal: AbortSignal.timeout(10_000),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: config.clientId,
       client_secret: clientSecret,
       code: authorizationCode,
-      grant_type: 'authorization_code',
+      grant_type: "authorization_code",
     }),
   });
   if (!res.ok) return null; // Never log provider bodies or credentials.
   const data = await res.json();
-  if (typeof data.refresh_token !== 'string' || !data.refresh_token ||
-      typeof data.id_token !== 'string') return null;
-  const subject = await verifyAppleIdentityToken(data.id_token, config.clientId);
+  if (
+    typeof data.refresh_token !== "string" || !data.refresh_token ||
+    typeof data.id_token !== "string"
+  ) return null;
+  const subject = await verifyAppleIdentityToken(
+    data.id_token,
+    config.clientId,
+  );
   return { refreshToken: data.refresh_token, subject };
 }
 
@@ -175,19 +201,19 @@ export async function revokeAppleRefreshToken(
   refreshToken: string,
 ): Promise<boolean> {
   const clientSecret = await buildAppleClientSecret(config);
-  const res = await fetch('https://appleid.apple.com/auth/revoke', {
-    method: 'POST',
+  const res = await fetch("https://appleid.apple.com/auth/revoke", {
+    method: "POST",
     signal: AbortSignal.timeout(10_000),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: config.clientId,
       client_secret: clientSecret,
       token: refreshToken,
-      token_type_hint: 'refresh_token',
+      token_type_hint: "refresh_token",
     }),
   });
   if (!res.ok) {
-    console.warn('apple: revocation pending', res.status);
+    console.warn("apple: revocation pending", res.status);
     return false;
   }
   return true;

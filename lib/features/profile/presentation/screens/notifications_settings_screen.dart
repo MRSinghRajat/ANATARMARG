@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -159,7 +160,7 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
                     _updateChannel(NotificationPreferences.keyDaily, v);
                   },
                 ),
-                if (_masterOn && _dailyReminders)
+                if (kDebugMode && _masterOn && _dailyReminders)
                   Padding(
                     padding: const EdgeInsets.only(left: 8, top: 4, bottom: 8),
                     child: TextButton.icon(
