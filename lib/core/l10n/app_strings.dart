@@ -136,11 +136,29 @@ class AppStrings {
     'continue_btn': 'Continue',
     'done': 'Done',
     'ok': 'OK',
+    'cancel': 'Cancel',
+    'delete': 'Delete',
     'error': 'Error',
     'loading': 'Loading...',
     'retry': 'Retry',
     'not_signed_in': 'Not signed in',
     'search': 'Search',
+
+    // Account deletion (L06)
+    'delete_account': 'Delete Account',
+    'delete_account_warning':
+        'This will permanently delete your account and data. If you signed in with Apple, we will revoke your Apple credential as part of deletion. Deletion may take a little time to fully complete.',
+    'delete_account_failed': 'Account deletion failed. Please try again.',
+    'delete_account_reauth_title': 'Confirm your identity',
+    'delete_account_reauth_body_apple':
+        'For security, please sign in with Apple again (use the same Apple ID) to confirm account deletion.',
+    'delete_account_reauth_body_google':
+        'For security, please sign in with Google again (use the same account) to confirm account deletion.',
+    'delete_account_reauth_body_generic':
+        'For security, please sign in again to confirm account deletion.',
+    'delete_account_reauth_failed': 'Reauthentication failed. Please try again.',
+    'delete_account_wrong_account':
+        'That sign-in did not match your current account. Please sign in with the same account to delete it.',
   };
 
   // ───── Hindi Devanagari ─────
@@ -270,10 +288,28 @@ class AppStrings {
     'continue_btn': 'आगे बढ़ें',
     'done': 'हो गया',
     'ok': 'ठीक',
+    'cancel': 'रद्द करें',
+    'delete': 'हटाएँ',
     'error': 'त्रुटि',
     'loading': 'लोड हो रहा है...',
     'retry': 'पुनः प्रयास',
     'not_signed_in': 'साइन इन नहीं है',
     'search': 'खोजें',
+
+    // Account deletion (L06)
+    'delete_account': 'खाता हटाएँ',
+    'delete_account_warning':
+        'यह आपके खाते और डेटा को स्थायी रूप से हटा देगा। यदि आपने Apple से साइन इन किया है, तो हटाने के दौरान Apple क्रेडेंशियल भी रद्द किया जाएगा। यह प्रक्रिया पूरी होने में थोड़ा समय ले सकती है।',
+    'delete_account_failed': 'खाता हटाने में विफल। कृपया पुनः प्रयास करें।',
+    'delete_account_reauth_title': 'पहचान की पुष्टि करें',
+    'delete_account_reauth_body_apple':
+        'सुरक्षा के लिए, खाता हटाने की पुष्टि करने हेतु Apple से फिर से साइन इन करें (वही Apple ID उपयोग करें)।',
+    'delete_account_reauth_body_google':
+        'सुरक्षा के लिए, खाता हटाने की पुष्टि करने हेतु Google से फिर से साइन इन करें (वही खाता उपयोग करें)।',
+    'delete_account_reauth_body_generic':
+        'सुरक्षा के लिए, खाता हटाने की पुष्टि करने हेतु फिर से साइन इन करें।',
+    'delete_account_reauth_failed': 'री-ऑथेंटिकेशन विफल। कृपया पुनः प्रयास करें।',
+    'delete_account_wrong_account':
+        'यह साइन इन आपके वर्तमान खाते से मेल नहीं खाता। कृपया खाता हटाने के लिए उसी खाते से साइन इन करें।',
   };
 }

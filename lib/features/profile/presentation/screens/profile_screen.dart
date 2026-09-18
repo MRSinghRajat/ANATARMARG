@@ -38,6 +38,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   bool _isSoundEnabled = true;
   double _soundVolume = 0.5;
+  bool _isDeletingAccount = false;
 
   UserSpiritualProgress? _progress;
   bool _isPremium = false;
@@ -237,7 +238,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: _buildSignOutButton(),
+                        child: _buildAccountActions(),
                       ),
                     ),
                     
@@ -796,6 +797,218 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildAccountActions() {
+    final loggedIn = SupabaseService().currentUserId != null;
+    if (!loggedIn) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSignOutButton(),
+        const SizedBox(height: 12),
+        _buildDeleteAccountButton(),
+      ],
+    );
+  }
+
+  Widget _buildDeleteAccountButton() {
+    final lang = ref.watch(languageProvider);
+    return OutlinedButton(
+      onPressed: _isDeletingAccount ? null : _confirmAndDeleteAccount,
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: Colors.red.withOpacity(0.5)),
+        foregroundColor: Colors.red.withOpacity(0.9),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: _isDeletingAccount
+          ? const SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+            )
+          : Text(
+              AppStrings.get('delete_account', lang),
+              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+    );
+  }
+
+  Future<void> _confirmAndDeleteAccount() async {
+    final lang = ref.watch(languageProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        title: Text(
+          AppStrings.get('delete_account', lang),
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
+        content: Text(
+          AppStrings.get('delete_account_warning', lang),
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              AppStrings.get('cancel', lang),
+              style: GoogleFonts.poppins(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              AppStrings.get('delete', lang),
+              style: GoogleFonts.poppins(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _runAccountDeletion();
+    }
+  }
+
+  Future<void> _runAccountDeletion() async {
+    if (_isDeletingAccount) return;
+    final lang = ref.watch(languageProvider);
+    final originalUserId = SupabaseService().currentUserId;
+    if (originalUserId == null) return;
+
+    setState(() => _isDeletingAccount = true);
+    try {
+      await SupabaseService().requestAccountDeletion();
+
+      await AppSessionReset.onSignOut();
+      await SupabaseService().client?.auth.signOut();
+
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, AppRouter.login, (route) => false);
+      }
+    } on AccountDeletionException catch (e) {
+      final data = e.data is Map ? (e.data as Map).cast<String, dynamic>() : <String, dynamic>{};
+      final err = data['error'];
+      if (e.statusCode == 401 && err == 'reauth_required') {
+        await _showReauthDialogAndMaybeRetry(originalUserId);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppStrings.get('delete_account_failed', lang),
+                style: GoogleFonts.poppins(fontSize: 13),
+              ),
+              backgroundColor: Colors.red.shade900,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.get('delete_account_failed', lang), style: GoogleFonts.poppins(fontSize: 13)),
+            backgroundColor: Colors.red.shade900,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeletingAccount = false);
+    }
+  }
+
+  Future<void> _showReauthDialogAndMaybeRetry(String originalUserId) async {
+    final lang = ref.watch(languageProvider);
+    final provider = SupabaseService.primaryProviderForCurrentUser(SupabaseService().client) ?? 'email';
+
+    final bodyKey = switch (provider) {
+      'apple' => 'delete_account_reauth_body_apple',
+      'google' => 'delete_account_reauth_body_google',
+      _ => 'delete_account_reauth_body_generic',
+    };
+
+    final actionKey = switch (provider) {
+      'apple' => 'continue_with_apple',
+      'google' => 'continue_with_google',
+      _ => 'continue_with_email',
+    };
+
+    final doReauth = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        title: Text(
+          AppStrings.get('delete_account_reauth_title', lang),
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
+        content: Text(
+          AppStrings.get(bodyKey, lang),
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(AppStrings.get('cancel', lang), style: GoogleFonts.poppins(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(AppStrings.get(actionKey, lang), style: GoogleFonts.poppins(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (doReauth != true) return;
+
+    try {
+      if (provider == 'apple') {
+        await SupabaseService().signInWithApple();
+      } else if (provider == 'google') {
+        await SupabaseService().signInWithGoogle();
+      } else {
+        final email = _userEmail;
+        if (email != null && email.isNotEmpty) {
+          await SupabaseService().signInWithOtp(email: email);
+        }
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.get('delete_account_reauth_failed', lang),
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+          backgroundColor: Colors.red.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final currentUserId = SupabaseService().currentUserId;
+    if (currentUserId != originalUserId) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.get('delete_account_wrong_account', lang),
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+          backgroundColor: Colors.red.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await _runAccountDeletion();
   }
 
   Color _getLevelColor(int level) {

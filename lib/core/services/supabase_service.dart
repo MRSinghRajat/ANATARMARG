@@ -176,11 +176,24 @@ class SupabaseService {
       throw Exception('No identity token returned from Apple Sign In');
     }
 
-    return _client!.auth.signInWithIdToken(
+    final authResponse = await _client!.auth.signInWithIdToken(
       provider: OAuthProvider.apple,
       idToken: idToken,
       nonce: rawNonce,
     );
+
+    // Best-effort: store Apple refresh token server-side for durable revocation on account deletion.
+    // Do not block sign-in if backend isn't configured yet.
+    final authorizationCode = credential.authorizationCode;
+    if (authorizationCode != null && authorizationCode.isNotEmpty) {
+      try {
+        await storeAppleCredential(authorizationCode: authorizationCode);
+      } catch (e) {
+        print('storeAppleCredential error: $e');
+      }
+    }
+
+    return authResponse;
   }
 
   String _generateNonce([int length = 32]) {
@@ -198,6 +211,38 @@ class SupabaseService {
     if (!Platform.isIOS) {
       await GoogleSignIn().signOut();
     }
+  }
+
+  Future<void> storeAppleCredential({required String authorizationCode}) async {
+    if (_client == null) return;
+    await _client!.functions.invoke(
+      'apple-auth-store',
+      body: {'authorizationCode': authorizationCode},
+    );
+  }
+
+  Future<Map<String, dynamic>> requestAccountDeletion() async {
+    if (_client == null) {
+      throw Exception('Supabase client not initialized');
+    }
+    final res = await _client!.functions.invoke('delete-account');
+    if (res.status != 202) {
+      throw AccountDeletionException(res.status, res.data);
+    }
+    final data = (res.data as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    return data;
+  }
+
+  static String? primaryProviderForCurrentUser(SupabaseClient? client) {
+    final user = client?.auth.currentUser;
+    if (user == null) return null;
+    final providers = user.appMetadata['providers'];
+    if (providers is List && providers.isNotEmpty) {
+      final p0 = providers.first;
+      if (p0 is String) return p0;
+    }
+    final provider = user.appMetadata['provider'];
+    return provider is String ? provider : null;
   }
 
   /// Sign in with email using OOB (magic link). Sends a link to [email];
@@ -240,4 +285,10 @@ class SupabaseService {
       return false;
     }
   }
+}
+
+class AccountDeletionException implements Exception {
+  AccountDeletionException(this.statusCode, this.data);
+  final int statusCode;
+  final dynamic data;
 }
