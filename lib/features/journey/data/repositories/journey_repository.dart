@@ -614,7 +614,9 @@ class JourneyRepository {
     DateTime? sinceDate,
   }) async {
     try {
-      final builder = _supabase
+      final client = _supabase;
+      if (client == null) return [];
+      final builder = client
           .from('user_journey_task_completions')
           .select('task_id')
           .eq('user_id', userId)
