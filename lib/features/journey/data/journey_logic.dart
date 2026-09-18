@@ -115,19 +115,20 @@ class JourneyLogic {
         return (currentDay: days, totalDays: 365);
       }
     }
-    final durationDays = (meta['duration_days'] as num?)?.toInt();
-    if (durationDays != null && durationDays > 0 && uj.startDate != null) {
-      final day = DateTime.now()
-          .difference(uj.startDate!)
-          .inDays
-          .clamp(0, durationDays);
-      return (currentDay: day, totalDays: durationDays);
+    final metaDurationDays = (meta['duration_days'] as num?)?.toInt();
+    final effectiveDurationDays = durationDays ?? metaDurationDays;
+    if (effectiveDurationDays != null &&
+        effectiveDurationDays > 0 &&
+        uj.startDate != null) {
+      final day =
+          effectiveDaysSinceStart(uj).clamp(0, effectiveDurationDays);
+      return (currentDay: day, totalDays: effectiveDurationDays);
     }
     if (uj.startDate != null) {
       final day = effectiveDaysSinceStart(uj).clamp(0, 99999);
-      return (currentDay: day, totalDays: durationDays ?? 90);
+      return (currentDay: day, totalDays: effectiveDurationDays ?? 90);
     }
-    return (currentDay: 0, totalDays: durationDays ?? 90);
+    return (currentDay: 0, totalDays: effectiveDurationDays ?? 90);
   }
 
   static bool _phaseTriggerMatches(
