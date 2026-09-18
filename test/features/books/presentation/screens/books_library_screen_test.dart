@@ -59,12 +59,8 @@ void main() {
     expect(find.text('Deep Dive'), findsNothing);
     expect(find.text("The Nature of 'Atman'"), findsNothing);
 
-    await tester.tap(find.text('Listen'));
-    await tester.pump();
-    expect(find.text('COMING SOON'), findsWidgets);
-    expect(find.text('Sacred audio is being recorded'), findsOneWidget);
-    expect(find.textContaining('Spiritual journeys unlock'), findsNothing);
-    expect(find.textContaining('Listen mode and the full audio library'), findsNothing);
+    expect(find.text('Listen'), findsNothing);
+    expect(find.text('Sacred audio is being recorded'), findsNothing);
 
     await tester.tap(find.text('Journey'));
     await tester.pump();

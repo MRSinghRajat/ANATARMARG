@@ -7,6 +7,8 @@
 set -e
 cd "$(dirname "$0")/.."
 
+python3 scripts/prepare_app_config.py
+
 PREFER=""
 [[ "$1" == "--simulator" ]] && PREFER="simulator"
 [[ "$1" == "--device" ]] && PREFER="device"

@@ -1,0 +1,5 @@
+appId: com.antarmarg.app
+---
+- tapOn: "Skip tour"
+- waitForAnimationToEnd:
+    timeout: 4000

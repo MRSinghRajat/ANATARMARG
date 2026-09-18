@@ -1,0 +1,51 @@
+appId: com.antarmarg.app
+---
+# Regression test for the "Switch journey" / "Remove journey" navigation bug
+# (fixed in main_navigation_screen.dart + books_library_screen.dart): both
+# actions must return the user to Granthalaya's Journey mode, not Read.
+#
+# Precondition: at least one active journey exists for the signed-in test
+# account (e.g. Little Sadhu). This flow does not create one — see
+# 03_start_little_sadhu_journey.yaml for a scripted setup if you need a
+# fresh account.
+#
+# After the 2026-09-02 Semantics rebuild, Continue Journey and the overflow
+# menu should be tappable by id. Point taps remain as comments if ids fail.
+
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "GRANTHALYA"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    id: "continue_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    id: "journey_overflow_menu"
+- tapOn: "Switch journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- assertVisible: "YOUR JOURNEYS"
+
+- tapOn:
+    id: "continue_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "journey_overflow_menu"
+- tapOn: "Remove journey"
+- tapOn: "Remove"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- assertNotVisible: "YOUR JOURNEYS"

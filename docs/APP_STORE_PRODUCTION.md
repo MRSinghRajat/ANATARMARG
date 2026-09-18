@@ -7,10 +7,10 @@ Use this together with [TESTFLIGHT_DEPLOY.md](./TESTFLIGHT_DEPLOY.md) for TestFl
 1. **Version** — Bump `version:` in `pubspec.yaml` (`x.y.z+build`). The **build number** after `+` must increase for every App Store / TestFlight upload.
 2. **Align `AppConfig.appVersion`** — Keep the `x.y.z` part consistent with `pubspec.yaml` for any in-app “About” or support text.
 3. **Signing** — Xcode → Runner → Signing & Capabilities → correct **Team**, **Release** profile valid.
-4. **`.env` in release** — Production API keys belong in CI secrets or local env at build time; `.env` is gitignored. Confirm Supabase, RevenueCat, Google OAuth IDs, etc. are set for the release build you upload. The app does **not** require `GPT_API_KEY` in the client bundle.
+4. **Distributable configuration** — Generate `.env.app` from local `.env` using `scripts/prepare_app_config.py`. Only allowlisted public client configuration is bundled; private tooling credentials stay outside the app. Verify configuration and scan the exact IPA before upload. Never upload an old build that still contains `.env`.
 5. **RevenueCat** — Use **production** API keys and App Store products in App Store Connect; Test Store keys are for sandbox only.
-6. **Firebase** — `GoogleService-Info.plist` matches the App Store bundle ID (`com.antarmarg.app`).
-7. **Build** — `./scripts/build_testflight.sh` (or `flutter build ipa --obfuscate --split-debug-info=build/debug-info`) from a **clean** tree after `flutter pub get` and `cd ios && pod install`. Archive `build/debug-info/` with the release so Crashlytics can symbolicate.
+6. **Firebase** — `ios/GoogleService-Info.plist` matches the App Store bundle ID (`com.antarmarg.app`) and the Xcode resource reference. Run `bash scripts/check_ios_release_config.sh`.
+7. **Build** — `bash scripts/build_testflight.sh` from a reviewed release baseline. The script generates configuration, runs tests, builds and scans the IPA. Archive `build/debug-info/` with the release so Crashlytics can symbolicate. A direct Xcode archive must undergo the same configuration and exported-IPA checks.
 
 ## App Store Connect (metadata)
 

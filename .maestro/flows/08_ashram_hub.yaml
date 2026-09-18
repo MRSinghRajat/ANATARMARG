@@ -1,0 +1,12 @@
+appId: com.antarmarg.app
+---
+# Ashram hub loads without crash. Language-dependent strings: try English
+# labels first; Hinglish/Hindi still has the ASHRAM tab.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "ASHRAM"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "ASHRAM"

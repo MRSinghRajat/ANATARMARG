@@ -1202,12 +1202,27 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
     Set<String> completedTaskIdsToday,
   ) async {
     final calendarPhase = JourneyLogic.getCurrentPhaseFromTasks(userJourney, allTasks);
+    // L04: this is the actual reward-granting path (CoinService().addCoins
+    // below) — canCompleteTaskToday previously had no way to know whether a
+    // `once`/`weekly` task was already completed on an earlier day (only
+    // "today" was ever checked), so a `once` welcome task or a `weekly`
+    // practice could be re-completed for coins every single day it was
+    // opened. Must fetch and pass real history here, not rely on the
+    // parameter defaults.
+    final completedOnce = await ref.read(
+      journeyCompletedOnceTaskIdsProvider(widget.userJourneyId).future,
+    );
+    final completedThisWeek = await ref.read(
+      journeyCompletedThisWeekTaskIdsProvider(widget.userJourneyId).future,
+    );
     if (!JourneyLogic.canCompleteTaskToday(
       userJourney: userJourney,
       task: task,
       calendarPhase: calendarPhase,
       allTasks: allTasks,
       completedTaskIdsToday: completedTaskIdsToday,
+      completedOnceTaskIds: completedOnce,
+      completedThisWeekTaskIds: completedThisWeek,
     )) {
       return;
     }
@@ -1227,6 +1242,8 @@ class _JourneyTaskDetailScreenState extends ConsumerState<JourneyTaskDetailScree
       ref.invalidate(todaysJourneyTasksProvider(widget.userJourneyId));
       ref.invalidate(displayedJourneyTasksProvider(widget.userJourneyId));
       ref.invalidate(journeyCompletedTaskIdsTodayProvider(widget.userJourneyId));
+      ref.invalidate(journeyCompletedOnceTaskIdsProvider(widget.userJourneyId));
+      ref.invalidate(journeyCompletedThisWeekTaskIdsProvider(widget.userJourneyId));
       ref.invalidate(allJourneyTasksWithTodayCompletionProvider(widget.userJourneyId));
       if (mounted) {
         await FlyingCoinsAnimation.show(

@@ -7,6 +7,8 @@
 set -e
 cd "$(dirname "$0")"
 
+python3 scripts/prepare_app_config.py
+
 echo "→ Flutter project: $(pwd)"
 echo "→ Checking devices..."
 flutter devices

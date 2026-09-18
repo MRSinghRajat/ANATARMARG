@@ -1,0 +1,43 @@
+appId: com.antarmarg.app
+---
+# Non-destructive half of flow 02: Switch journey must land on Journey mode,
+# not Read. Does NOT remove the journey (the signed-in simulator account is
+# a real user). Use 02_journey_switch_and_remove.yaml only on a disposable
+# test account.
+#
+# Precondition: at least one active journey (YOUR JOURNEYS / Continue Journey).
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- scrollUntilVisible:
+    element:
+      id: "continue_journey"
+    direction: DOWN
+    timeout: 20000
+- assertVisible:
+    id: "continue_journey"
+- tapOn:
+    id: "continue_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "journey_overflow_menu"
+- tapOn: "Switch journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- scrollUntilVisible:
+    element:
+      id: "continue_journey"
+    direction: DOWN
+    timeout: 15000
+- assertVisible:
+    id: "continue_journey"
+- assertVisible: "Journey"

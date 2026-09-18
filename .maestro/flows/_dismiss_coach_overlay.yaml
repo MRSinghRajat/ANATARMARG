@@ -1,0 +1,5 @@
+appId: com.antarmarg.app
+---
+- tapOn: "Let's go!"
+- waitForAnimationToEnd:
+    timeout: 4000

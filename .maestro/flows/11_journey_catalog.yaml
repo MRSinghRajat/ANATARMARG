@@ -1,0 +1,22 @@
+appId: com.antarmarg.app
+---
+# Journey catalog loads. Little Sadhu is a live free journey (AM-41).
+# AM-46 (Coming Soon on empty flagship journeys) is NOT applied on live as of
+# 2026-09-02 — hanuman-chalisa-40 / work-stress-21 / gayatri-sadhana-40 still
+# have is_coming_soon=false. Do not assert Coming Soon on those titles until
+# that data change lands; this flow only proves the catalog is reachable.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- scrollUntilVisible:
+    element: "Little Sadhu"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Little Sadhu"

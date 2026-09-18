@@ -23,6 +23,7 @@ import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/widgets/upgrade_pro_banner.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../journey/data/models/journey_models.dart';
+import '../../../journey/data/journey_discovery.dart';
 import '../../../journey/data/starter/starter_journey_fallback.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
 import '../widgets/deity_portrait.dart';
@@ -46,7 +47,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   bool _isPremium = false;
   StreamSubscription<bool>? _premiumSubscription;
   ProviderSubscription<int?>? _granthalayaPendingTabSubscription;
-  /// 0 = Read, 1 = Listen (Coming Soon), 2 = Journey
+  /// 0 = Read, 2 = Journey. Keep route index 2 for existing navigation intents.
   int _granthalayaTabIndex = 0;
   int _sacredLibraryCategoryIndex = 0;
 
@@ -109,8 +110,9 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ref.read(granthalayaPendingTabProvider.notifier).state = null;
-        setState(() => _granthalayaTabIndex = tab);
-        ref.read(granthalayaReadModeProvider.notifier).state = tab == 0;
+        final visibleTab = tab == 2 ? 2 : 0;
+        setState(() => _granthalayaTabIndex = visibleTab);
+        ref.read(granthalayaReadModeProvider.notifier).state = visibleTab == 0;
       });
     });
   }
@@ -240,9 +242,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             Expanded(
               child: _granthalayaTabIndex == 0
                   ? _buildReadContent()
-                  : _granthalayaTabIndex == 1
-                      ? _buildListenContent()
-                      : _buildJourneyContent(),
+                  : _buildJourneyContent(),
             ),
           ],
         ),
@@ -271,7 +271,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
           if (!_isPremium)
             const SliverToBoxAdapter(
               child: UpgradeProBanner(
-                message: 'Read all chapters, stories & audio',
+                message: 'Explore Pro reading and guided journeys',
               ),
             ),
           SliverToBoxAdapter(child: _buildLastViewedSection()),
@@ -300,35 +300,38 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         child: Row(
           children: [
             Expanded(
-              child: GestureDetector(
-                onTap: () => _selectGranthalayaTab(0),
-                child: _buildModeToggleSegment(
-                  index: 0,
-                  icon: Icons.auto_stories,
-                  label: 'Read',
-                  locked: false,
+              child: Semantics(
+                button: true,
+                selected: _granthalayaTabIndex == 0,
+                label: 'Read',
+                identifier: 'granthalaya_tab_read',
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => _selectGranthalayaTab(0),
+                  child: _buildModeToggleSegment(
+                    index: 0,
+                    icon: Icons.auto_stories,
+                    label: 'Read',
+                    locked: false,
+                  ),
                 ),
               ),
             ),
             Expanded(
-              child: GestureDetector(
-                onTap: () => _selectGranthalayaTab(1),
-                child: _buildModeToggleSegment(
-                  index: 1,
-                  icon: Icons.headphones,
-                  label: 'Listen',
-                  locked: false,
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _selectGranthalayaTab(2),
-                child: _buildModeToggleSegment(
-                  index: 2,
-                  icon: Icons.route,
-                  label: 'Journey',
-                  locked: false,
+              child: Semantics(
+                button: true,
+                selected: _granthalayaTabIndex == 2,
+                label: 'Journey',
+                identifier: 'granthalaya_tab_journey',
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => _selectGranthalayaTab(2),
+                  child: _buildModeToggleSegment(
+                    index: 2,
+                    icon: Icons.route,
+                    label: 'Journey',
+                    locked: false,
+                  ),
                 ),
               ),
             ),
@@ -491,20 +494,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               final types = typesAsync.valueOrNull ?? [];
               final memberCounts = countsAsync.valueOrNull ?? {};
               final pausedJourneys = allJourneys.where((j) => j.isPaused).toList();
-              // Hide deferred specialist programs from new-user discovery while preserving
-              // existing users’ progress (if they already have the journey, keep it visible).
-              const deferredSlugs = <String>{
-                'work-stress-21',
-                'gayatri-sadhana-40',
-              };
-              final userJourneyTypeIds = allJourneys.map((j) => j.journeyTypeId).toSet();
-              bool isDiscoverable(JourneyType t) =>
-                  !deferredSlugs.contains(t.slug) || userJourneyTypeIds.contains(t.id);
-
-              final startTypes =
-                  types.where((t) => !t.isComingSoon && isDiscoverable(t)).toList();
-              final comingSoonTypes =
-                  types.where((t) => t.isComingSoon && isDiscoverable(t)).toList();
+              final startTypes = types.where(isMvpJourneyCandidate).toList();
               final allUserJourneysForProgress = [...activeJourneys, ...pausedJourneys];
               final jp = allUserJourneysForProgress.length;
               if (jp > 1 && _journeyCarouselIndex >= jp) {
@@ -662,7 +652,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
-                      'POPULAR IN YOUR CIRCLE',
+                      localized(ref, en: 'EXPLORE JOURNEYS', hi: 'यात्राएँ देखें'),
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
@@ -672,9 +662,8 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  ...startTypes.asMap().entries.map((e) => _buildJourneyPopularCard(ref, e.value, memberCounts, isTrending: e.key == 0, showPill: e.key == 1)),
-                  ...comingSoonTypes.map((t) => _buildJourneyPopularCard(ref, t, memberCounts, isComingSoon: true)),
-                  if (types.isEmpty && !typesAsync.isLoading)
+                  ...startTypes.map((type) => _buildJourneyPopularCard(ref, type, memberCounts)),
+                  if (startTypes.isEmpty && !typesAsync.isLoading)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 48),
                       child: Center(
@@ -728,7 +717,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
         : (compact ? const EdgeInsets.all(12) : const EdgeInsets.all(20));
     return Padding(
       padding: outerPadding,
-      child: Material(
+      child: Semantics(
+        button: true,
+        label: 'Continue Journey',
+        identifier: 'continue_journey',
+        excludeSemantics: true,
+        child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => Navigator.of(context).pushNamed(AppRouter.journeyHome, arguments: {'userJourneyId': active.id}),
@@ -928,6 +922,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -2604,48 +2599,6 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     );
   }
 
-  /// Listen is a v1 placeholder until recorded chant/narration audio is uploaded.
-  /// Audio screens remain in the repo; this path no longer opens them.
-  Widget _buildListenContent() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.headphones,
-              size: 48,
-              color: AppColors.matteGold.withValues(alpha: 0.85),
-            ),
-            const SizedBox(height: 16),
-            _comingSoonBadge(),
-            const SizedBox(height: 16),
-            Text(
-              'Sacred audio is being recorded',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Chants, narrations, and guided listening will appear here once they are ready. Read and Journey are available now.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.zinc400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   static const _sacredCategories = [
     'All Texts',
     'Puranas',
@@ -3366,7 +3319,11 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                       builder: (_) => BookDetailScreen(book: book)),
                 ).then((_) => _loadBooks()),
         borderRadius: BorderRadius.circular(16),
-        child: Opacity(
+        child: Semantics(
+          identifier: 'sacred_library_book_${book.id}',
+          button: true,
+          label: book.name,
+          child: Opacity(
           opacity: isLocked ? 0.6 : 1.0,
           child: SizedBox(
             width: 200,
@@ -3462,6 +3419,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
@@ -3512,45 +3470,54 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               final deities = deitiesAsync.valueOrNull ?? [];
               if (deities.isEmpty) {
                 final items = _deitiesFallback;
-                return SizedBox(
-                  height: 130,
-                  child: ListView.separated(
+                return Semantics(
+                  identifier: 'explore_deities_carousel',
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    scrollDirection: Axis.horizontal,
-                    physics: const ClampingScrollPhysics(),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 32),
-                    itemBuilder: (_, i) {
-                      final (name, url) = items[i];
-                      // Known gap (low priority): fallback circles only render if
-                      // the live deities query fails. They have no detail payload.
-                      return _buildDeityCircle(name, url, slug: name, onTap: () {});
-                    },
+                    child: Wrap(
+                      spacing: 20,
+                      runSpacing: 20,
+                      children: [
+                        for (final (name, url) in items)
+                          SizedBox(
+                            width: 96,
+                            child: _buildDeityCircle(
+                              name,
+                              url,
+                              slug: name,
+                              onTap: () {},
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               }
-              return SizedBox(
-                height: 130,
-                child: ListView.separated(
+              return Semantics(
+                identifier: 'explore_deities_carousel',
+                child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: deities.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 32),
-                  itemBuilder: (_, i) {
-                    final d = deities[i];
-                    return _buildDeityCircle(
-                      d.name,
-                      d.imageUrl ?? '',
-                      slug: d.slug,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DeityDetailScreen(deity: d),
+                  child: Wrap(
+                    spacing: 20,
+                    runSpacing: 20,
+                    children: [
+                      for (final d in deities)
+                        SizedBox(
+                          width: 96,
+                          child: _buildDeityCircle(
+                            d.name,
+                            d.imageUrl ?? '',
+                            slug: d.slug,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DeityDetailScreen(deity: d),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
               );
             },
@@ -3561,7 +3528,12 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
   }
 
   Widget _buildDeityCircle(String name, String imageUrl, {String? slug, VoidCallback? onTap}) {
-    return Material(
+    return Semantics(
+      button: true,
+      label: name,
+      identifier: 'deity_${(slug ?? name).toLowerCase()}',
+      excludeSemantics: true,
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -3618,6 +3590,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -3761,7 +3734,11 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     final coverUrl = text.coverImageUrl;
     final hasCoverImage = coverUrl != null && coverUrl.isNotEmpty;
 
-    return GestureDetector(
+    return Semantics(
+      identifier: 'sacred_text_tile_${text.slug}',
+      button: true,
+      label: localized(ref, en: text.title, hi: text.titleHindi),
+      child: GestureDetector(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
@@ -3874,6 +3851,7 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -1,0 +1,31 @@
+appId: com.antarmarg.app
+---
+# AM-28: Airplane mode smoke — each tab should load without infinite spinner/crash.
+# iOS simulator: toggleAirplaneMode may be unsupported; if this flow fails at
+# toggle, run the manual checklist in .maestro/README.md (AM-28 section).
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- toggleAirplaneMode
+- waitForAnimationToEnd:
+    timeout: 2000
+- tapOn: "AANGAN"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "AANGAN"
+- tapOn: "ASHRAM"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "ASHRAM"
+- runFlow: _goto_granthalaya.yaml
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "GRANTHALYA"
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "PROFILE"
+- toggleAirplaneMode
+- waitForAnimationToEnd:
+    timeout: 3000

@@ -176,11 +176,52 @@ class SupabaseService {
       throw Exception('No identity token returned from Apple Sign In');
     }
 
-    return _client!.auth.signInWithIdToken(
+    final response = await _client!.auth.signInWithIdToken(
       provider: OAuthProvider.apple,
       idToken: idToken,
       nonce: rawNonce,
     );
+
+    // Await capture so failures are observable and a one-time code is not lost
+    // to app suspension. Sign-in itself still succeeds; deletion provides a
+    // native reauthentication recovery path if capture was unavailable.
+    final authCode = credential.authorizationCode;
+    appleTokenCapturePending = authCode.isEmpty || !await _storeAppleAuthCode(authCode);
+    return response;
+  }
+
+  bool appleTokenCapturePending = false;
+
+  Future<bool> _storeAppleAuthCode(String authorizationCode) async {
+    try {
+      final response = await _client!.functions.invoke(
+        'apple-auth-store',
+        body: {'authorizationCode': authorizationCode},
+      );
+      return response.data is Map && response.data['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Captures a new Apple code under the current Supabase session. This does
+  /// not sign in to another Supabase account; the backend verifies the Apple
+  /// subject matches this account before accepting its credential.
+  Future<bool> prepareAppleAccountDeletion() async {
+    if (_client?.auth.currentUser == null) return false;
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+        nonce: sha256.convert(utf8.encode(_generateNonce())).toString(),
+      );
+      final stored = credential.authorizationCode.isNotEmpty &&
+          await _storeAppleAuthCode(credential.authorizationCode);
+      appleTokenCapturePending = !stored;
+      return stored;
+    } catch (_) {
+      appleTokenCapturePending = true;
+      return false;
+    }
   }
 
   String _generateNonce([int length = 32]) {
@@ -197,6 +238,53 @@ class SupabaseService {
     await _client!.auth.signOut();
     if (!Platform.isIOS) {
       await GoogleSignIn().signOut();
+    }
+  }
+
+  Future<void> clearDeletedAccountSession() async {
+    appleTokenCapturePending = false;
+    await _client?.auth.signOut(scope: SignOutScope.local);
+  }
+
+  /// L06: permanently delete the signed-in user's account and data via the
+  /// `delete-account` Edge Function (supabase/functions/delete-account).
+  /// The function derives the user id from the caller's own session token —
+  /// nothing about which account to delete is ever passed from here, so
+  /// this can only ever delete the currently signed-in account.
+  ///
+  /// Does not sign out locally on success; the caller should still run its
+  /// usual sign-out/session-reset flow afterward (the deleted account no
+  /// longer has a valid server-side session, but local caches and
+  /// singletons still need clearing exactly as on a normal sign-out).
+  Future<AccountDeletionResult> deleteAccount() async {
+    if (_client == null) {
+      return const AccountDeletionResult(
+        success: false,
+        errorCode: 'not_initialized',
+      );
+    }
+    try {
+      final res = await _client!.functions.invoke('delete-account');
+      final data = res.data;
+      if (data is Map && data['ok'] == true) {
+        return AccountDeletionResult(success: true, pending: data['pending'] == true);
+      }
+      return AccountDeletionResult(
+        success: false,
+        partial: data is Map && data['partial'] == true,
+        errorCode: data is Map ? data['error']?.toString() : null,
+      );
+    } on FunctionException catch (e) {
+      final details = e.details;
+      return AccountDeletionResult(
+        success: false,
+        partial: details is Map && details['partial'] == true,
+        errorCode: details is Map
+            ? details['error']?.toString() ?? 'function_error_${e.status}'
+            : 'function_error_${e.status}',
+      );
+    } catch (e) {
+      return AccountDeletionResult(success: false, errorCode: e.toString());
     }
   }
 
@@ -240,4 +328,22 @@ class SupabaseService {
       return false;
     }
   }
+}
+
+/// Result of [SupabaseService.deleteAccount].
+class AccountDeletionResult {
+  final bool success;
+  /// True when app data was deleted but the auth account itself could not
+  /// be removed by an older backend; the caller offers a safe retry.
+  final bool partial;
+  /// A durable server job is completing deletion without requiring this session.
+  final bool pending;
+  final String? errorCode;
+
+  const AccountDeletionResult({
+    required this.success,
+    this.partial = false,
+    this.pending = false,
+    this.errorCode,
+  });
 }

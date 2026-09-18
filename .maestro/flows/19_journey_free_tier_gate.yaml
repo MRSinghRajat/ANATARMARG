@@ -1,0 +1,29 @@
+appId: com.antarmarg.app
+---
+# AM-41: Journey catalog reachable; free journeys listed; premium gated on tap.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Our Spiritual Circle"
+- scrollUntilVisible:
+    element: "Little Sadhu"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Little Sadhu"
+- scrollUntilVisible:
+    element: "Garbh Sanskar"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Garbh Sanskar"
+- tapOn: "Garbh Sanskar"
+- waitForAnimationToEnd:
+    timeout: 4000
+# Free tier: upgrade banner. Pro sim: setup wizard step indicator.
+- assertVisible:
+    text: ".*Upgrade to Pro.*|Step 1 of.*"

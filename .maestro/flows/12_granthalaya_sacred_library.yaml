@@ -1,0 +1,26 @@
+appId: com.antarmarg.app
+---
+# Granthalaya Read: Sacred Library section is on screen; opening a book
+# must not crash. Titles vary by catalog — "Sacred Library" is the stable hook.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_read"
+- waitForAnimationToEnd:
+    timeout: 4000
+- scrollUntilVisible:
+    element: "Sacred Library"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Sacred Library"
+- scrollUntilVisible:
+    element: "Sacred Stories"
+    direction: DOWN
+    timeout: 12000
+- assertVisible: "Sacred Stories"
+- assertNotVisible: "Test mythology"
+- assertNotVisible: "Test leela"
+- assertNotVisible: "Test moral"

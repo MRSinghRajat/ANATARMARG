@@ -363,7 +363,16 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: FilledButton(
+                    child: Semantics(
+                      identifier: _currentStep < visible.length - 1
+                          ? 'journey_setup_next'
+                          : 'start_journey_submit',
+                      button: true,
+                      label: _currentStep < visible.length - 1
+                          ? 'Next'
+                          : 'Start Journey',
+                      excludeSemantics: true,
+                      child: FilledButton(
                       onPressed: () {
                         if (typeStr == 'text' &&
                             !optional &&
@@ -399,6 +408,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                         style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                       ),
                     ),
+                    ),
                   ),
                 ),
               ],
@@ -421,7 +431,13 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
         final isSelected = current == value;
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Material(
+          child: Semantics(
+            button: true,
+            selected: isSelected,
+            label: optLabel ?? '',
+            identifier: 'journey_setup_${key}_${value ?? ''}',
+            excludeSemantics: true,
+            child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: () => setState(() {
@@ -489,6 +505,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                 ),
               ),
             ),
+            ),
           ),
         );
       }).toList(),
@@ -527,14 +544,19 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
   Widget _buildTextField(Map<String, dynamic> q, String key, bool optional) {
     final initial = _answers[key] as String? ?? '';
     _textControllers[key] ??= TextEditingController(text: initial);
-    return TextField(
-      controller: _textControllers[key],
-      style: GoogleFonts.inter(color: AppColors.zinc100, fontSize: 15),
-      cursorColor: JourneyAshramTheme.accent,
-      decoration: InputDecoration(
-        hintText: q['placeholder'] as String?,
+    return Semantics(
+      identifier: 'journey_setup_field_$key',
+      label: q['label'] as String? ?? key,
+      textField: true,
+      child: TextField(
+        controller: _textControllers[key],
+        style: GoogleFonts.inter(color: AppColors.zinc100, fontSize: 15),
+        cursorColor: JourneyAshramTheme.accent,
+        decoration: InputDecoration(
+          hintText: q['placeholder'] as String?,
+        ),
+        onChanged: (v) => setState(() => _answers[key] = v),
       ),
-      onChanged: (v) => setState(() => _answers[key] = v),
     );
   }
 
@@ -592,7 +614,12 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
             if (_isSubmitting)
               CircularProgressIndicator(color: JourneyAshramTheme.accent)
             else
-              SizedBox(
+              Semantics(
+                identifier: 'start_journey_submit',
+                button: true,
+                label: 'Start Journey',
+                excludeSemantics: true,
+                child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => _submit(context, journeyType),
@@ -604,6 +631,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
                   ),
                   child: Text('Start Journey', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
+              ),
               ),
           ],
         ),

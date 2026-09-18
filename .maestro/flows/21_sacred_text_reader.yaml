@@ -1,0 +1,38 @@
+appId: com.antarmarg.app
+---
+# AM-60: Sacred text tile → reader; HI/EN language toggle present.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_read"
+- waitForAnimationToEnd:
+    timeout: 5000
+- scrollUntilVisible:
+    element: "Sacred Texts"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Sacred Texts"
+- scrollUntilVisible:
+    element:
+      id: "sacred_text_tile_hanuman-chalisa"
+    direction: RIGHT
+    timeout: 20000
+- tapOn:
+    id: "sacred_text_tile_hanuman-chalisa"
+- waitForAnimationToEnd:
+    timeout: 6000
+- assertVisible:
+    id: "sacred_text_lang_hi"
+- assertVisible:
+    id: "sacred_text_lang_en"
+- tapOn:
+    id: "sacred_text_lang_en"
+- waitForAnimationToEnd:
+    timeout: 2000
+- tapOn:
+    id: "sacred_text_lang_hi"
+- waitForAnimationToEnd:
+    timeout: 2000

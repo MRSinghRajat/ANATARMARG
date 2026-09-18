@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish docs/CONFLUENCE_APP_OVERVIEW.md to Confluence Cloud.
 
-Required environment variables (add to .env or export before running):
+Required environment variables (add to .env.confluence or export before running):
   CONFLUENCE_BASE_URL   e.g. https://yourcompany.atlassian.net/wiki
   CONFLUENCE_EMAIL      Atlassian account email
   CONFLUENCE_API_TOKEN  API token from https://id.atlassian.com/manage-profile/security/api-tokens
@@ -31,7 +31,10 @@ SOURCE = ROOT / "docs" / "CONFLUENCE_APP_OVERVIEW.md"
 
 
 def _load_dotenv() -> None:
-    env_path = ROOT / ".env"
+    # Dedicated file, not the shared .env — this script's credentials have no
+    # reason to live in the same file as app/runtime secrets. Not bundled by
+    # Flutter (not in pubspec.yaml, not in ALLOWED_KEYS in prepare_app_config.py).
+    env_path = ROOT / ".env.confluence"
     if not env_path.is_file():
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():

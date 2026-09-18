@@ -1,0 +1,39 @@
+appId: com.antarmarg.app
+---
+# AM-32/60/58: Sacred Library book → detail → chapter reader opens.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_read"
+- waitForAnimationToEnd:
+    timeout: 5000
+- scrollUntilVisible:
+    element: "Sacred Library"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Sacred Library"
+- scrollUntilVisible:
+    element:
+      id: "sacred_library_book_bhagavad_gita"
+    direction: RIGHT
+    timeout: 20000
+- tapOn:
+    id: "sacred_library_book_bhagavad_gita"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Bhagavad Gita"
+- waitForAnimationToEnd:
+    timeout: 8000
+- scrollUntilVisible:
+    element: ".*Arjuna Vishada.*"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    text: ".*Arjuna Vishada.*"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible:
+    text: ".*Chapter 1.*|.*Verse.*|.*श्लोक.*"

@@ -1,0 +1,34 @@
+appId: com.antarmarg.app
+---
+# Ashram hub: Today's Path and Practice Tools open without crash.
+# Completing a task is account-stateful (coins); this flow only proves the
+# sections are reachable. Japa/Chants/Panchang are Pro-gated — opening them
+# must not crash (destination or upgrade prompt both OK).
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "ASHRAM"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "ASHRAM"
+- scrollUntilVisible:
+    element: ".*Today's Path.*"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: ".*Today's Path.*"
+- scrollUntilVisible:
+    element: "Practice Tools"
+    direction: DOWN
+    timeout: 12000
+- tapOn: "Practice Tools"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "Japa Counter"
+- assertVisible: "Chants"
+- assertVisible: "Panchang"
+- tapOn: "Japa Counter"
+- waitForAnimationToEnd:
+    timeout: 5000
+# Japa (or the upgrade prompt) is a pushed route — bottom nav is gone; don't
+# tap ASHRAM here. Getting this far without a crash is the assertion.

@@ -1,0 +1,15 @@
+appId: com.antarmarg.app
+---
+# AM-40: Listen must be Coming Soon, not the old sparse audio library.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_listen"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "COMING SOON"
+- assertVisible: "Sacred audio is being recorded"
+- assertNotVisible: "Now Playing"
