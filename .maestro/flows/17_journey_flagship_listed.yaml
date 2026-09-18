@@ -1,0 +1,30 @@
+appId: com.antarmarg.app
+---
+# Documents live AM-46 state. As of 2026-09-02 these three still have
+# is_coming_soon=false, so they appear as startable catalog cards, not
+# Coming Soon. This flow asserts they are listed. Flip the last asserts
+# to Coming Soon once the data fix lands.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 5000
+- scrollUntilVisible:
+    element: ".*Hanuman Chalisa.*"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: ".*Hanuman Chalisa.*"
+- scrollUntilVisible:
+    element: ".*Stress-Free.*"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: ".*Stress-Free.*"
+- scrollUntilVisible:
+    element: ".*Gayatri.*"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: ".*Gayatri.*"

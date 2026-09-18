@@ -3,13 +3,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PLIST="$ROOT/ios/Runner/GoogleService-Info.plist"
+# Xcode includes this file in the top-level iOS project group, not Runner/.
+PLIST="$ROOT/ios/GoogleService-Info.plist"
 EXPECTED_BUNDLE="com.antarmarg.app"
 
 if [[ ! -f "$PLIST" ]]; then
   echo "ERROR: Missing $PLIST"
   echo "Download GoogleService-Info.plist for bundle ID $EXPECTED_BUNDLE from Firebase Console"
-  echo "and place it at ios/Runner/GoogleService-Info.plist"
+  echo "and place it at ios/GoogleService-Info.plist"
   exit 1
 fi
 

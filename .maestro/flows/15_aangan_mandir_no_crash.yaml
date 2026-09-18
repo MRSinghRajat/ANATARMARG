@@ -1,0 +1,15 @@
+appId: com.antarmarg.app
+---
+# AM-25 regression: Mandir tab opens without crashing. START ARTI lives inside
+# the 3D WebView, so Maestro often cannot see that label — a crash or a blank
+# MANDIR header is the failure this flow can catch.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "AANGAN"
+- tapOn: "MANDIR"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "MANDIR"
+- assertVisible: "AANGAN"

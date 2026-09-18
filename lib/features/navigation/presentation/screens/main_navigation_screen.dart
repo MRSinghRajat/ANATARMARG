@@ -70,7 +70,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           ref.read(aanganPendingTabProvider.notifier).state = aTab;
         }
         if (nav == NavItem.books && gTab != null) {
-          ref.read(granthalayaPendingTabProvider.notifier).state = gTab;
+          // _navigateTo's setState only schedules a rebuild for the *next*
+          // frame, so BooksLibraryScreen (lazily built, unlike the always-on
+          // Aangan tab) may not exist yet — its pending-tab listener wouldn't
+          // be registered in time to see this value change. Defer one more
+          // frame so the tab is actually built first.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            ref.read(granthalayaPendingTabProvider.notifier).state = gTab;
+          });
         }
       });
     });
@@ -88,7 +96,6 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
         WidgetsBinding.instance.platformDispatcher.locale.countryCode;
     final region =
         (code != null && code.isNotEmpty) ? code : null;
-    AanganNotificationRealtimeService.instance.stop();
     AanganNotificationRealtimeService.instance.start(userRegion: region);
   }
 

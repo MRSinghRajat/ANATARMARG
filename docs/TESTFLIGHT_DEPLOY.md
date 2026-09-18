@@ -21,9 +21,9 @@ Do this **before** `flutter build ipa` or **Archive** in Xcode:
 
 | Check | What to do |
 |--------|------------|
-| **`.env` file** | Copy from `.env.example` to **`.env`** in the project root. `pubspec.yaml` lists `.env` as an asset—**the file must exist** for release builds to bundle it. |
+| **App configuration** | Keep source settings in local `.env`; run `python3 scripts/prepare_app_config.py` to generate ignored `.env.app`. Flutter bundles only `.env.app`. Use `scripts/build_testflight.sh` for configuration and artifact verification. |
 | **RevenueCat (iOS)** | Set **`REVENUECAT_API_KEY`** or **`REVENUECAT_API_KEY_IOS`** to RevenueCat’s **Apple public SDK key** (`appl_…`). **Do not** use Test Store keys (`test_…`) for TestFlight; the SDK rejects them in release. Keep **`REVENUECAT_USE_TEST_STORE=false`**. |
-| **Pro access** | **Default:** Pro only via RevenueCat (unset or `PREMIUM_GRANT_ALL=false`). For a beta where everyone should be Pro without paying, set **`PREMIUM_GRANT_ALL=true`** in `.env`. |
+| **Pro access** | Pro comes from RevenueCat. `PREMIUM_GRANT_ALL` is a debug/profile convenience only and is disabled in release; never use it to grant TestFlight access. |
 | **Build number** | Increase **`version`** in `pubspec.yaml` (the `+N` part) for **every** upload to App Store Connect. |
 | **Push notifications** | `ios/Runner/Runner.entitlements` uses **`aps-environment` = production** for release—correct for TestFlight and App Store. |
 
@@ -51,8 +51,7 @@ In the project root:
 
 ```bash
 cd /Users/mrsingh/Documents/VibeCoding/AnatarMarg/ANATARMARG
-flutter pub get
-flutter build ipa --obfuscate --split-debug-info=build/debug-info
+bash scripts/build_testflight.sh
 ```
 
 - This creates a **release** build and an **IPA**.

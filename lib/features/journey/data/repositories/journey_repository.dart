@@ -389,6 +389,41 @@ class JourneyRepository {
     }
   }
 
+  /// Task ids with a completion row on or after [sinceDate] (inclusive, local
+  /// calendar date) — or ever, if [sinceDate] is null. This reuses the
+  /// existing `user_journey_task_completions` history (one row per
+  /// user/task/day, per its own upsert conflict key) rather than requiring a
+  /// schema change: L04 needs completion *history*, not just today's set, to
+  /// enforce `once` (pass `sinceDate: null`) and `weekly` (pass
+  /// `sinceDate: JourneyLogic.weekStart(now)`) recurrence correctly.
+  Future<List<String>> getCompletedTaskIds(
+    String userId,
+    String userJourneyId, {
+    DateTime? sinceDate,
+  }) async {
+    try {
+      final builder = _supabase
+          .from('user_journey_task_completions')
+          .select('task_id')
+          .eq('user_id', userId)
+          .eq('user_journey_id', userJourneyId);
+      final res = sinceDate == null
+          ? await builder
+          : await builder.gte(
+              'completed_date',
+              DateTime(sinceDate.year, sinceDate.month, sinceDate.day)
+                  .toIso8601String()
+                  .split('T')
+                  .first,
+            );
+      final list = res as List;
+      return list.map((e) => e['task_id'] as String).toSet().toList();
+    } catch (e) {
+      print('JourneyRepository.getCompletedTaskIds: $e');
+      return [];
+    }
+  }
+
   Future<void> completeTask({
     required String userId,
     required String userJourneyId,

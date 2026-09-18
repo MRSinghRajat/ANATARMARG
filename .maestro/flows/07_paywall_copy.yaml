@@ -1,0 +1,19 @@
+appId: com.antarmarg.app
+---
+# AM-48/49: paywall (or customer center if already Pro) must not sell
+# Quests / 18 parvas, and must not use loot-tier rarity copy.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- tapOn:
+    text: ".*Plans.*|.*Active.*|Upgrade for Mandir.*"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertNotVisible: "Quests"
+- assertNotVisible: "18 parvas"
+- assertNotVisible: "rare, epic, and legendary"
+- assertNotVisible: "Legendary"

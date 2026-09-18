@@ -73,7 +73,6 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
           WidgetsBinding.instance.platformDispatcher.locale.countryCode;
       final region =
           (code != null && code.isNotEmpty) ? code : null;
-      AanganNotificationRealtimeService.instance.stop();
       AanganNotificationRealtimeService.instance.start(userRegion: region);
       if (_dailyReminders ||
           _prayerAlerts ||

@@ -1,0 +1,57 @@
+appId: com.antarmarg.app
+---
+# Creates one active "Little Sadhu" journey (free tier) for a signed-in test
+# account that doesn't have one yet — a precondition for
+# 02_journey_switch_and_remove.yaml. Not idempotent: re-running this while a
+# Little Sadhu journey is already active will hit the catalog card instead of
+# the 5-step setup wizard.
+#
+# Child's name: tap by Semantics id (journey_setup_field_child_name), not hint
+# label — inputText on hint text was flaky on this simulator.
+
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: _goto_granthalaya.yaml
+- tapOn:
+    id: "granthalaya_tab_journey"
+- waitForAnimationToEnd:
+    timeout: 4000
+- tapOn: "Little Sadhu"
+
+# Step 1/5 — Child's name
+- tapOn:
+    id: "journey_setup_field_child_name"
+- waitForAnimationToEnd:
+    timeout: 2000
+- eraseText
+- inputText: "Test Child"
+- assertVisible: "Test Child"
+- tapOn:
+    id: "journey_setup_next"
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Step 2/5 — Date of birth (native calendar picker, defaults to today)
+- tapOn: "Choose date"
+- tapOn: "OK"
+- tapOn:
+    id: "journey_setup_next"
+
+# Step 3/5 — Gender. Semantics added 2026-09-02; tap by visible label.
+- tapOn: "Girl"
+- tapOn:
+    id: "journey_setup_next"
+
+# Step 4/5 — Story language preference
+- tapOn: "English"
+- tapOn:
+    id: "journey_setup_next"
+
+# Step 5/5 — AppBar title is also "Start Journey"; tap the submit button by id.
+- tapOn:
+    id: "start_journey_submit"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "Spiritual Daily Tasks"

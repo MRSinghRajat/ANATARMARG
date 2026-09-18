@@ -1,0 +1,23 @@
+appId: com.antarmarg.app
+---
+# Profile: bookmarks + language settings reachable (AM-54 language lives here).
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- scrollUntilVisible:
+    element: ".*Bookmarks.*"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: ".*Bookmarks.*"
+- scrollUntilVisible:
+    element: "Language"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Language"
+- waitForAnimationToEnd:
+    timeout: 4000
+# Language settings is a pushed route — bottom nav is gone. Opening it is enough.

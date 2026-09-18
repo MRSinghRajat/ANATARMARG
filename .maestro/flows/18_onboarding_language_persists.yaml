@@ -1,0 +1,90 @@
+appId: com.antarmarg.app
+---
+# AM-54: onboarding English toggle persists into Profile language settings.
+# Clears app prefs and re-runs onboarding. Ends logged out via Skip for now.
+# Runtime ~3 min. Re-sign in before other signed-in flows.
+
+- launchApp:
+    clearState: true
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 10000
+- tapOn: "English"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Begin Your Journey"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Q1 age
+- tapOn: ".*26–35.*"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Continue"
+- waitForAnimationToEnd:
+    timeout: 3000
+# Q2 prayer (option tiles merge emoji + label in a11y tree)
+- tapOn: ".*Daily.*"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Continue"
+- waitForAnimationToEnd:
+    timeout: 3000
+# Q3 books (multi-select)
+- tapOn: "Bhagavad Gita"
+- tapOn: "Continue"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Continue"
+- waitForAnimationToEnd:
+    timeout: 3000
+# Q4 meditation
+- tapOn: ".*Sometimes.*"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Continue"
+- waitForAnimationToEnd:
+    timeout: 3000
+# Q5 goal
+- tapOn: ".*Inner peace.*"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "See Your Journey"
+- waitForAnimationToEnd:
+    timeout: 6000
+- scrollUntilVisible:
+    element: "Continue"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Continue"
+# Name
+- tapOn: "Enter your name"
+- inputText: "Maestro"
+- tapOn: "Welcome, Maestro!"
+# Summary
+- tapOn: "Let's Go!"
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "Skip for now"
+- waitForAnimationToEnd:
+    timeout: 8000
+# First-run overlays (streak coach + tab tour)
+- runFlow:
+    when:
+      visible: "Let's go!"
+    file: _dismiss_coach_overlay.yaml
+- runFlow:
+    when:
+      visible: "Skip tour"
+    file: _skip_app_tour.yaml
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- scrollUntilVisible:
+    element: "Language"
+    direction: DOWN
+    timeout: 12000
+- tapOn: "Language"
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertVisible: ".*Hinglish.*"

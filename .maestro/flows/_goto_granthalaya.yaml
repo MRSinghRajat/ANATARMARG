@@ -1,0 +1,10 @@
+appId: com.antarmarg.app
+---
+# Shared: get onto Granthalaya. First tap can no-op (already there) or miss
+# (IndexedStack still showing the previous tab). A second tap is cheap.
+- tapOn: "GRANTHALYA"
+- waitForAnimationToEnd:
+    timeout: 4000
+- tapOn: "GRANTHALYA"
+- waitForAnimationToEnd:
+    timeout: 4000

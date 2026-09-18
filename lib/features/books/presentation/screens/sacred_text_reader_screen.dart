@@ -166,6 +166,7 @@ class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
           Row(
             children: [
               IconButton(
+                tooltip: localized(ref, en: 'Back', hi: 'वापस'),
                 icon: const Icon(Icons.arrow_back_ios_new,
                     color: _gold, size: 20),
                 onPressed: () => Navigator.pop(context),
@@ -188,6 +189,9 @@ class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
                 ),
               ),
               IconButton(
+                tooltip: _isBookmarked
+                    ? localized(ref, en: 'Remove bookmark', hi: 'बुकमार्क हटाएँ')
+                    : localized(ref, en: 'Add bookmark', hi: 'बुकमार्क जोड़ें'),
                 icon: Icon(
                   _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
                   color: _gold,
@@ -196,6 +200,7 @@ class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
                 onPressed: _toggleBookmark,
               ),
               IconButton(
+                tooltip: localized(ref, en: 'Reading settings', hi: 'पढ़ने की सेटिंग'),
                 icon: const Icon(Icons.settings_outlined, color: _gold, size: 22),
                 onPressed: () => _showReaderSettings(context),
               ),
@@ -256,7 +261,13 @@ class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
   }
 
   Widget _buildLangButton(String label, bool active) {
-    return GestureDetector(
+    return Semantics(
+      identifier: 'sacred_text_lang_${label.toLowerCase()}',
+      button: true,
+      label: label,
+      selected: active,
+      excludeSemantics: true,
+      child: GestureDetector(
       onTap: () => setState(() => _overrideHindi = label == 'HI'),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -273,6 +284,7 @@ class _SacredTextReaderScreenState extends ConsumerState<SacredTextReaderScreen>
             color: active ? _gold : Colors.white38,
           ),
         ),
+      ),
       ),
     );
   }

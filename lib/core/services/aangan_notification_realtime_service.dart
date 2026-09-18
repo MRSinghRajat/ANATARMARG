@@ -20,10 +20,13 @@ class AanganNotificationRealtimeService {
 
   RealtimeChannel? _channel;
   bool _started = false;
+  String? _userRegion;
 
   void start({String? userRegion}) {
+    if (userRegion != null) _userRegion = userRegion;
     final client = SupabaseService().client;
     if (client == null || _started) return;
+    _started = true;
 
     try {
       _channel = client.channel('public_aangan_notifications');
@@ -31,14 +34,15 @@ class AanganNotificationRealtimeService {
         event: PostgresChangeEvent.insert,
         schema: 'public',
         table: SupabaseConfig.aanganNotificationsTable,
-        callback: (payload) => _onInsert(payload, userRegion: userRegion),
+        callback: (payload) => _onInsert(payload),
       );
       _channel!.subscribe();
-      _started = true;
       if (kDebugMode) {
         print('AanganNotificationRealtimeService: subscribed to inserts');
       }
     } catch (e) {
+      _started = false;
+      _channel = null;
       if (kDebugMode) {
         print('AanganNotificationRealtimeService subscribe failed: $e');
       }
@@ -53,10 +57,7 @@ class AanganNotificationRealtimeService {
     _started = false;
   }
 
-  Future<void> _onInsert(
-    PostgresChangePayload payload, {
-    String? userRegion,
-  }) async {
+  Future<void> _onInsert(PostgresChangePayload payload) async {
     try {
       final row = payload.newRecord;
       if (row.isEmpty) return;
@@ -65,7 +66,7 @@ class AanganNotificationRealtimeService {
       if (!SupabaseAanganNotificationDataSource.rowMatchesUser(
         row,
         userId: userId,
-        userRegion: userRegion,
+        userRegion: _userRegion,
       )) {
         return;
       }

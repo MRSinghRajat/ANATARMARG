@@ -1,0 +1,18 @@
+appId: com.antarmarg.app
+---
+# Smoke test: app launches and all 4 bottom-nav tabs are reachable with no crash.
+- launchApp:
+    stopApp: false
+- assertVisible: "AANGAN"
+
+- tapOn: "ASHRAM"
+- assertVisible: "ASHRAM"
+
+- tapOn: "GRANTHALYA"
+- assertVisible: "GRANTHALYA"
+
+- tapOn: "PROFILE"
+- assertVisible: "PROFILE"
+
+- tapOn: "AANGAN"
+- assertVisible: "AANGAN"

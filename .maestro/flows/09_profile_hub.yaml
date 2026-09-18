@@ -1,0 +1,16 @@
+appId: com.antarmarg.app
+---
+# Profile hub: streak/settings area reachable; bookmarks section present.
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "PROFILE"
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertVisible: "PROFILE"
+- scrollUntilVisible:
+    element: "Settings"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "Settings"
