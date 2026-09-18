@@ -23,6 +23,7 @@ import '../../../../core/utils/profile_pro_upgrade_nav.dart';
 import '../../../../shared/widgets/upgrade_pro_banner.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../journey/data/models/journey_models.dart';
+import '../../../journey/data/starter/starter_journey_fallback.dart';
 import '../../../journey/presentation/providers/journey_providers.dart';
 import '../widgets/deity_portrait.dart';
 import '../../../navigation/presentation/providers/main_navigation_intent_provider.dart';
@@ -142,6 +143,14 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
     }
     final uid = ref.read(currentUserIdProvider);
     if (uid == null) {
+      // Allow the free starter to be tested without authentication when Supabase
+      // credentials are missing (offline/simulator runs).
+      if (t.slug == kStarterJourneySlug) {
+        if (!mounted) return;
+        Navigator.of(context)
+            .pushNamed(AppRouter.journeySetup, arguments: {'slug': t.slug});
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please sign in')),
@@ -482,8 +491,20 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
               final types = typesAsync.valueOrNull ?? [];
               final memberCounts = countsAsync.valueOrNull ?? {};
               final pausedJourneys = allJourneys.where((j) => j.isPaused).toList();
-              final startTypes = types.where((t) => !t.isComingSoon).toList();
-              final comingSoonTypes = types.where((t) => t.isComingSoon).toList();
+              // Hide deferred specialist programs from new-user discovery while preserving
+              // existing users’ progress (if they already have the journey, keep it visible).
+              const deferredSlugs = <String>{
+                'work-stress-21',
+                'gayatri-sadhana-40',
+              };
+              final userJourneyTypeIds = allJourneys.map((j) => j.journeyTypeId).toSet();
+              bool isDiscoverable(JourneyType t) =>
+                  !deferredSlugs.contains(t.slug) || userJourneyTypeIds.contains(t.id);
+
+              final startTypes =
+                  types.where((t) => !t.isComingSoon && isDiscoverable(t)).toList();
+              final comingSoonTypes =
+                  types.where((t) => t.isComingSoon && isDiscoverable(t)).toList();
               final allUserJourneysForProgress = [...activeJourneys, ...pausedJourneys];
               final jp = allUserJourneysForProgress.length;
               if (jp > 1 && _journeyCarouselIndex >= jp) {

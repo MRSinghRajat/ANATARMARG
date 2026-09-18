@@ -8,6 +8,7 @@ import '../../../profile/presentation/providers/language_provider.dart';
 import '../../data/models/journey_models.dart';
 import '../providers/journey_providers.dart';
 import '../theme/journey_ashram_theme.dart';
+import '../../data/starter/starter_journey_fallback.dart';
 
 /// Dynamic setup flow from journey_types.setup_schema. On complete: start journey and navigate to Journey Home.
 class JourneySetupScreen extends ConsumerStatefulWidget {
@@ -612,8 +613,13 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
 
   Future<void> _submit(BuildContext context, JourneyType journeyType) async {
     final uid = ref.read(currentUserIdProvider);
-    if (uid == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please sign in')));
+    final isStarter = journeyType.slug == kStarterJourneySlug;
+    final userId = uid ?? (isStarter ? 'guest' : null);
+    if (userId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Please sign in')));
+      }
       return;
     }
     setState(() => _isSubmitting = true);
@@ -639,7 +645,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
       metadata['mode'] = 'planning';
     }
     final existing = await repo.getActiveOrPausedJourneyForType(
-      userId: uid,
+      userId: userId,
       journeyTypeId: journeyType.id,
     );
     if (existing != null) {
@@ -661,7 +667,7 @@ class _JourneySetupScreenState extends ConsumerState<JourneySetupScreen> {
     }
     try {
       final userJourney = await repo.startJourney(
-        userId: uid,
+        userId: userId,
         journeyTypeId: journeyType.id,
         metadata: metadata,
         startDate: startDate,

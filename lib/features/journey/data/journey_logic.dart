@@ -48,6 +48,14 @@ class JourneyLogic {
         return (currentDay: days, totalDays: 365);
       }
     }
+    final durationDays = (meta['duration_days'] as num?)?.toInt();
+    if (durationDays != null && durationDays > 0 && uj.startDate != null) {
+      final day = DateTime.now()
+          .difference(uj.startDate!)
+          .inDays
+          .clamp(0, durationDays);
+      return (currentDay: day, totalDays: durationDays);
+    }
     if (uj.startDate != null) {
       final day = DateTime.now().difference(uj.startDate!).inDays.clamp(0, 99999);
       return (currentDay: day, totalDays: 90);

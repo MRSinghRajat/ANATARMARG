@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/services/supabase_service.dart';
 import '../../data/journey_logic.dart';
 import '../../data/models/journey_models.dart';
 import '../../data/repositories/journey_repository.dart';
@@ -18,7 +18,7 @@ final journeyBrowsePhaseIdProvider =
 // ─── Auth (current user id) ─────────────────────────────────────────────────
 
 final currentUserIdProvider = Provider<String?>((ref) {
-  return Supabase.instance.client.auth.currentUser?.id;
+  return SupabaseService().client?.auth.currentUser?.id;
 });
 
 // ─── Catalog ────────────────────────────────────────────────────────────────
