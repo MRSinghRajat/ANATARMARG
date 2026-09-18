@@ -7,6 +7,26 @@ import 'package:purchases_flutter/purchases_flutter.dart' hide PurchaseResult;
 
 import 'app_analytics.dart';
 
+enum RevenueCatIdentityState {
+  /// SDK not configured / state unknown (e.g. init failed).
+  unknown,
+
+  /// Supabase user is signed out (guest). RevenueCat may still have an anonymous
+  /// appUserID, but the app treats premium as unavailable until a signed-in
+  /// identity is synchronized.
+  guest,
+
+  /// A sign-in / sign-out transition is in-flight.
+  transitioning,
+
+  /// RevenueCat is identified to the signed-in Supabase user id.
+  synced,
+
+  /// The last requested identity operation failed. Premium stays fail-closed
+  /// until a later successful identity operation.
+  failed,
+}
+
 /// RevenueCat service for managing in-app purchases and subscriptions.
 /// 
 /// This service handles:
@@ -36,6 +56,61 @@ class RevenueCatService {
   // Cached offerings
   Offerings? _offerings;
   Offerings? get offerings => _offerings;
+
+  // ─── L05: Supabase identity sync & serialization ─────────────────────────
+
+  /// Last Supabase user id successfully identified to the RevenueCat SDK.
+  String? _lastSyncedUserId;
+
+  /// A userId requested before [initialize] finished, applied once it does.
+  String? _pendingIdentitySync;
+
+  /// Identity operations are serialized so a delayed result for user A can never
+  /// overwrite user B's state. Each request increments [_identityToken]; only
+  /// the latest token is allowed to apply results.
+  int _identityToken = 0;
+  int _latestRequestedIdentityToken = 0;
+  Future<void> _identityChain = Future<void>.value();
+
+  RevenueCatIdentityState _identityState = RevenueCatIdentityState.unknown;
+  RevenueCatIdentityState get identityState => _identityState;
+
+  bool _customerInfoListenerRegistered = false;
+
+  /// Returns the last successfully synchronized Supabase user id, if any.
+  String? get syncedUserId => _lastSyncedUserId;
+
+  bool get hasSyncedUser => _identityState == RevenueCatIdentityState.synced && _lastSyncedUserId != null;
+
+  /// While transitioning or after a failed logout/identify, premium must remain
+  /// fail-closed.
+  bool get _shouldSuppressPremium =>
+      _identityState != RevenueCatIdentityState.synced;
+
+  void _failClosedClearCaches() {
+    _customerInfo = null;
+    _subscriptionStatusController.add(false);
+  }
+
+  Future<T?> _enqueueIdentityOp<T>(
+    int token,
+    Future<T> Function() op,
+  ) {
+    final completer = Completer<T?>();
+    _identityChain = _identityChain.then((_) async {
+      if (token != _latestRequestedIdentityToken) {
+        completer.complete(null);
+        return;
+      }
+      try {
+        final res = await op();
+        completer.complete(res);
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
 
   // Configuration
   String get _entitlementId => dotenv.env['REVENUECAT_ENTITLEMENT_ID'] ?? 'Antar marg Pro';
@@ -134,6 +209,69 @@ class RevenueCatService {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
+  /// Request RevenueCat identity sync to a signed-in Supabase user id.
+  ///
+  /// - `null` / empty is a no-op (guest state is managed via [logOut]).
+  /// - Only marks the user synchronized after `Purchases.logIn` succeeds.
+  /// - Operations are serialized; stale results are ignored.
+  /// - On failure, premium remains suppressed (fail-closed) until a later success.
+  Future<bool> syncIdentity(String? userId) async {
+    final id = userId?.trim();
+    if (id == null || id.isEmpty) return false;
+
+    if (!_isInitialized) {
+      _pendingIdentitySync = id;
+      return false;
+    }
+
+    if (_identityState == RevenueCatIdentityState.synced && _lastSyncedUserId == id) {
+      return true;
+    }
+
+    final token = ++_identityToken;
+    _latestRequestedIdentityToken = token;
+    _pendingIdentitySync = null;
+
+    final res = await _enqueueIdentityOp<bool>(token, () async {
+      // Skip if superseded before start.
+      if (token != _latestRequestedIdentityToken) return false;
+
+      _identityState = RevenueCatIdentityState.transitioning;
+      _failClosedClearCaches();
+
+      try {
+        debugPrint('RevenueCat: logIn (syncIdentity) userId=$id');
+        final loginResult = await Purchases.logIn(id);
+
+        // If a newer identity op was requested mid-flight, do not apply results.
+        if (token != _latestRequestedIdentityToken) return false;
+
+        _lastSyncedUserId = id;
+        _identityState = RevenueCatIdentityState.synced;
+
+        final info = loginResult.customerInfo;
+        _applyCustomerInfo(info);
+        return true;
+      } catch (e) {
+        if (token == _latestRequestedIdentityToken) {
+          _lastSyncedUserId = null;
+          _identityState = RevenueCatIdentityState.failed;
+          _failClosedClearCaches();
+        }
+        debugPrint('RevenueCat: syncIdentity failed: $e');
+        return false;
+      } finally {
+        if (token == _latestRequestedIdentityToken &&
+            _identityState == RevenueCatIdentityState.transitioning) {
+          // Conservative fallback: if we didn't set synced/failed explicitly.
+          _identityState = RevenueCatIdentityState.failed;
+        }
+      }
+    });
+
+    return res ?? false;
+  }
+
   /// Initialize RevenueCat SDK.
   /// Call this once during app startup.
   Future<void> initialize() async {
@@ -164,6 +302,7 @@ class RevenueCatService {
       
       // Listen to customer info updates
       Purchases.addCustomerInfoUpdateListener(_onCustomerInfoUpdated);
+      _customerInfoListenerRegistered = true;
 
       // Fetch initial customer info
       await refreshCustomerInfo();
@@ -172,8 +311,15 @@ class RevenueCatService {
       await refreshOfferings();
 
       _isInitialized = true;
+      _identityState = RevenueCatIdentityState.guest;
       debugPrint('RevenueCat: Initialized successfully');
       debugPrint('RevenueCat: Entitlement ID: $_entitlementId');
+
+      final pending = _pendingIdentitySync;
+      if (pending != null && pending.trim().isNotEmpty) {
+        _pendingIdentitySync = null;
+        await syncIdentity(pending);
+      }
     } catch (e) {
       debugPrint('RevenueCat: Initialization failed: $e');
       rethrow;
@@ -182,6 +328,15 @@ class RevenueCatService {
 
   /// Callback when customer info is updated
   void _onCustomerInfoUpdated(CustomerInfo info) {
+    // Ignore updates while the app is not confidently synced to a signed-in user.
+    if (_shouldSuppressPremium) {
+      _failClosedClearCaches();
+      return;
+    }
+    _applyCustomerInfo(info);
+  }
+
+  void _applyCustomerInfo(CustomerInfo info) {
     _customerInfo = info;
     _customerInfoController.add(info);
     
@@ -210,9 +365,16 @@ class RevenueCatService {
       return false;
     }
 
+    final tokenAtStart = _latestRequestedIdentityToken;
+    if (_shouldSuppressPremium) return false;
+
     try {
       final info = await Purchases.getCustomerInfo();
-      _customerInfo = info;
+      if (tokenAtStart != _latestRequestedIdentityToken || _shouldSuppressPremium) {
+        _failClosedClearCaches();
+        return false;
+      }
+      _applyCustomerInfo(info);
       return _checkAnyPaid(info);
     } catch (e) {
       debugPrint('RevenueCat: Error checking premium status: $e');
@@ -224,11 +386,20 @@ class RevenueCatService {
   Future<CustomerInfo?> refreshCustomerInfo() async {
     if (!_isInitialized && _resolvedApiKey.isEmpty) return null;
 
+    final tokenAtStart = _latestRequestedIdentityToken;
+    if (_shouldSuppressPremium) {
+      _failClosedClearCaches();
+      return null;
+    }
+
     try {
-      _customerInfo = await Purchases.getCustomerInfo();
-      _customerInfoController.add(_customerInfo!);
-      _subscriptionStatusController.add(_checkAnyPaid(_customerInfo!));
-      return _customerInfo;
+      final info = await Purchases.getCustomerInfo();
+      if (tokenAtStart != _latestRequestedIdentityToken || _shouldSuppressPremium) {
+        _failClosedClearCaches();
+        return null;
+      }
+      _applyCustomerInfo(info);
+      return info;
     } catch (e) {
       debugPrint('RevenueCat: Error refreshing customer info: $e');
       return null;
@@ -303,23 +474,38 @@ class RevenueCatService {
     if (!_isInitialized) {
       throw Exception('RevenueCat not initialized');
     }
+    final tokenAtStart = _latestRequestedIdentityToken;
+    if (_shouldSuppressPremium) {
+      return SubscriptionPurchaseOutcome(
+        success: false,
+        errorMessage: 'Please sign in to purchase.',
+      );
+    }
 
     try {
       debugPrint('RevenueCat: Purchasing package: ${package.identifier}');
 
-      final sdkResult = await Purchases.purchase(PurchaseParams.package(package));
-      _customerInfo = sdkResult.customerInfo;
-      _customerInfoController.add(_customerInfo!);
+      final sdkResult =
+          await Purchases.purchase(PurchaseParams.package(package));
+      final info = sdkResult.customerInfo;
+      if (tokenAtStart != _latestRequestedIdentityToken || _shouldSuppressPremium) {
+        _failClosedClearCaches();
+        return SubscriptionPurchaseOutcome(
+          success: false,
+          errorMessage:
+              'Purchase finished but account changed. Please sign in again and restore purchases.',
+        );
+      }
+      _applyCustomerInfo(info);
 
-      final isNowPremium = _checkAnyPaid(_customerInfo!);
-      _subscriptionStatusController.add(isNowPremium);
+      final isNowPremium = _checkAnyPaid(info);
 
       debugPrint('RevenueCat: Purchase successful. Premium: $isNowPremium');
       await AppAnalytics.logPurchaseCompleted(productId: package.identifier);
 
       return SubscriptionPurchaseOutcome(
         success: true,
-        customerInfo: _customerInfo!,
+        customerInfo: info,
         isPremium: isNowPremium,
       );
     } on PlatformException catch (e) {
@@ -365,16 +551,30 @@ class RevenueCatService {
     if (!_isInitialized) {
       throw Exception('RevenueCat not initialized');
     }
+    final tokenAtStart = _latestRequestedIdentityToken;
+    if (_shouldSuppressPremium) {
+      return SubscriptionPurchaseOutcome(
+        success: false,
+        errorMessage: 'Please sign in to purchase.',
+      );
+    }
     try {
       debugPrint('RevenueCat: Purchasing store product: ${product.identifier}');
       final sdkResult = await Purchases.purchase(PurchaseParams.storeProduct(product));
-      _customerInfo = sdkResult.customerInfo;
-      _customerInfoController.add(_customerInfo!);
-      final isNowPremium = _checkAnyPaid(_customerInfo!);
-      _subscriptionStatusController.add(isNowPremium);
+      final info = sdkResult.customerInfo;
+      if (tokenAtStart != _latestRequestedIdentityToken || _shouldSuppressPremium) {
+        _failClosedClearCaches();
+        return SubscriptionPurchaseOutcome(
+          success: false,
+          errorMessage:
+              'Purchase finished but account changed. Please sign in again and restore purchases.',
+        );
+      }
+      _applyCustomerInfo(info);
+      final isNowPremium = _checkAnyPaid(info);
       return SubscriptionPurchaseOutcome(
         success: true,
-        customerInfo: _customerInfo!,
+        customerInfo: info,
         isPremium: isNowPremium,
       );
     } on PlatformException catch (e) {
@@ -404,21 +604,36 @@ class RevenueCatService {
     if (!_isInitialized) {
       throw Exception('RevenueCat not initialized');
     }
+    final tokenAtStart = _latestRequestedIdentityToken;
+    if (_shouldSuppressPremium) {
+      return RestoreResult(
+        success: false,
+        restoredPurchases: false,
+        errorMessage: 'Please sign in to restore purchases.',
+      );
+    }
 
     try {
       debugPrint('RevenueCat: Restoring purchases...');
       
-      _customerInfo = await Purchases.restorePurchases();
-      _customerInfoController.add(_customerInfo!);
-      
-      final isNowPremium = _checkAnyPaid(_customerInfo!);
-      _subscriptionStatusController.add(isNowPremium);
+      final info = await Purchases.restorePurchases();
+      if (tokenAtStart != _latestRequestedIdentityToken || _shouldSuppressPremium) {
+        _failClosedClearCaches();
+        return RestoreResult(
+          success: false,
+          restoredPurchases: false,
+          errorMessage:
+              'Restore finished but account changed. Please sign in again and retry.',
+        );
+      }
+      _applyCustomerInfo(info);
+      final isNowPremium = _checkAnyPaid(info);
       
       debugPrint('RevenueCat: Restore successful. Premium: $isNowPremium');
       
       return RestoreResult(
         success: true,
-        customerInfo: _customerInfo!,
+        customerInfo: info,
         isPremium: isNowPremium,
         restoredPurchases: isNowPremium,
       );
@@ -437,38 +652,56 @@ class RevenueCatService {
     }
   }
 
-  /// Identify user with a custom app user ID
-  /// Call this after user logs in with your auth system
+  /// Low-level SDK identity call (kept for backwards compatibility).
+  ///
+  /// Prefer [syncIdentity] so results are serialized and fail-closed correctly.
   Future<CustomerInfo?> identifyUser(String userId) async {
-    if (!_isInitialized) return null;
-
-    try {
-      debugPrint('RevenueCat: Identifying user: $userId');
-      final LogInResult loginResult = await Purchases.logIn(userId);
-      _customerInfo = loginResult.customerInfo;
-      _customerInfoController.add(_customerInfo!);
-      _subscriptionStatusController.add(_checkAnyPaid(_customerInfo!));
-      return _customerInfo;
-    } catch (e) {
-      debugPrint('RevenueCat: Error identifying user: $e');
-      return null;
-    }
+    final ok = await syncIdentity(userId);
+    return ok ? _customerInfo : null;
   }
 
   /// Log out current user (switch to anonymous)
   Future<CustomerInfo?> logOut() async {
-    if (!_isInitialized) return null;
-
-    try {
-      debugPrint('RevenueCat: Logging out user');
-      _customerInfo = await Purchases.logOut();
-      _customerInfoController.add(_customerInfo!);
-      _subscriptionStatusController.add(_checkAnyPaid(_customerInfo!));
-      return _customerInfo;
-    } catch (e) {
-      debugPrint('RevenueCat: Error logging out: $e');
+    if (!_isInitialized) {
+      _pendingIdentitySync = null;
+      _lastSyncedUserId = null;
+      _identityState = RevenueCatIdentityState.guest;
+      _failClosedClearCaches();
       return null;
     }
+
+    final token = ++_identityToken;
+    _latestRequestedIdentityToken = token;
+    _pendingIdentitySync = null;
+
+    final res = await _enqueueIdentityOp<CustomerInfo?>(token, () async {
+      if (token != _latestRequestedIdentityToken) return null;
+
+      _identityState = RevenueCatIdentityState.transitioning;
+      _lastSyncedUserId = null;
+      _failClosedClearCaches();
+
+      try {
+        debugPrint('RevenueCat: logOut requested');
+        final info = await Purchases.logOut();
+        if (token != _latestRequestedIdentityToken) return null;
+
+        // Even if RevenueCat returns an anonymous customerInfo, the app treats
+        // guest as non-premium until a signed-in identity is synced.
+        _identityState = RevenueCatIdentityState.guest;
+        _failClosedClearCaches();
+        return info;
+      } catch (e) {
+        if (token == _latestRequestedIdentityToken) {
+          _identityState = RevenueCatIdentityState.failed;
+          _failClosedClearCaches();
+        }
+        debugPrint('RevenueCat: logOut failed: $e');
+        return null;
+      }
+    });
+
+    return res;
   }
 
   /// Get the current app user ID
@@ -531,6 +764,7 @@ class RevenueCatService {
   /// Sync local purchases with RevenueCat (e.g. after redeeming a code outside the app).
   Future<CustomerInfo?> syncPurchases() async {
     if (!_isInitialized && _resolvedApiKey.isEmpty) return null;
+    if (_shouldSuppressPremium) return null;
     try {
       await Purchases.syncPurchases();
       return await refreshCustomerInfo();
@@ -572,6 +806,10 @@ class RevenueCatService {
 
   /// Dispose resources
   void dispose() {
+    if (_customerInfoListenerRegistered) {
+      Purchases.removeCustomerInfoUpdateListener(_onCustomerInfoUpdated);
+      _customerInfoListenerRegistered = false;
+    }
     _subscriptionStatusController.close();
     _customerInfoController.close();
     _instance = null;

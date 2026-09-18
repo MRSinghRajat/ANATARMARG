@@ -7,6 +7,7 @@ import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../../../../core/services/app_analytics.dart';
 import '../../../../core/services/revenuecat_service.dart';
+import '../../../../core/services/supabase_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_router.dart';
 import '../../../../shared/services/premium_service.dart';
@@ -90,6 +91,7 @@ class PaywallScreen extends StatefulWidget {
   static Future<bool?> showRevenueCatPaywallOrCustom(BuildContext context) async {
     await AppAnalytics.logPaywallViewed(source: 'revenuecat');
     final rc = RevenueCatService.instance;
+    final supabaseUserId = SupabaseService().currentUserId;
     if (!rc.isInitialized) {
       try {
         await rc.initialize();
@@ -98,10 +100,26 @@ class PaywallScreen extends StatefulWidget {
       }
     }
 
-    if (rc.isInitialized) {
+    // L05: do not allow purchases/restores on anonymous RevenueCat identities.
+    // For guests, show the custom paywall UI which prompts sign-in.
+    if (supabaseUserId != null && supabaseUserId.isNotEmpty && rc.isInitialized) {
       try {
         await rc.refreshOfferings();
         final offering = rc.effectiveOffering;
+        final hasLifetime = (offering?.availablePackages ?? <Package>[])
+            .any((p) => p.packageType == PackageType.lifetime || p.identifier.toLowerCase().contains('lifetime'));
+        if (hasLifetime) {
+          debugPrint('Paywall: Offering contains lifetime package; using custom paywall UI');
+          if (!context.mounted) return false;
+          return showAsBottomSheet(context);
+        }
+
+        final ok = await rc.syncIdentity(supabaseUserId);
+        if (!ok) {
+          debugPrint('Paywall: RevenueCat identity not synced; using custom paywall UI');
+          if (!context.mounted) return false;
+          return showAsBottomSheet(context);
+        }
         debugPrint(
           'Paywall: RevenueCat native UI — offering="${offering?.identifier}" '
           'packages=${offering?.availablePackages.length ?? 0}',
@@ -231,6 +249,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
       final plans = packages
           .map((p) => SubscriptionPlan.fromPackage(p))
+          .where((p) => p.type != SubscriptionPlanType.lifetime)
           .toList();
 
       // Sort: monthly, yearly, lifetime
@@ -238,7 +257,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
         const order = {
           SubscriptionPlanType.monthly: 0,
           SubscriptionPlanType.yearly: 1,
-          SubscriptionPlanType.lifetime: 2,
         };
         return order[a.type]!.compareTo(order[b.type]!);
       });
@@ -278,9 +296,22 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Future<void> _purchase() async {
     if (_selectedPlan?.package == null) return;
 
+    final supabaseUserId = SupabaseService().currentUserId;
+    if (supabaseUserId == null || supabaseUserId.isEmpty) {
+      _showError('Please sign in to purchase.');
+      if (!mounted) return;
+      Navigator.of(context).pushNamed(AppRouter.login);
+      return;
+    }
+
     setState(() => _isPurchasing = true);
 
     try {
+      final ok = await _revenueCat.syncIdentity(supabaseUserId);
+      if (!ok) {
+        _showError('Could not sync your account. Please try again.');
+        return;
+      }
       final result = await _revenueCat.purchasePackage(_selectedPlan!.package!);
       
       if (result.success && result.isPremium) {
@@ -311,6 +342,17 @@ class _PaywallScreenState extends State<PaywallScreen> {
     setState(() => _isPurchasing = true);
 
     try {
+      final supabaseUserId = SupabaseService().currentUserId;
+      if (supabaseUserId == null || supabaseUserId.isEmpty) {
+        _showError('Please sign in to restore purchases.');
+        if (mounted) Navigator.of(context).pushNamed(AppRouter.login);
+        return;
+      }
+      final ok = await _revenueCat.syncIdentity(supabaseUserId);
+      if (!ok) {
+        _showError('Could not sync your account. Please try again.');
+        return;
+      }
       final result = await _revenueCat.restorePurchases();
       
       if (result.success && result.isPremium) {
@@ -356,6 +398,17 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Future<void> _redeemCoupon() async {
     setState(() => _isRedeemingCoupon = true);
     try {
+      final supabaseUserId = SupabaseService().currentUserId;
+      if (supabaseUserId == null || supabaseUserId.isEmpty) {
+        if (mounted) _showError('Please sign in to redeem a code.');
+        if (mounted) Navigator.of(context).pushNamed(AppRouter.login);
+        return;
+      }
+      final ok = await _revenueCat.syncIdentity(supabaseUserId);
+      if (!ok) {
+        if (mounted) _showError('Could not sync your account. Please try again.');
+        return;
+      }
       await _revenueCat.presentCodeRedemptionSheet();
       await _premiumService.refreshPremiumStatus();
       final isNowPremium = await _premiumService.isPremium;
