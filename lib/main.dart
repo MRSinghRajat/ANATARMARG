@@ -127,14 +127,20 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Minimal blocking init so first frame shows fast (avoids 1000+ ms startup latency)
+  // Minimal blocking init so first frame shows fast (avoids 1000+ ms startup latency).
+  // Release/TestFlight ships only `.env.app` (pubspec asset from prepare_app_config.py).
+  // Prefer that; fall back to `.env` for local checkouts that still use a root file.
+  // Do not load `.env` first — TestFlight has no `.env` asset, so Supabase never inits.
   try {
-    await dotenv.load(fileName: ".env");
-    if (kDebugMode) {
-      print('=== ENV LOADED ===');
+    try {
+      await dotenv.load(fileName: '.env.app');
+      if (kDebugMode) print('=== ENV LOADED from .env.app ===');
+    } catch (_) {
+      await dotenv.load(fileName: '.env');
+      if (kDebugMode) print('=== ENV LOADED from .env (local fallback) ===');
     }
   } catch (e) {
-    if (kDebugMode) print('Error loading .env file: $e');
+    if (kDebugMode) print('Error loading .env.app / .env: $e');
   }
 
   // Independent of each other; a failure in one must not cancel the other.
