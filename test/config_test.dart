@@ -30,15 +30,12 @@ SUPABASE_ANON_KEY=mock_key
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(pubspec.contains('- .env.app'), isTrue);
     // Avoid regressing to bundling the full local `.env` secret-bearing file.
-    final assetsMatch = RegExp(r'assets:\s*\n((?:[ \t]+- .*\n)+)', multiLine: true)
-        .firstMatch(pubspec);
-    expect(assetsMatch, isNotNull);
-    final assetsBlock = assetsMatch!.group(1)!;
-    expect(assetsBlock.contains('.env.app'), isTrue);
     expect(
-      RegExp(r'(?m)^[ \t]+- \.env\s*$').hasMatch(assetsBlock),
+      RegExp(r'^[ \t]+- \.env\s*$', multiLine: true).hasMatch(pubspec),
       isFalse,
       reason: 'Do not ship root .env as a Flutter asset',
     );
+    final mainDart = File('lib/main.dart').readAsStringSync();
+    expect(mainDart.contains("fileName: '.env.app'"), isTrue);
   });
 }
