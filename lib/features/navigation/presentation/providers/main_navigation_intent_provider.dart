@@ -7,7 +7,9 @@ class MainNavIntent {
   final NavItem nav;
   /// When [nav] is [NavItem.home]: `0` = Aatma, `1` = Mandir.
   final int? aanganTabIndex;
-  /// When [nav] is [NavItem.books]: `0` = Read, `1` = Listen, `2` = Journey.
+  /// When [nav] is [NavItem.books]: `0` = Read, `2` = Journey.
+  ///
+  /// `1` is reserved for Granthalaya Listen (audio) when it ships.
   final int? granthalayaTabIndex;
 
   const MainNavIntent(this.nav, {this.aanganTabIndex, this.granthalayaTabIndex});
