@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import '../config/feature_flags.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/sign_up_screen.dart';
@@ -65,6 +66,14 @@ class AppRouter {
   static const String listenAllBooks = '/listen/all-books';
   static const String listenAllStories = '/listen/all-stories';
   static const String listenAllChants = '/listen/all-chants';
+
+  static Route<dynamic> _listenDisabledRoute() {
+    return MaterialPageRoute(
+      builder: (_) => const MainNavigationScreen(),
+      settings: const RouteSettings(name: home),
+    );
+  }
+
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case splash:
@@ -193,24 +202,31 @@ class AppRouter {
         );
       }
       case listenSacredText: {
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         final text = settings.arguments as SacredTextModel;
         return MaterialPageRoute(builder: (_) => SacredTextAudioScreen(sacredText: text), settings: settings);
       }
       case listenBook: {
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         final book = settings.arguments as BookModel;
         return MaterialPageRoute(builder: (_) => BookAudioDetailScreen(book: book), settings: settings);
       }
       case listenStory: {
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         final story = settings.arguments as SacredStoryModel;
         return MaterialPageRoute(builder: (_) => StoryAudioScreen(story: story), settings: settings);
       }
       case listenAllTexts:
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         return MaterialPageRoute(builder: (_) => const AllSacredTextsListenScreen(), settings: settings);
       case listenAllBooks:
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         return MaterialPageRoute(builder: (_) => const AllBooksListenScreen(), settings: settings);
       case listenAllStories:
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         return MaterialPageRoute(builder: (_) => const AllStoriesListenScreen(), settings: settings);
       case listenAllChants:
+        if (!FeatureFlags.kListenEnabled) return _listenDisabledRoute();
         return MaterialPageRoute(builder: (_) => const AllChantsListenScreen(), settings: settings);
       case journeyOpenContent: {
         final args = settings.arguments as Map<String, dynamic>? ?? {};

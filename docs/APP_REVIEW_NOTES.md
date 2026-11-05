@@ -1,53 +1,54 @@
-# App Review notes — Antar Marg (draft for App Store Connect)
+# App Review Notes — Antar Marg (submission-ready draft)
 
-**What to paste:** App Store Connect → the app version → App Review Information → Notes.
+**Paste into:** App Store Connect → App Review Information → Notes.
 
 ---
 
-Antar Marg is a Hindu/Vedic daily-practice and sacred-text app. Primary tabs: Aangan (home sanctuary), Ashram (daily tasks), Granthalaya (library + journeys), Profile.
+Antar Marg is a Hindi/English Hindu spiritual-practice app focused on daily practice, sacred reading, and guided journeys.  
+Primary tabs: **Aangan** (home sanctuary), **Ashram** (daily tasks), **Granthalaya** (Read + Journey), **Profile**.
 
-## How to reach the subscription paywall (fresh install)
+## Key product constraints (for review clarity)
 
-1. Launch the app. Complete or skip onboarding (Skip / continue to sign-in).
-2. Sign in with Apple or Google, or skip sign-in if the build allows it.
-3. Open **Profile** (rightmost tab) → tap the Pro / Upgrade control, **or**
-4. Open **Granthalaya** → Journey and tap a Pro-gated journey, **or** open a premium book.
+- **No live AI guru / no live AI chat**: there is no conversational “guru” experience.
+- **No kundli / astrology** features.
+- **No health, medical, or wealth claims.**
+- **Granthalaya “Listen” (audio) is intentionally hidden** in this build until recorded audio ships.
 
-The paywall is RevenueCat’s native paywall (dashboard offering “Antar marg Pro”) with a custom Flutter fallback if offerings fail to load.
+## Sign-in / guest start
 
-## What Pro unlocks
+- On first launch, complete onboarding and then choose:
+  - **Sign in** with **Apple** or **Google**, or
+  - **Skip for now** to continue as a **guest** (sign in later from **Profile**).
 
-- Premium books and stories; skip-ahead chapter access
-- Full audio library (chants, audiobooks, meditations)
-- All structured journeys (Garbh Sanskar, Hanuman Chalisa, Gayatri Sadhana, 21-Day Stress-Free)
-- Pre-generated AI commentary on verses (static text in our database — no live chatbot)
-- Exclusive Aangan/Mandir customizations and advanced Ashram practices
+## How to reach the paywall (fresh install)
 
-There is **no** in-app AI chat / consultation product.
+1. Launch the app → complete onboarding → sign in (Apple/Google) or continue as guest.
+2. Open **Profile** → tap **Upgrade / Pro**, **or**
+3. Open **Granthalaya → Journey** and tap a **Pro-gated** journey, **or**
+4. Open a **Pro-gated** book/story in Granthalaya.
 
-## Subscriptions
+Purchases and entitlements are managed via **RevenueCat** (Antar Marg Pro).
 
-- Auto-renewing via Apple: monthly / annual / lifetime as configured in the subscription group.
-- Manage / cancel: iOS Settings → Apple ID → Subscriptions, or the in-app Customer Center from Profile.
-- Restore: Profile / paywall Restore Purchases.
+## What the reviewer should try
 
-## Sandbox
+- **First practice**: go to **Ashram** → complete any “Today’s Task” and confirm progress updates.
+- **Read**: go to **Granthalaya → Read** → open a text/story and scroll through content.
+- **Journey**: go to **Granthalaya → Journey** → start a journey and open a task.
+- **Restore purchases**: **Profile → Restore Purchases** (after a prior Sandbox purchase).
+- **Account deletion** (signed-in only): **Profile → scroll down → Delete Account** → confirm deletion.
 
-Use a Sandbox Apple ID. Complete a purchase, force-quit, relaunch — Pro should remain active. Restore on a reinstall should return the same entitlement.
+## Demo account (optional)
 
-## Demo account (optional — fill in if you create one)
+If a demo account is needed, fill these in (do not invent credentials):
 
-- Apple ID: ________________
-- Password: ________________
-- Notes: pre-activated Pro via RevenueCat sandbox / grant, if provided.
+- **TODO (Rajat)** Demo Apple ID / email: `__________`
+- **TODO (Rajat)** Password (if applicable): `__________`
+- **TODO (Rajat)** Notes (e.g., Pro pre-activated / test user state): `__________`
 
-## Sign-in
+## URLs (privacy / support)
 
-Google Sign-In and Sign in with Apple are both supported. Reviewers can use Sign in with Apple.
+These should point to `antarmarg.com` once the pages are published:
 
-## Privacy / legal URLs
-
-- Privacy: https://antarmarg.app/legal/privacy.html
-- Terms: https://antarmarg.app/legal/terms.html
-
-(Host these after reviewing `web/legal/*.html`.)
+- **TODO** Privacy Policy: `https://antarmarg.com/privacy`
+- **TODO** Terms of Service: `https://antarmarg.com/terms`
+- **TODO** Support: `https://antarmarg.com/support`
